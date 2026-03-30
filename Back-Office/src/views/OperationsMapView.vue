@@ -1,16 +1,16 @@
 <template>
   <div class="page">
-    <p class="lead">
-      Percurso de entrega (OSRM + OpenStreetMap): estafeta → loja Continente → morada do cliente. Toque num pedido à direita para
-      destacar a rota; em trânsito, o marcador do estafeta anima ao longo do trajeto loja → cliente.
-    </p>
     <div v-if="routeError" class="banner" role="status">{{ routeError }}</div>
+    <div v-if="isolateInvalid" class="banner banner--err" role="alert">
+      O pedido na URL não está roteável (atribui estafeta, loja e GPS) ou não existe.
+    </div>
     <div class="layout">
       <aside class="panel panel--left card">
-        <h3>Estafetas</h3>
-        <p class="hint">Online e com encomenda</p>
+        <h3>{{ mapIsolated ? 'Estafeta desta entrega' : 'Estafetas' }}</h3>
+        <p class="hint">{{ mapIsolated ? 'Só o motorista do pedido selecionado' : 'Online e com encomenda' }}</p>
         <ul class="list">
-          <li v-for="c in activeCouriers" :key="c.id" class="li">
+          <li v-if="!couriersForSidePanel.length" class="li muted">Sem estafeta para mostrar.</li>
+          <li v-for="c in couriersForSidePanel" :key="c.id" class="li">
             <span class="pulse" aria-hidden="true" />
             <div>
               <strong>{{ c.name }}</strong>
@@ -25,11 +25,20 @@
       <div class="map-wrap card">
         <div ref="mapEl" class="map" role="application" aria-label="Mapa operacional" />
         <div class="legend">
-          <span class="leg leg--rider"><i /> Estafeta</span>
-          <span class="leg leg--store"><i /> Continente</span>
-          <span class="leg leg--dest"><i /> Cliente</span>
-          <span class="leg leg--leg1"><i /> Até à loja</span>
-          <span class="leg leg--leg2"><i /> Loja → cliente</span>
+          <span class="leg leg--rider">
+            <img class="leg-rider-thumb" :src="courierPinUrl" width="16" height="16" alt="" />
+            Estafeta (GPS)
+          </span>
+          <span class="leg leg--store">
+            <img class="leg-store-thumb" :src="continentePinUrl" width="16" height="16" alt="" />
+            Loja Continente
+          </span>
+          <span class="leg leg--dest">
+            <img class="leg-house-thumb" :src="customerHousePinUrl" width="16" height="16" alt="" />
+            Entrega (cliente)
+          </span>
+          <span class="leg leg--leg1"><i class="leg-dash--sample" /> ① Estafeta → loja (tom néon do pedido)</span>
+          <span class="leg leg--leg2"><i class="leg-line--sample" /> ② Loja → cliente (tom néon do pedido)</span>
           <span v-if="routesLoading" class="leg leg--load">A calcular rotas…</span>
           <span v-else-if="usedFallback" class="leg leg--warn">Alguns traços: linha reta (API indisponível)</span>
         </div>
@@ -37,7 +46,11 @@
 
       <aside class="panel panel--right card">
         <h3>Pedidos com rota</h3>
-        <p class="hint">Atribuídos ou em trânsito (com loja e GPS)</p>
+        <p class="hint">Atribuídos ou em trânsito (com loja e GPS). Um clique = mapa só com esse pedido.</p>
+        <p v-if="mapIsolated" class="isolate-bar">
+          <span class="isolate-pill">Mapa: {{ selectedOrderId }}</span>
+          <button type="button" class="btn-clear-map" @click="clearMapSelection">Mostrar todas no mapa</button>
+        </p>
         <ul class="list">
           <li
             v-for="o in routableOrders"
@@ -78,6 +91,109 @@ import {
 import { courierStateLabels, COURIER_STATE, orderStatusLabels } from '../constants/logistics.js';
 import { fetchDeliveryLegs, deliveryLegsStraightLine } from '../utils/osrmRouting.js';
 
+const courierPinUrl = `${import.meta.env.BASE_URL}media/map/courier-pin.png`;
+const continentePinUrl = `${import.meta.env.BASE_URL}media/map/continente-pin.png`;
+const customerHousePinUrl = `${import.meta.env.BASE_URL}media/map/customer-house-pin.png`;
+
+/** Marcadores no mapa (mais discretos) */
+const COURIER_ICON_PX = 40;
+const STORE_ICON_PX = 28;
+const CUSTOMER_ICON_PX = 26;
+
+/**
+ * Cada pedido = uma família néon: perna ① e ② são dois tons da mesma cor,
+ * para distinguir pernas mas reconhecer a mesma entrega frente a outras famílias.
+ */
+const ORDER_ROUTE_PALETTES = [
+  { leg1: '#e8ff00', leg2: '#00ff66' }, // lima → verde puro (máximo contraste)
+  { leg1: '#00ffff', leg2: '#0066ff' }, // ciano puro → azul elétrico
+  { leg1: '#ff00ff', leg2: '#ff0080' }, // magenta → rosa choque
+  { leg1: '#ffff00', leg2: '#ffcc00' }, // amarelo puro → âmbar vivo
+  { leg1: '#bfff00', leg2: '#00ff00' }, // lima → verde limão
+  { leg1: '#e040fb', leg2: '#aa00ff' }, // roxo néon (dois tons)
+  { leg1: '#ffab00', leg2: '#ff3d00' }, // âmbar → laranja forte
+  { leg1: '#ff0055', leg2: '#ff3333' }, // vermelho néon (dois tons)
+  { leg1: '#00ffcc', leg2: '#00ff44' }, // aqua → verde néon
+  { leg1: '#77ffff', leg2: '#2979ff' }, // ciano claro → azul royal
+];
+
+function routePaletteForOrderId(id) {
+  const s = String(id ?? '');
+  let h = 0;
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) | 0;
+  return ORDER_ROUTE_PALETTES[Math.abs(h) % ORDER_ROUTE_PALETTES.length];
+}
+
+let courierIconStatic = null;
+let courierIconAnim = null;
+let storeMapIcon = null;
+let customerMapIcon = null;
+
+function getCourierIcon(animated) {
+  const px = COURIER_ICON_PX;
+  if (animated) {
+    if (!courierIconAnim) {
+      courierIconAnim = L.icon({
+        iconUrl: courierPinUrl,
+        iconSize: [px, px],
+        iconAnchor: [px / 2, px],
+        popupAnchor: [0, -px],
+        className: 'bo-courier-marker-icon bo-courier-marker-icon--anim',
+      });
+    }
+    return courierIconAnim;
+  }
+  if (!courierIconStatic) {
+    courierIconStatic = L.icon({
+      iconUrl: courierPinUrl,
+      iconSize: [px, px],
+      iconAnchor: [px / 2, px],
+      popupAnchor: [0, -px],
+      className: 'bo-courier-marker-icon',
+    });
+  }
+  return courierIconStatic;
+}
+
+function getStoreMapIcon() {
+  if (!storeMapIcon) {
+    const px = STORE_ICON_PX;
+    storeMapIcon = L.icon({
+      iconUrl: continentePinUrl,
+      iconSize: [px, px],
+      iconAnchor: [px / 2, px],
+      popupAnchor: [0, -px],
+      className: 'bo-store-marker-icon',
+    });
+  }
+  return storeMapIcon;
+}
+
+function getCustomerMapIcon() {
+  if (!customerMapIcon) {
+    const px = CUSTOMER_ICON_PX;
+    customerMapIcon = L.icon({
+      iconUrl: customerHousePinUrl,
+      iconSize: [px, px],
+      iconAnchor: [px / 2, px],
+      popupAnchor: [0, -px],
+      className: 'bo-customer-marker-icon',
+    });
+  }
+  return customerMapIcon;
+}
+
+function validLatLngPair(p) {
+  return (
+    Array.isArray(p) &&
+    p.length >= 2 &&
+    typeof p[0] === 'number' &&
+    typeof p[1] === 'number' &&
+    !Number.isNaN(p[0]) &&
+    !Number.isNaN(p[1])
+  );
+}
+
 const mapEl = ref(null);
 const route = useRoute();
 const router = useRouter();
@@ -106,9 +222,39 @@ const routableOrders = computed(() =>
   )
 );
 
+const selectedRoutableOrder = computed(() => {
+  const id = selectedOrderId.value;
+  if (!id) return null;
+  return routableOrders.value.find((o) => o.id === id) || null;
+});
+
+/** URL tem ?order= mas o pedido não é roteável */
+const isolateInvalid = computed(() => {
+  const id = selectedOrderId.value;
+  return !!id && !selectedRoutableOrder.value;
+});
+
+/** Um pedido válido selecionado → mapa só com essa entrega */
+const mapIsolated = computed(() => !!selectedRoutableOrder.value);
+
+/** Pedidos para desenhar rotas e bounds */
+const ordersForMap = computed(() => {
+  if (isolateInvalid.value) return [];
+  const one = selectedRoutableOrder.value;
+  if (one) return [one];
+  return routableOrders.value;
+});
+
 const activeCouriers = computed(() =>
   logistics.couriers.filter((c) => c.state === COURIER_STATE.E06 || !!c.currentOrderId)
 );
+
+const couriersForSidePanel = computed(() => {
+  const sel = selectedRoutableOrder.value;
+  if (!sel) return activeCouriers.value;
+  const c = getCourierById(sel.courierId);
+  return c ? [c] : [];
+});
 
 function storeName(id) {
   if (!id) return '—';
@@ -118,15 +264,6 @@ function storeName(id) {
 function courierName(id) {
   if (!id) return '—';
   return getCourierById(id)?.name || id;
-}
-
-function makePulseIcon(className) {
-  return L.divIcon({
-    className: `bo-pin ${className}`,
-    html: '<span class="bo-pin__dot"></span>',
-    iconSize: [28, 28],
-    iconAnchor: [14, 14],
-  });
 }
 
 function clearAnim() {
@@ -143,7 +280,7 @@ function clearAnim() {
 function startCourierAnimAlongLeg2(coords) {
   clearAnim();
   if (!map || !coords?.length) return;
-  animMarker = L.marker(coords[0], { icon: makePulseIcon('bo-pin--rider-anim'), zIndexOffset: 1000 }).addTo(map);
+  animMarker = L.marker(coords[0], { icon: getCourierIcon(true), zIndexOffset: 1000 }).addTo(map);
   let idx = 0;
   animTimer = setInterval(() => {
     idx = (idx + 1) % coords.length;
@@ -156,34 +293,89 @@ function selectOrder(id) {
   router.replace({ name: 'map', query: id ? { order: id } : {} });
 }
 
+function clearMapSelection() {
+  selectOrder('');
+}
+
+/** Camadas por perna: contorno escuro, brilho da cor, halo branco, traço principal. */
+const ROUTE_LEG_LAYER_COUNT = 4;
+
+function addRouteLeg(latlngs, color, options) {
+  const { weight, opacity, dashArray } = options;
+  const under = L.polyline(latlngs, {
+    color: '#000000',
+    weight: weight + 6,
+    opacity: 0.45,
+    lineCap: 'round',
+    lineJoin: 'round',
+  }).addTo(routesGroup);
+  const glow = L.polyline(latlngs, {
+    color,
+    weight: weight + 7,
+    opacity: 0.5,
+    lineCap: 'round',
+    lineJoin: 'round',
+  }).addTo(routesGroup);
+  const halo = L.polyline(latlngs, {
+    color: '#ffffff',
+    weight: weight + 3,
+    opacity: Math.min(1, opacity + 0.28),
+    lineCap: 'round',
+    lineJoin: 'round',
+  }).addTo(routesGroup);
+  const line = L.polyline(latlngs, {
+    color,
+    weight,
+    opacity,
+    lineCap: 'round',
+    lineJoin: 'round',
+    dashArray: dashArray || null,
+  }).addTo(routesGroup);
+  routeLayers.push(under, glow, halo, line);
+}
+
 function drawMarkers() {
   if (!map) return;
   markerLayers.forEach((l) => map.removeLayer(l));
   markerLayers.length = 0;
 
-  for (const s of logistics.continentStores) {
-    const m = L.marker([s.lat, s.lng], { icon: makePulseIcon('bo-pin--store') }).addTo(map);
+  if (isolateInvalid.value) {
+    return;
+  }
+
+  const isolated = mapIsolated.value;
+  const selOrder = selectedRoutableOrder.value;
+
+  const storesToShow = isolated && selOrder?.storeId
+    ? logistics.continentStores.filter((s) => s.id === selOrder.storeId)
+    : logistics.continentStores;
+
+  for (const s of storesToShow) {
+    const m = L.marker([s.lat, s.lng], { icon: getStoreMapIcon() }).addTo(map);
     m.bindPopup(`<strong>${s.name}</strong><br/>Loja Continente`);
     markerLayers.push(m);
   }
 
   const hideCourierIds = new Set();
-  const sel = selectedOrderId.value;
-  const selOrder = routableOrders.value.find((o) => o.id === sel);
   if (selOrder?.status === ORDER_STATUS.IN_TRANSIT && selOrder.courierId) {
     hideCourierIds.add(selOrder.courierId);
   }
 
-  for (const c of logistics.couriers) {
+  const couriersToIterate = isolated && selOrder?.courierId
+    ? logistics.couriers.filter((c) => c.id === selOrder.courierId)
+    : logistics.couriers;
+
+  for (const c of couriersToIterate) {
     if (c.lat == null || hideCourierIds.has(c.id)) continue;
-    const m = L.marker([c.lat, c.lng], { icon: makePulseIcon('bo-pin--rider') }).addTo(map);
+    const m = L.marker([c.lat, c.lng], { icon: getCourierIcon(false) }).addTo(map);
     m.bindPopup(`<strong>${c.name}</strong><br/>${courierStateLabels[c.state]}`);
     markerLayers.push(m);
   }
 
-  for (const o of routableOrders.value) {
+  const ordersForDest = isolated && selOrder ? [selOrder] : routableOrders.value;
+  for (const o of ordersForDest) {
     if (o.destLat == null || o.destLng == null) continue;
-    const m = L.marker([o.destLat, o.destLng], { icon: makePulseIcon('bo-pin--dest') }).addTo(map);
+    const m = L.marker([o.destLat, o.destLng], { icon: getCustomerMapIcon() }).addTo(map);
     m.bindPopup(`Destino · ${o.id}<br/>${o.clientName}`);
     markerLayers.push(m);
   }
@@ -201,12 +393,14 @@ async function refreshRoutes() {
   usedFallback.value = false;
   routeError.value = '';
 
-  const orders = routableOrders.value;
+  const orders = ordersForMap.value;
   if (!orders.length) {
     routesLoading.value = false;
     drawMarkers();
     return;
   }
+
+  const singleFocus = mapIsolated.value;
 
   routesLoading.value = true;
   try {
@@ -218,6 +412,7 @@ async function refreshRoutes() {
       const courier = [c.lat, c.lng];
       const store = [s.lat, s.lng];
       const dest = [o.destLat, o.destLng];
+      if (!validLatLngPair(courier) || !validLatLngPair(store) || !validLatLngPair(dest)) continue;
       let legs;
       try {
         legs = await fetchDeliveryLegs(courier, store, dest, signal);
@@ -229,18 +424,27 @@ async function refreshRoutes() {
       if (!legs?.leg1?.length || !legs?.leg2?.length) continue;
       if (!legs.fromApi) usedFallback.value = true;
 
-      const sel = selectedOrderId.value === o.id;
-      const w = sel ? 5 : 3;
-      const o1 = sel ? 0.95 : 0.28;
-      const o2 = sel ? 0.95 : 0.28;
+      const focused = singleFocus || selectedOrderId.value === o.id;
+      const wMain = focused ? 6 : 5;
+      const opacityMain = focused ? 1 : 0.92;
+      const { leg1: col1, leg2: col2 } = routePaletteForOrderId(o.id);
 
-      const p1 = L.polyline(legs.leg1, { color: '#2563eb', weight: w, opacity: o1 }).addTo(routesGroup);
-      const p2 = L.polyline(legs.leg2, { color: '#059669', weight: w, opacity: o2 }).addTo(routesGroup);
-      p1.bindPopup(`${o.id}: estafeta → loja`);
-      p2.bindPopup(`${o.id}: loja → cliente`);
-      routeLayers.push(p1, p2);
+      addRouteLeg(legs.leg1, col1, {
+        weight: wMain,
+        opacity: opacityMain,
+        dashArray: '16 12',
+      });
+      addRouteLeg(legs.leg2, col2, {
+        weight: wMain,
+        opacity: opacityMain,
+        dashArray: null,
+      });
+      const n = routeLayers.length;
+      const k = ROUTE_LEG_LAYER_COUNT;
+      routeLayers[n - k * 2 + k - 1].bindPopup(`<strong>${o.id}</strong><br/>① Estafeta → loja (recolha)`);
+      routeLayers[n - 1].bindPopup(`<strong>${o.id}</strong><br/>② Loja → cliente (entrega)`);
 
-      if (sel && o.status === ORDER_STATUS.IN_TRANSIT) {
+      if (o.status === ORDER_STATUS.IN_TRANSIT && (singleFocus || selectedOrderId.value === o.id)) {
         startCourierAnimAlongLeg2(legs.leg2);
       }
     }
@@ -322,12 +526,6 @@ onBeforeUnmount(() => {
   gap: 12px;
 }
 
-.lead {
-  margin: 0;
-  font-size: 14px;
-  color: var(--bo-text-secondary);
-}
-
 .banner {
   padding: 10px 14px;
   border-radius: var(--bo-radius-sm);
@@ -335,6 +533,45 @@ onBeforeUnmount(() => {
   color: #92400e;
   font-size: 13px;
   font-weight: 600;
+}
+
+.banner--err {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.isolate-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 10px 12px;
+  background: #eff6ff;
+  border-radius: var(--bo-radius-sm);
+  border: 1px solid #bfdbfe;
+}
+
+.isolate-pill {
+  font-size: 12px;
+  font-weight: 700;
+  color: #1d4ed8;
+}
+
+.btn-clear-map {
+  margin-left: auto;
+  padding: 8px 12px;
+  border-radius: var(--bo-radius-sm);
+  border: 1px solid var(--bo-border);
+  background: var(--bo-surface);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  color: var(--bo-text);
+}
+
+.btn-clear-map:hover {
+  background: var(--bo-page);
 }
 
 .layout {
@@ -414,7 +651,8 @@ onBeforeUnmount(() => {
   height: 12px;
   margin-top: 4px;
   border-radius: 50%;
-  background: #10b981;
+  background: #00ffcc;
+  box-shadow: 0 0 10px rgba(0, 255, 204, 0.7);
   flex-shrink: 0;
   animation: pulse 1.4s ease-in-out infinite;
 }
@@ -486,22 +724,49 @@ onBeforeUnmount(() => {
   border-radius: 2px;
 }
 
-.leg--rider i {
-  background: #2563eb;
+.leg-rider-thumb {
+  display: block;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
 }
-.leg--store i {
-  background: #10b981;
+
+.leg-store-thumb {
+  display: block;
+  width: 16px;
+  height: 16px;
+  object-fit: cover;
+  flex-shrink: 0;
+  border-radius: 50%;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
 }
-.leg--dest i {
-  background: #dc2626;
+
+/* Pin gotícula + casa (sem máscara circular) */
+.leg-house-thumb {
+  display: block;
+  width: 16px;
+  height: 16px;
+  object-fit: contain;
+  flex-shrink: 0;
+  filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.35));
 }
-.leg--leg1 i {
-  background: #2563eb;
-  height: 3px;
+
+.leg--leg1 i.leg-dash--sample {
+  height: 4px;
+  width: 28px;
+  border-radius: 2px;
+  background: repeating-linear-gradient(90deg, #ccff00 0 4px, transparent 4px 7px);
+  box-shadow: 0 0 8px rgba(204, 255, 0, 0.65);
 }
-.leg--leg2 i {
-  background: #059669;
-  height: 3px;
+
+.leg--leg2 i.leg-line--sample {
+  height: 4px;
+  width: 28px;
+  border-radius: 2px;
+  background: #00ff88;
+  box-shadow: 0 0 8px rgba(0, 255, 136, 0.65);
 }
 .leg--load,
 .leg--warn {
@@ -526,41 +791,32 @@ onBeforeUnmount(() => {
 </style>
 
 <style>
-.bo-pin {
-  background: transparent !important;
-  border: none !important;
-  display: flex !important;
-  align-items: center;
-  justify-content: center;
-}
-.bo-pin__dot {
-  width: 16px;
-  height: 16px;
+/* Leaflet aplica a class no <img> do marcador */
+.bo-store-marker-icon {
   border-radius: 50%;
-  border: 2px solid #fff;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.25);
-  animation: bo-pin-pulse 1.5s ease-in-out infinite;
+  object-fit: cover;
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.4));
 }
-.bo-pin--store .bo-pin__dot {
-  background: #10b981;
+
+.bo-customer-marker-icon {
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
 }
-.bo-pin--rider .bo-pin__dot {
-  background: #2563eb;
+
+.bo-courier-marker-icon {
+  filter: drop-shadow(0 3px 8px rgba(0, 0, 0, 0.4));
 }
-.bo-pin--rider-anim .bo-pin__dot {
-  background: #1d4ed8;
-  animation: bo-pin-pulse 0.8s ease-in-out infinite;
+
+.bo-courier-marker-icon--anim {
+  animation: bo-courier-bob 1.1s ease-in-out infinite;
 }
-.bo-pin--dest .bo-pin__dot {
-  background: #dc2626;
-}
-@keyframes bo-pin-pulse {
+
+@keyframes bo-courier-bob {
   0%,
   100% {
-    transform: scale(1);
+    transform: translateY(0);
   }
   50% {
-    transform: scale(1.12);
+    transform: translateY(-5px);
   }
 }
 </style>

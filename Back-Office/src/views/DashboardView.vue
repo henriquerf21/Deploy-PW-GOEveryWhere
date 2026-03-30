@@ -10,10 +10,12 @@
 
     <div class="row2">
       <section class="card block">
-        <h3>Volume horário (últimas 24h)</h3>
-        <div class="bars24" role="presentation">
+        <h3>Volume horário por hora de criação</h3>
+        <p class="block__sub">Pedidos criados por hora (0–23), hora local do browser.</p>
+        <p v-if="!hasHourlyData" class="empty-zones">Ainda não há pedidos para desenhar o histograma.</p>
+        <div v-else class="bars24" role="img" aria-label="Histograma de pedidos por hora">
           <div v-for="(h, i) in logistics.hourlyVolume" :key="i" class="b24">
-            <div class="b24__f" :style="{ height: (h / maxH) * 100 + '%' }" />
+            <div class="b24__f" :style="{ height: (h / maxH) * 100 + '%' }" :title="`${h} pedido(s) às ${i}h`" />
             <span class="b24__x">{{ i }}</span>
           </div>
         </div>
@@ -21,7 +23,8 @@
 
       <section class="card block">
         <h3>Estados dos pedidos</h3>
-        <div class="donut-wrap">
+        <p v-if="!donutTotal" class="empty-zones">Sem pedidos no painel.</p>
+        <div v-else class="donut-wrap">
           <div class="donut" :style="donutStyle" />
           <ul class="leg">
             <li v-for="s in donutLeg" :key="s.k"><i :style="{ background: s.c }" />{{ s.k }} ({{ s.n }})</li>
@@ -32,8 +35,10 @@
 
     <div class="row2">
       <section class="card block">
-        <h3>Entregas por área</h3>
-        <div class="area-bars">
+        <h3>Pedidos por zona</h3>
+        <p class="block__sub">Contagem por zona (exclui apenas rejeitados).</p>
+        <div v-if="!logistics.deliveriesByZone.length" class="empty-zones">Sem pedidos elegíveis para agregar por zona.</div>
+        <div v-else class="area-bars">
           <div v-for="a in logistics.deliveriesByZone" :key="a.zone" class="ab">
             <span class="ab__z">{{ a.zone }}</span>
             <div class="ab__t"><div class="ab__f" :style="{ width: (a.count / maxZ) * 100 + '%' }" /></div>
@@ -43,11 +48,15 @@
       </section>
 
       <section class="card block">
-        <h3>Gráfico de barras — receita (k€)</h3>
+        <h3>Custo entregues por mês (k€)</h3>
+        <p class="block__sub">
+          Soma dos custos dos pedidos <strong>entregues</strong> nos últimos 6 meses (mês de criação do pedido). Valores em milhares de euros.
+        </p>
         <div class="rev-bars">
-          <div v-for="m in monthlyRevenueSeries" :key="m.month" class="rb">
-            <div class="rb__f" :style="{ height: (m.k / maxRev) * 100 + '%' }" />
+          <div v-for="m in monthlyRevenueFromOrders" :key="m.month" class="rb">
+            <div class="rb__f" :style="{ height: (m.k / maxRev) * 100 + '%' }" :title="`${m.k} k€`" />
             <span>{{ m.month }}</span>
+            <span class="rb__k">{{ m.k }}</span>
           </div>
         </div>
       </section>
@@ -55,14 +64,16 @@
 
     <div class="row2">
       <section class="card block">
-        <h3>Avaliações recentes</h3>
-        <ul class="reviews">
-          <li v-for="r in logistics.recentReviews" :key="r.at + r.client">
-            <strong>{{ r.client }}</strong> · {{ '★'.repeat(r.rating) }}{{ '☆'.repeat(5 - r.rating) }}
-            <p>{{ r.text }}</p>
-            <time>{{ r.at.slice(0, 16).replace('T', ' ') }}</time>
-          </li>
-        </ul>
+        <h3>Pedidos por loja (recolha)</h3>
+        <p class="block__sub">Contagem por Continente de recolha (exclui rejeitados; sem loja não entra).</p>
+        <p v-if="!pickupsByStore.length" class="empty-zones">Sem pedidos com loja atribuída.</p>
+        <div v-else class="area-bars">
+          <div v-for="s in pickupsByStore" :key="s.storeId" class="ab">
+            <span class="ab__z">{{ s.name }}</span>
+            <div class="ab__t"><div class="ab__f ab__f--store" :style="{ width: (s.count / maxStore) * 100 + '%' }" /></div>
+            <span class="ab__n">{{ s.count }}</span>
+          </div>
+        </div>
       </section>
 
       <section class="card block">
@@ -80,21 +91,49 @@
 
 <script setup>
 import { computed } from 'vue';
-import { logistics, kpiSummary, monthlyRevenueSeries, ORDER_STATUS, orderStatusLabels } from '../stores/logisticsStore.js';
+import {
+  logistics,
+  kpiSummary,
+  monthlyRevenueFromOrders,
+  pickupsByStore,
+  ORDER_STATUS,
+  orderStatusLabels,
+} from '../stores/logisticsStore.js';
+
+const hasHourlyData = computed(() => logistics.hourlyVolume.some((h) => h > 0));
 
 const maxH = computed(() => Math.max(...logistics.hourlyVolume, 1));
 
-const maxRev = computed(() => Math.max(...monthlyRevenueSeries.map((m) => m.k), 1));
+const maxRev = computed(() => Math.max(...monthlyRevenueFromOrders.value.map((m) => m.k), 0.1));
 
 const maxZ = computed(() => Math.max(...logistics.deliveriesByZone.map((z) => z.count), 1));
+
+const maxStore = computed(() => Math.max(...pickupsByStore.value.map((s) => s.count), 1));
 
 const kpiItems = computed(() => {
   const k = kpiSummary.value;
   return [
-    { label: 'Pedidos hoje', value: k.ordersToday, hint: 'Novos registos' },
-    { label: 'Pedidos ativos', value: k.active, hint: 'Em pipeline' },
-    { label: 'Estafetas online', value: k.online, hint: 'E-06 disponíveis' },
-    { label: 'Receita atribuída', value: `€${k.revenue.toFixed(2)}`, hint: 'Soma dos custos nos pedidos com valor' },
+    { label: 'Pedidos hoje', value: k.ordersToday, hint: 'Criados na data de hoje' },
+    { label: 'Pedidos ativos', value: k.active, hint: 'Pendentes, info, aprovados, atribuídos, em trânsito' },
+    { label: 'Estafetas online', value: k.online, hint: 'E-06 com sessão ativa' },
+    {
+      label: 'Custo em pipeline',
+      value: `€${k.revenuePipeline.toFixed(2)}`,
+      hint: 'Soma custos: aprovado + atribuído + em trânsito',
+    },
+    {
+      label: 'Custo entregues',
+      value: `€${k.revenueDelivered.toFixed(2)}`,
+      hint: 'Soma custos dos pedidos entregues',
+    },
+    { label: 'Produtos ativos', value: `${k.productsActive} / ${k.totalProducts}`, hint: 'SKU ativos no catálogo' },
+    { label: 'Alertas stock', value: k.lowStockCount, hint: 'Ativos com stock ≤ limiar' },
+    { label: 'Clientes', value: k.totalCustomers, hint: 'Registos na base' },
+    {
+      label: 'Rejeitados',
+      value: `${k.rejectedCount} (${k.rejectionRatePct}%)`,
+      hint: 'Pedidos rejeitados / total no painel',
+    },
   ];
 });
 
@@ -119,6 +158,8 @@ const donutLeg = computed(() => {
     c: statusColors[st] || '#94a3b8',
   }));
 });
+
+const donutTotal = computed(() => donutLeg.value.reduce((a, p) => a + p.n, 0));
 
 const donutStyle = computed(() => {
   const parts = donutLeg.value;
@@ -151,7 +192,7 @@ const donutStyle = computed(() => {
 
 .kpis {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   gap: 14px;
 }
 
@@ -197,15 +238,22 @@ const donutStyle = computed(() => {
 }
 
 .block h3 {
-  margin: 0 0 16px;
+  margin: 0 0 8px;
   font-size: 15px;
+}
+
+.block__sub {
+  margin: 0 0 14px;
+  font-size: 12px;
+  color: var(--bo-text-secondary);
+  line-height: 1.45;
 }
 
 .bars24 {
   display: flex;
   align-items: flex-end;
   gap: 3px;
-  height: 120px;
+  height: 132px;
 }
 
 .b24 {
@@ -291,6 +339,10 @@ const donutStyle = computed(() => {
   border-radius: 5px;
 }
 
+.ab__f--store {
+  background: linear-gradient(90deg, #0d9488, var(--bo-brand));
+}
+
 .rev-bars {
   display: flex;
   align-items: flex-end;
@@ -315,27 +367,17 @@ const donutStyle = computed(() => {
   min-height: 4px;
 }
 
-.reviews,
+.rb__k {
+  font-size: 10px;
+  font-weight: 700;
+  color: var(--bo-text-secondary);
+}
+
 .act {
   list-style: none;
   margin: 0;
   padding: 0;
   font-size: 14px;
-}
-
-.reviews li {
-  padding: 12px 0;
-  border-bottom: 1px solid var(--bo-border);
-}
-
-.reviews p {
-  margin: 6px 0;
-  color: var(--bo-text-secondary);
-}
-
-.reviews time {
-  font-size: 12px;
-  color: var(--bo-text-secondary);
 }
 
 .act li {
@@ -350,5 +392,11 @@ const donutStyle = computed(() => {
   color: var(--bo-text-secondary);
   font-family: ui-monospace, monospace;
   min-width: 40px;
+}
+
+.empty-zones {
+  margin: 0;
+  font-size: 13px;
+  color: var(--bo-text-secondary);
 }
 </style>

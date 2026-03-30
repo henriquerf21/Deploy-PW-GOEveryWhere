@@ -6,7 +6,7 @@
     <header class="head card">
       <div>
         <h2 class="title">{{ c.name }}</h2>
-        <p class="sub">{{ c.email }} · {{ courierStateLabels[c.state] }}</p>
+        <p class="sub">{{ c.email }} · {{ c.phone || 'Sem telemóvel' }} · {{ courierStateLabels[c.state] }}</p>
       </div>
       <div class="head-actions">
         <label class="toggle">
@@ -27,6 +27,13 @@
       </div>
     </header>
 
+    <section class="card block block--notes">
+      <h3>Notas internas (admin)</h3>
+      <p class="hint">Visível só no painel — útil para follow-up e alertas à equipa.</p>
+      <textarea v-model="adminNotesDraft" class="inp ta-notes" rows="3" placeholder="Ex.: Falta apólice; disponível fins-de-semana…" />
+      <button type="button" class="btn btn--sec btn--sm" @click="saveAdminNotes">Guardar notas</button>
+    </section>
+
     <div class="stats card">
       <div v-for="s in statItems" :key="s.k" class="stat">
         <span class="stat__v">{{ s.v }}</span>
@@ -42,6 +49,8 @@
           <input v-model="edit.name" class="inp" />
           <label>Email</label>
           <input v-model="edit.email" type="email" class="inp" />
+          <label>Telemóvel</label>
+          <input v-model="edit.phone" type="tel" class="inp" />
           <label>NIF</label>
           <input v-model="edit.nif" class="inp" />
           <label>CC</label>
@@ -62,6 +71,8 @@
           </div>
           <label>Matrícula</label>
           <input v-model="edit.vehicle.plate" class="inp" />
+          <label>Cor do veículo</label>
+          <input v-model="edit.vehicle.color" class="inp" placeholder="Ex.: Cinzento" />
           <label>Carta condução n.º</label>
           <input v-model="edit.vehicle.licenseNumber" class="inp" />
           <label>Seguro (ref.)</label>
@@ -119,7 +130,7 @@
         <textarea v-model="rejReason" class="inp ta" rows="3" />
         <div class="modal__act">
           <button type="button" class="btn btn--sec" @click="showRej = false">Cancelar</button>
-          <button type="button" class="btn btn--danger" @click="confirmRej">Confirmar</button>
+          <button type="button" class="btn btn--danger" :disabled="!rejReason.trim()" @click="confirmRej">Confirmar</button>
         </div>
       </div>
     </div>
@@ -130,7 +141,7 @@
         <textarea v-model="infoMsg" class="inp ta" rows="3" />
         <div class="modal__act">
           <button type="button" class="btn btn--sec" @click="showInfo = false">Cancelar</button>
-          <button type="button" class="btn btn--go" @click="confirmInfo">Enviar</button>
+          <button type="button" class="btn btn--go" :disabled="!infoMsg.trim()" @click="confirmInfo">Enviar</button>
         </div>
       </div>
     </div>
@@ -152,6 +163,7 @@ import {
   reactivateCourier,
   setCourierOnline,
   setCourierMaxConcurrent,
+  setCourierAdminNotes,
 } from '../stores/logisticsStore.js';
 import { courierStateLabels, ZONES } from '../constants/logistics.js';
 import { toast } from '../utils/notify.js';
@@ -178,14 +190,26 @@ const statItems = computed(() => {
 const edit = reactive({
   name: '',
   email: '',
+  phone: '',
   nif: '',
   cc: '',
   birthDate: '',
   address: '',
   iban: '',
   zones: [],
-  vehicle: { type: '', brand: '', model: '', plate: '', licenseNumber: '', insuranceRef: '', inspectionValidUntil: '' },
+  vehicle: {
+    type: '',
+    brand: '',
+    model: '',
+    color: '',
+    plate: '',
+    licenseNumber: '',
+    insuranceRef: '',
+    inspectionValidUntil: '',
+  },
 });
+
+const adminNotesDraft = ref('');
 
 watch(
   c,
@@ -193,13 +217,15 @@ watch(
     if (!x) return;
     edit.name = x.name;
     edit.email = x.email;
+    edit.phone = x.phone || '';
     edit.nif = x.nif;
     edit.cc = x.cc;
     edit.birthDate = x.birthDate;
     edit.address = x.address;
     edit.iban = x.iban;
     edit.zones = [...x.zones];
-    edit.vehicle = { ...x.vehicle };
+    edit.vehicle = { ...x.vehicle, color: x.vehicle?.color || '' };
+    adminNotesDraft.value = x.adminNotes || '';
   },
   { immediate: true }
 );
@@ -222,6 +248,11 @@ function saveEdit() {
     zones: [...edit.zones],
   });
   toast(r.ok ? 'Dados guardados.' : r.error, r.ok ? 'success' : 'error');
+}
+
+function saveAdminNotes() {
+  const r = setCourierAdminNotes(c.value.id, adminNotesDraft.value);
+  toast(r.ok ? 'Notas guardadas.' : r.error || 'Erro', r.ok ? 'success' : 'error');
 }
 
 function onToggleOnline(e) {
@@ -390,6 +421,28 @@ function doReactivate() {
   font-size: 16px;
 }
 
+.block--notes {
+  margin-bottom: 0;
+}
+
+.block--notes .hint {
+  margin: 0 0 10px;
+  font-size: 12px;
+  color: var(--bo-text-secondary);
+}
+
+.ta-notes {
+  width: 100%;
+  margin-bottom: 10px;
+  resize: vertical;
+  min-height: 72px;
+}
+
+.btn--sm {
+  padding: 8px 14px;
+  font-size: 13px;
+}
+
 .block h4 {
   margin: 16px 0 8px;
   font-size: 14px;
@@ -498,6 +551,11 @@ label {
 .btn--warn {
   background: #f59e0b;
   color: #fff;
+}
+
+.btn:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 .ta {

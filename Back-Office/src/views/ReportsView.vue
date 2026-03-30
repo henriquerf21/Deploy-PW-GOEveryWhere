@@ -18,9 +18,10 @@
 
     <div class="row">
       <section class="card block">
-        <h3>Receita mensal (k€)</h3>
+        <h3>Custo entregues por mês (k€)</h3>
+        <p class="sub">Últimos 6 meses; pedidos com estado entregue, soma de custos por mês de criação.</p>
         <div class="bars">
-          <div v-for="m in monthlyRevenueSeries" :key="m.month" class="bar-col">
+          <div v-for="m in monthlyRevenueFromOrders" :key="m.month" class="bar-col">
             <div class="bar" :style="{ height: (m.k / maxR) * 100 + '%' }" />
             <span>{{ m.month }}</span>
             <span class="k">{{ m.k }}k</span>
@@ -60,7 +61,7 @@
 import { computed } from 'vue';
 import {
   logistics,
-  monthlyRevenueSeries,
+  monthlyRevenueFromOrders,
   cancellationRatePct,
   exportOrdersCsv,
   exportFullReportCsv,
@@ -69,7 +70,7 @@ import { toast } from '../utils/notify.js';
 
 const cancelPct = computed(() => cancellationRatePct());
 
-const maxR = computed(() => Math.max(...monthlyRevenueSeries.map((m) => m.k), 1));
+const maxR = computed(() => Math.max(...monthlyRevenueFromOrders.value.map((m) => m.k), 0.1));
 const maxZ = computed(() => Math.max(...logistics.deliveriesByZone.map((z) => z.count), 1));
 
 function download(filename, text) {
@@ -190,8 +191,15 @@ function exportFull() {
 }
 
 .block h3 {
-  margin: 0 0 16px;
+  margin: 0 0 8px;
   font-size: 15px;
+}
+
+.sub {
+  margin: 0 0 16px;
+  font-size: 12px;
+  color: var(--bo-text-secondary);
+  line-height: 1.45;
 }
 
 .block.full {

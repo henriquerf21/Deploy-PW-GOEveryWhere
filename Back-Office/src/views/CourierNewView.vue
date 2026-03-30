@@ -11,6 +11,7 @@
       <div class="grid2">
         <label class="field"><span>Nome completo *</span><input v-model="f.name" required class="inp" /></label>
         <label class="field"><span>Email *</span><input v-model="f.email" type="email" required class="inp" /></label>
+        <label class="field"><span>Telemóvel (contacto operacional)</span><input v-model="f.phone" type="tel" class="inp" placeholder="+351…" /></label>
         <label class="field"><span>NIF *</span><input v-model="f.nif" required class="inp" /></label>
         <label class="field"><span>CC (cartão cidadão) *</span><input v-model="f.cc" required class="inp" /></label>
         <label class="field"><span>Data nascimento *</span><input v-model="f.birthDate" type="date" required class="inp" /></label>
@@ -32,6 +33,7 @@
         <label class="field"><span>Modelo</span><input v-model="f.model" class="inp" /></label>
         <label class="field"><span>Matrícula</span><input v-model="f.plate" class="inp" /></label>
       </div>
+      <label class="field"><span>Cor do veículo</span><input v-model="f.vehicleColor" class="inp" placeholder="Ex.: Preto, branco…" /></label>
       <div class="grid3">
         <label class="field"><span>Carta condução n.º *</span><input v-model="f.licenseNumber" required class="inp" /></label>
         <label class="field"><span>Seguro (ref.) *</span><input v-model="f.insuranceRef" required class="inp" /></label>
@@ -75,6 +77,7 @@ const router = useRouter();
 const f = reactive({
   name: '',
   email: '',
+  phone: '',
   nif: '',
   cc: '',
   birthDate: '',
@@ -84,6 +87,7 @@ const f = reactive({
   brand: '',
   model: '',
   plate: '',
+  vehicleColor: '',
   licenseNumber: '',
   insuranceRef: '',
   inspectionValidUntil: '',

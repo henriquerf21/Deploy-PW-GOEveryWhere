@@ -32,6 +32,7 @@
             <td>
               <div class="strong">{{ c.name }}</div>
               <div class="muted">{{ c.email }}</div>
+              <div v-if="c.phone" class="muted phone-line">{{ c.phone }}</div>
             </td>
             <td>{{ courierStateLabels[c.state] }}</td>
             <td>{{ c.online ? 'Sim' : 'Não' }}</td>
@@ -147,6 +148,11 @@ const filtered = computed(() => {
 .muted {
   font-size: 12px;
   color: var(--bo-text-secondary);
+}
+
+.phone-line {
+  margin-top: 2px;
+  font-family: ui-monospace, monospace;
 }
 
 .link {

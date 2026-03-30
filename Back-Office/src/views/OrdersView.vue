@@ -52,18 +52,25 @@
           </tr>
         </thead>
         <tbody>
-          <tr v-for="o in rows" :key="o.id">
-            <td class="mono">{{ o.id }}</td>
-            <td>{{ o.clientName }}</td>
-            <td>{{ o.zone }}</td>
-            <td>{{ orderTypeLabels[o.type] }}</td>
-            <td><span :class="['prio', 'p' + o.priority]">{{ o.priority }}</span></td>
-            <td>{{ orderStatusLabels[o.status] }}</td>
-            <td class="muted">{{ o.createdAt.slice(0, 10) }}</td>
-            <td>
-              <RouterLink class="link" :to="{ name: 'order-detail', params: { id: o.id } }">Operar</RouterLink>
-            </td>
-          </tr>
+          <template v-if="!rows.length">
+            <tr>
+              <td colspan="8" class="empty-row">Nenhum pedido corresponde aos filtros ou à pesquisa.</td>
+            </tr>
+          </template>
+          <template v-else>
+            <tr v-for="o in rows" :key="o.id">
+              <td class="mono">{{ o.id }}</td>
+              <td>{{ o.clientName }}</td>
+              <td>{{ o.zone }}</td>
+              <td>{{ orderTypeLabels[o.type] }}</td>
+              <td><span :class="['prio', 'p' + o.priority]">{{ o.priority }}</span></td>
+              <td>{{ orderStatusLabels[o.status] }}</td>
+              <td class="muted">{{ o.createdAt.slice(0, 10) }}</td>
+              <td>
+                <RouterLink class="link" :to="{ name: 'order-detail', params: { id: o.id } }">Operar</RouterLink>
+              </td>
+            </tr>
+          </template>
         </tbody>
       </table>
     </div>
@@ -220,5 +227,12 @@ void logistics;
 
 .link:hover {
   text-decoration: underline;
+}
+
+.empty-row {
+  text-align: center;
+  padding: 28px 16px !important;
+  color: var(--bo-text-secondary);
+  font-size: 14px;
 }
 </style>

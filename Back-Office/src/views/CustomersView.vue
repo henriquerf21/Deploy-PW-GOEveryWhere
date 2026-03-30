@@ -24,6 +24,7 @@
           <tr>
             <th>Cliente</th>
             <th>Contacto</th>
+            <th>NIF</th>
             <th>Cidade / Zona</th>
             <th>Encomendas</th>
             <th>Gasto total</th>
@@ -34,7 +35,7 @@
         </thead>
         <tbody>
           <tr v-if="!filtered.length">
-            <td colspan="8" class="empty-cell">Sem clientes na lista ou na pesquisa.</td>
+            <td colspan="9" class="empty-cell">Sem clientes na lista ou na pesquisa.</td>
           </tr>
           <tr v-for="c in filtered" :key="c.id">
             <td>
@@ -45,6 +46,7 @@
               <div>{{ c.email }}</div>
               <div class="muted">{{ c.phone }}</div>
             </td>
+            <td class="mono muted">{{ c.nif || '—' }}</td>
             <td>
               <div>{{ c.city }}</div>
               <div class="muted">{{ c.zone }}</div>
@@ -53,7 +55,7 @@
             <td>{{ formatMoney(c.totalSpent) }}</td>
             <td class="muted">{{ c.lastOrderAt?.slice(0, 10) || '—' }}</td>
             <td>
-              <span class="stars">{{ c.avgRating.toFixed(1) }} ★</span>
+              <span class="stars">{{ (Number(c.avgRating) || 0).toFixed(1) }} ★</span>
             </td>
             <td class="actions">
               <button type="button" class="link-btn" @click="openView(c)">Ver</button>
@@ -83,6 +85,12 @@
             <dd>{{ viewCustomer.email }}</dd>
             <dt>Telefone</dt>
             <dd>{{ viewCustomer.phone || '—' }}</dd>
+            <dt>NIF</dt>
+            <dd class="mono">{{ viewCustomer.nif || '—' }}</dd>
+            <dt>Comunicações comerciais</dt>
+            <dd>{{ viewCustomer.marketingOptIn ? 'Aceites' : 'Recusadas' }}</dd>
+            <dt>Notas internas</dt>
+            <dd class="notes-dd">{{ viewCustomer.notes || '—' }}</dd>
             <dt>Cidade</dt>
             <dd>{{ viewCustomer.city }}</dd>
             <dt>Zona</dt>
@@ -94,7 +102,7 @@
             <dt>Última encomenda</dt>
             <dd>{{ viewCustomer.lastOrderAt?.slice(0, 19).replace('T', ' ') || '—' }}</dd>
             <dt>Avaliação média</dt>
-            <dd>{{ viewCustomer.avgRating.toFixed(1) }} / 5</dd>
+            <dd>{{ (Number(viewCustomer.avgRating) || 0).toFixed(1) }} / 5</dd>
           </dl>
           <div class="modal__actions">
             <button type="button" class="btn btn--sec" @click="viewCustomer = null">Fechar</button>
@@ -123,6 +131,8 @@
             <input id="bo-c-email" v-model="form.email" type="email" class="inp" autocomplete="email" />
             <label for="bo-c-phone">Telefone</label>
             <input id="bo-c-phone" v-model="form.phone" type="tel" class="inp" autocomplete="tel" />
+            <label for="bo-c-nif">NIF (opcional)</label>
+            <input id="bo-c-nif" v-model="form.nif" type="text" class="inp" inputmode="numeric" autocomplete="off" />
             <label for="bo-c-city">Cidade</label>
             <input id="bo-c-city" v-model="form.city" type="text" class="inp" />
             <label for="bo-c-zone">Zona</label>
@@ -131,6 +141,12 @@
             </select>
             <label for="bo-c-rating">Avaliação média (0–5)</label>
             <input id="bo-c-rating" v-model.number="form.avgRating" type="number" min="0" max="5" step="0.1" class="inp" />
+            <label class="check-row">
+              <input v-model="form.marketingOptIn" type="checkbox" />
+              Consente comunicações comerciais (opt-in)
+            </label>
+            <label for="bo-c-notes">Notas internas (só painel)</label>
+            <textarea id="bo-c-notes" v-model="form.notes" class="inp notes-ta" rows="2" placeholder="Preferências de entrega, alertas…" />
             <p class="form-hint">
               RF31: contacto, cidade, nº encomendas, gasto total, última encomenda e avaliação. Os três primeiros totais vêm dos
               pedidos (botão «Sincronizar» ou ao marcar entregue); a avaliação podes ajustar aqui.
@@ -154,6 +170,7 @@ import {
   updateCustomer,
   deleteCustomer,
   refreshCustomerAggregatesFromOrders,
+  syncOperationalAggregatesFromOrders,
   getCustomerById,
 } from '../stores/logisticsStore.js';
 import { ZONES } from '../constants/logistics.js';
@@ -175,9 +192,12 @@ const form = reactive({
   name: '',
   email: '',
   phone: '',
+  nif: '',
   city: '',
   zone: ZONES[0],
   avgRating: 4.5,
+  marketingOptIn: false,
+  notes: '',
 });
 
 const filtered = computed(() => {
@@ -199,7 +219,8 @@ function formatMoney(n) {
 
 function doSync() {
   const r = refreshCustomerAggregatesFromOrders();
-  toast(r.ok ? 'Totais atualizados a partir dos pedidos.' : 'Erro', r.ok ? 'success' : 'error');
+  syncOperationalAggregatesFromOrders();
+  toast(r.ok ? 'Totais de clientes e gráficos operacionais atualizados.' : 'Erro', r.ok ? 'success' : 'error');
 }
 
 function openAdd() {
@@ -208,9 +229,12 @@ function openAdd() {
   form.name = '';
   form.email = '';
   form.phone = '';
+  form.nif = '';
   form.city = '';
   form.zone = ZONES[0];
   form.avgRating = 4.5;
+  form.marketingOptIn = false;
+  form.notes = '';
   formOpen.value = true;
 }
 
@@ -221,9 +245,12 @@ function openEdit(c) {
   form.name = live.name;
   form.email = live.email;
   form.phone = live.phone || '';
+  form.nif = live.nif || '';
   form.city = live.city || '';
   form.zone = live.zone || ZONES[0];
   form.avgRating = live.avgRating;
+  form.marketingOptIn = !!live.marketingOptIn;
+  form.notes = live.notes || '';
   formOpen.value = true;
 }
 
@@ -264,9 +291,12 @@ function submitForm() {
       name,
       email,
       phone: form.phone,
+      nif: form.nif,
       city: form.city,
       zone: form.zone,
       avgRating,
+      marketingOptIn: form.marketingOptIn,
+      notes: form.notes,
     });
     toast(r.ok ? 'Cliente atualizado.' : r.error || 'Erro.', r.ok ? 'success' : 'error');
     if (r.ok) closeForm();
@@ -276,9 +306,12 @@ function submitForm() {
       name,
       email,
       phone: form.phone,
+      nif: form.nif,
       city: form.city,
       zone: form.zone,
       avgRating,
+      marketingOptIn: form.marketingOptIn,
+      notes: form.notes,
     });
     toast(r.ok ? 'Cliente criado.' : r.error || 'Erro.', r.ok ? 'success' : 'error');
     if (r.ok) closeForm();
@@ -554,5 +587,35 @@ function confirmDelete(c) {
   background: var(--bo-page);
   border: 1px solid var(--bo-border);
   color: var(--bo-text);
+}
+
+.mono {
+  font-family: ui-monospace, monospace;
+  font-size: 13px;
+}
+
+.notes-dd {
+  white-space: pre-wrap;
+  color: var(--bo-text-secondary);
+}
+
+.notes-ta {
+  resize: vertical;
+  min-height: 56px;
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.check-row input {
+  width: 18px;
+  height: 18px;
 }
 </style>

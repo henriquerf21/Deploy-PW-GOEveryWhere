@@ -76,36 +76,45 @@ function seed() {
       name: 'Maria Silva',
       email: 'maria.s@mail.pt',
       phone: '+351 912 000 001',
+      nif: '245789123',
       city: 'Porto',
       zone: 'Porto Centro',
       ordersCount: 12,
       totalSpent: 428.5,
       lastOrderAt: '2026-03-30T12:00:00Z',
       avgRating: 4.8,
+      marketingOptIn: true,
+      notes: 'Prefere entregas antes das 18h.',
     },
     {
       id: 'CU-2',
       name: 'João Costa',
       email: 'jcosta@mail.pt',
       phone: '+351 934 000 002',
+      nif: '201998877',
       city: 'Matosinhos',
       zone: 'Matosinhos',
       ordersCount: 4,
       totalSpent: 119.2,
       lastOrderAt: '2026-03-28T09:00:00Z',
       avgRating: 4.2,
+      marketingOptIn: false,
+      notes: '',
     },
     {
       id: 'CU-3',
       name: 'Ana Ribeiro',
       email: 'ana.r@mail.pt',
       phone: '+351 965 000 003',
+      nif: '288112233',
       city: 'Gaia',
       zone: 'Vila Nova de Gaia',
       ordersCount: 21,
       totalSpent: 902.0,
       lastOrderAt: '2026-03-29T16:00:00Z',
       avgRating: 4.9,
+      marketingOptIn: true,
+      notes: 'Cliente B2B ocasional — contactar para volumes.',
     },
   ];
 
@@ -114,11 +123,13 @@ function seed() {
       id: 'ST-1',
       name: 'Miguel Santos',
       email: 'm.santos@mail.pt',
+      phone: '+351 910 100 201',
       nif: '298765432',
       cc: '14895632 4 ZY',
       birthDate: '1992-05-14',
       address: 'Rua da Alegria 12, Porto',
       iban: 'PT50 0002 0123 12345678901 45',
+      adminNotes: 'Experiente; apto para pedidos urgentes.',
       state: COURIER_STATE.E06,
       online: true,
       maxConcurrent: 3,
@@ -127,6 +138,7 @@ function seed() {
         type: 'Mota',
         brand: 'Honda',
         model: 'PCX 125',
+        color: 'Cinzento',
         plate: 'AB-12-CD',
         licenseNumber: 'T-998877',
         insuranceRef: 'SEG-2026-8844',
@@ -143,11 +155,13 @@ function seed() {
       id: 'ST-2',
       name: 'Sofia Ferreira',
       email: 'sofi.f@mail.pt',
+      phone: '+351 922 200 302',
       nif: '201112233',
       cc: '12004455 6 ZZ',
       birthDate: '1995-11-02',
       address: 'Av. Brasil 44, Matosinhos',
       iban: 'PT50 0033 0444 55667788990 12',
+      adminNotes: '',
       state: COURIER_STATE.E06,
       online: true,
       maxConcurrent: 2,
@@ -156,6 +170,7 @@ function seed() {
         type: 'Carro',
         brand: 'Renault',
         model: 'Clio',
+        color: 'Branco',
         plate: 'EF-34-GH',
         licenseNumber: 'T-112233',
         insuranceRef: 'SEG-2026-2211',
@@ -172,11 +187,13 @@ function seed() {
       id: 'ST-3',
       name: 'Ricardo Pinto',
       email: 'rpinto@mail.pt',
+      phone: '+351 933 300 403',
       nif: '276543210',
       cc: '13998877 1 XX',
       birthDate: '1988-03-20',
       address: 'Rua Heroísmo 90, Gaia',
       iban: 'PT50 0011 0222 33445566778 90',
+      adminNotes: 'Aguardar documentação de seguro e carta.',
       state: COURIER_STATE.E01,
       online: false,
       maxConcurrent: 2,
@@ -185,6 +202,7 @@ function seed() {
         type: 'Mota',
         brand: 'Yamaha',
         model: 'NMAX',
+        color: 'Azul',
         plate: 'IJ-56-KL',
         licenseNumber: '',
         insuranceRef: '',
@@ -352,15 +370,9 @@ function seed() {
     { name: 'GoGummies Night 30u', sku: 'GG-NGT-30', units: 388 },
   ];
 
-  logistics.deliveriesByZone = [
-    { zone: 'Porto Centro', count: 124 },
-    { zone: 'Vila Nova de Gaia', count: 98 },
-    { zone: 'Matosinhos', count: 76 },
-    { zone: 'Maia', count: 52 },
-    { zone: 'Gondomar', count: 41 },
-  ];
-
-  logistics.hourlyVolume = [2, 3, 2, 4, 5, 8, 12, 18, 22, 28, 32, 30, 26, 24, 28, 34, 38, 42, 36, 24, 16, 10, 6, 4];
+  logistics.deliveriesByZone = [];
+  logistics.hourlyVolume = Array(24).fill(0);
+  syncOperationalAggregatesFromOrders();
 
   logistics.recentReviews = [
     { client: 'Maria Silva', rating: 5, text: 'Entrega rápida e embalagem impecável.', at: '2026-03-30T10:00:00Z' },
@@ -369,12 +381,66 @@ function seed() {
   ];
 
   logistics.products = [
-    { name: 'GoGummies Original', sku: 'GG-ORG-30', stock: 1240, price: 14.99, active: true, category: 'Gomas' },
-    { name: 'GoGummies Boost', sku: 'GG-BST-30', stock: 560, price: 16.99, active: true, category: 'Gomas' },
-    { name: 'GoGummies Night', sku: 'GG-NGT-30', stock: 0, price: 15.49, active: false, category: 'Gomas' },
+    {
+      name: 'GoGummies Original',
+      sku: 'GG-ORG-30',
+      brand: 'GoGummies',
+      description: '30 gomas proteicas sabor frutos vermelhos; fórmula diária equilibrada.',
+      ean: '5601234567891',
+      stock: 1240,
+      lowStockThreshold: 150,
+      price: 14.99,
+      active: true,
+      category: 'Gomas',
+      imageUrl: 'media/gogummies/product-detail.png',
+    },
+    {
+      name: 'GoGummies Boost',
+      sku: 'GG-BST-30',
+      brand: 'GoGummies',
+      description: 'Energia e foco — cafeína natural e vitaminas B.',
+      ean: '5601234567892',
+      stock: 560,
+      lowStockThreshold: 120,
+      price: 16.99,
+      active: true,
+      category: 'Gomas',
+      imageUrl: 'media/gogummies/hero-gym.png',
+    },
+    {
+      name: 'GoGummies Night',
+      sku: 'GG-NGT-30',
+      brand: 'GoGummies',
+      description: 'Melatonina + magnésio para rotina de descanso.',
+      ean: '5601234567893',
+      stock: 0,
+      lowStockThreshold: 80,
+      price: 15.49,
+      active: false,
+      category: 'Gomas',
+      imageUrl: 'media/gogummies/hero-jar.png',
+    },
   ];
 
   logAct('Dados de demonstração carregados.');
+}
+
+/** Atualiza agregados demo (zonas, histograma horário) a partir dos pedidos — alinha dashboard/relatórios com a lista real. */
+export function syncOperationalAggregatesFromOrders() {
+  const zoneMap = {};
+  for (const o of logistics.orders) {
+    if (o.status === ORDER_STATUS.REJECTED) continue;
+    zoneMap[o.zone] = (zoneMap[o.zone] || 0) + 1;
+  }
+  logistics.deliveriesByZone = Object.entries(zoneMap)
+    .map(([zone, count]) => ({ zone, count }))
+    .sort((a, b) => b.count - a.count);
+  const hours = Array(24).fill(0);
+  for (const o of logistics.orders) {
+    hours[new Date(o.createdAt).getHours()]++;
+  }
+  logistics.hourlyVolume = hours;
+  return { ok: true };
 }
 
 export function getOrderById(id) {
@@ -432,12 +498,15 @@ export function addCustomer(payload) {
     name,
     email,
     phone: (payload.phone || '').trim(),
+    nif: (payload.nif || '').trim(),
     city: (payload.city || '').trim() || '—',
     zone: (payload.zone || '').trim() || 'Outro',
     ordersCount: 0,
     totalSpent: 0,
     lastOrderAt: new Date().toISOString(),
     avgRating: Math.min(5, Math.max(0, Number(payload.avgRating) || 0)),
+    marketingOptIn: !!payload.marketingOptIn,
+    notes: (payload.notes || '').trim(),
   });
   logAct(`Cliente ${name} criado no painel.`);
   return { ok: true };
@@ -458,6 +527,9 @@ export function updateCustomer(id, patch) {
   if (patch.city != null) c.city = String(patch.city).trim() || c.city;
   if (patch.zone != null) c.zone = String(patch.zone).trim() || c.zone;
   if (patch.avgRating != null) c.avgRating = Math.min(5, Math.max(0, Number(patch.avgRating) || 0));
+  if (patch.nif != null) c.nif = String(patch.nif).trim();
+  if (patch.marketingOptIn != null) c.marketingOptIn = !!patch.marketingOptIn;
+  if (patch.notes != null) c.notes = String(patch.notes).trim();
   logAct(`Cliente ${c.name} atualizado.`);
   return { ok: true };
 }
@@ -492,6 +564,7 @@ export function approveOrder(orderId, { storeId, costEuro, etaMinutes, resources
   o.resources = resources;
   o.status = ORDER_STATUS.APPROVED;
   logAct(`Pedido ${orderId} aprovado (loja ${storeId}).`);
+  syncOperationalAggregatesFromOrders();
   return { ok: true };
 }
 
@@ -512,6 +585,7 @@ export function rejectOrder(orderId, justification) {
     kind: 'rejeição',
   });
   logAct(`Pedido ${orderId} rejeitado.`);
+  syncOperationalAggregatesFromOrders();
   return { ok: true };
 }
 
@@ -531,6 +605,7 @@ export function requestOrderInfo(orderId, message) {
     kind: 'info_adicional',
   });
   logAct(`Pedido ${orderId}: pedido de informação ao cliente.`);
+  syncOperationalAggregatesFromOrders();
   return { ok: true };
 }
 
@@ -554,11 +629,19 @@ export function assignCourierToOrder(orderId, courierId) {
   if (active >= c.maxConcurrent) {
     return { ok: false, error: 'Limite de entregas simultâneas atingido' };
   }
+  if (o.courierId && o.courierId !== courierId) {
+    const prev = getCourierById(o.courierId);
+    if (prev && prev.currentOrderId === orderId) {
+      prev.currentOrderId = null;
+      prev.etaMinutes = null;
+    }
+  }
   o.courierId = courierId;
   o.status = ORDER_STATUS.ASSIGNED;
   c.currentOrderId = orderId;
   c.etaMinutes = o.etaMinutes;
   logAct(`Pedido ${orderId} atribuído a ${c.name}.`);
+  syncOperationalAggregatesFromOrders();
   return { ok: true };
 }
 
@@ -581,6 +664,7 @@ export function startTransit(orderId) {
   if (!o || o.status !== ORDER_STATUS.ASSIGNED) return { ok: false };
   o.status = ORDER_STATUS.IN_TRANSIT;
   logAct(`Pedido ${orderId} em trânsito.`);
+  syncOperationalAggregatesFromOrders();
   return { ok: true };
 }
 
@@ -601,15 +685,18 @@ export function completeDelivery(orderId) {
   }
   logAct(`Pedido ${orderId} entregue.`);
   refreshAggregatesForCustomerId(o.clientId);
+  syncOperationalAggregatesFromOrders();
   return { ok: true };
 }
 
-export function addProduct({ name, sku, stock, price, category }) {
+export function addProduct({ name, sku, stock, price, category, imageUrl, brand, description, ean, lowStockThreshold }) {
   const s = (sku || '').trim();
   if (!s) return { ok: false, error: 'SKU obrigatório' };
   if (logistics.products.some((p) => p.sku === s)) return { ok: false, error: 'SKU já existe' };
   const st = Number(stock);
   const pr = Number(price);
+  const img = imageUrl != null ? String(imageUrl).trim() : '';
+  const lst = Number(lowStockThreshold);
   logistics.products.push({
     name: (name || '').trim() || 'Sem nome',
     sku: s,
@@ -617,6 +704,11 @@ export function addProduct({ name, sku, stock, price, category }) {
     price: Number.isFinite(pr) ? Math.max(0, pr) : 0,
     active: true,
     category: (category || '').trim() || 'Geral',
+    brand: (brand || '').trim() || 'GoGummies',
+    description: (description || '').trim(),
+    ean: (ean || '').trim(),
+    lowStockThreshold: Number.isFinite(lst) && lst >= 0 ? lst : 0,
+    ...(img ? { imageUrl: img } : {}),
   });
   logAct(`Produto ${s} adicionado.`);
   return { ok: true };
@@ -636,6 +728,18 @@ export function updateProduct(sku, patch) {
   }
   if (patch.active != null) p.active = !!patch.active;
   if (patch.category != null) p.category = String(patch.category).trim() || p.category;
+  if (patch.imageUrl !== undefined) {
+    const img = String(patch.imageUrl || '').trim();
+    if (img) p.imageUrl = img;
+    else delete p.imageUrl;
+  }
+  if (patch.brand != null) p.brand = String(patch.brand).trim() || p.brand;
+  if (patch.description != null) p.description = String(patch.description).trim();
+  if (patch.ean != null) p.ean = String(patch.ean).trim();
+  if (patch.lowStockThreshold != null) {
+    const lst = Number(patch.lowStockThreshold);
+    if (Number.isFinite(lst) && lst >= 0) p.lowStockThreshold = lst;
+  }
   logAct(`Produto ${sku} atualizado.`);
   return { ok: true };
 }
@@ -668,11 +772,13 @@ export function registerCourier(payload) {
     id: uid('ST'),
     name: payload.name,
     email: payload.email,
+    phone: (payload.phone || '').trim(),
     nif: payload.nif || '',
     cc: payload.cc || '',
     birthDate: payload.birthDate || '',
     address: payload.address || '',
     iban: payload.iban || '',
+    adminNotes: '',
     state: COURIER_STATE.E01,
     online: false,
     maxConcurrent: Math.max(1, Number(payload.maxConcurrent) || 2),
@@ -681,6 +787,7 @@ export function registerCourier(payload) {
       type: payload.vehicleType || '',
       brand: payload.brand || '',
       model: payload.model || '',
+      color: (payload.vehicleColor || '').trim(),
       plate: payload.plate || '',
       licenseNumber: payload.licenseNumber || '',
       insuranceRef: payload.insuranceRef || '',
@@ -719,11 +826,13 @@ export function updateCourierVerified(courierId, patch) {
   Object.assign(c, {
     name: patch.name ?? c.name,
     email: patch.email ?? c.email,
+    phone: patch.phone !== undefined ? String(patch.phone).trim() : c.phone,
     nif: patch.nif ?? c.nif,
     cc: patch.cc ?? c.cc,
     birthDate: patch.birthDate ?? c.birthDate,
     address: patch.address ?? c.address,
     iban: patch.iban ?? c.iban,
+    adminNotes: patch.adminNotes !== undefined ? String(patch.adminNotes).trim() : c.adminNotes,
     maxConcurrent: patch.maxConcurrent != null ? Math.max(1, Number(patch.maxConcurrent)) : c.maxConcurrent,
     zones: patch.zones ?? c.zones,
   });
@@ -825,6 +934,14 @@ export function setCourierMaxConcurrent(courierId, n) {
   return { ok: true };
 }
 
+export function setCourierAdminNotes(courierId, notes) {
+  const c = getCourierById(courierId);
+  if (!c) return { ok: false, error: 'Não encontrado' };
+  c.adminNotes = String(notes || '').trim();
+  logAct(`Notas internas atualizadas — ${c.name}.`);
+  return { ok: true };
+}
+
 /** Filtros RF15 */
 export function filterOrders({ status, priority, dateFrom, dateTo, type, zone, q }) {
   return logistics.orders.filter((o) => {
@@ -864,19 +981,86 @@ export const kpiSummary = computed(() => {
     )
   ).length;
   const online = logistics.couriers.filter((c) => c.state === COURIER_STATE.E06 && c.online).length;
-  const revenue = logistics.orders.reduce((a, o) => a + (Number(o.costEuro) || 0), 0);
-  return { ordersToday, active, online, revenue };
+  const pipelineStatuses = [ORDER_STATUS.APPROVED, ORDER_STATUS.ASSIGNED, ORDER_STATUS.IN_TRANSIT];
+  const revenuePipeline = logistics.orders
+    .filter((o) => pipelineStatuses.includes(o.status))
+    .reduce((a, o) => a + (Number(o.costEuro) || 0), 0);
+  const revenueDelivered = logistics.orders
+    .filter((o) => o.status === ORDER_STATUS.DELIVERED)
+    .reduce((a, o) => a + (Number(o.costEuro) || 0), 0);
+  const productsActive = logistics.products.filter((p) => p.active).length;
+  const lowStockCount = logistics.products.filter((p) => {
+    if (!p.active) return false;
+    const th = Number(p.lowStockThreshold);
+    if (!Number.isFinite(th) || th <= 0) return false;
+    return Number(p.stock) <= th;
+  }).length;
+  const totalOrders = logistics.orders.length;
+  const rejectedCount = logistics.orders.filter((o) => o.status === ORDER_STATUS.REJECTED).length;
+  const rejectionRatePct = totalOrders > 0 ? Math.round((rejectedCount / totalOrders) * 1000) / 10 : 0;
+  return {
+    ordersToday,
+    active,
+    online,
+    revenuePipeline,
+    revenueDelivered,
+    productsActive,
+    totalProducts: logistics.products.length,
+    lowStockCount,
+    totalCustomers: logistics.customers.length,
+    rejectedCount,
+    rejectionRatePct,
+  };
 });
 
-/** RF30 — receita mensal últimos 6 meses (demo) */
-export const monthlyRevenueSeries = [
-  { month: 'Out', k: 12.4 },
-  { month: 'Nov', k: 15.8 },
-  { month: 'Dez', k: 18.2 },
-  { month: 'Jan', k: 16.1 },
-  { month: 'Fev', k: 19.5 },
-  { month: 'Mar', k: 22.1 },
-];
+const PT_MONTHS_SHORT = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+
+/** Últimos 6 meses: soma de custos (€) de pedidos entregues, por mês de criação do pedido → valores em k€. */
+export function getMonthlyDeliveredKiloEuroSeries() {
+  const now = new Date();
+  const rows = [];
+  for (let i = 5; i >= 0; i--) {
+    const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+    const y = d.getFullYear();
+    const mo = d.getMonth() + 1;
+    const key = `${y}-${String(mo).padStart(2, '0')}`;
+    rows.push({
+      key,
+      month: `${PT_MONTHS_SHORT[mo - 1]} ’${String(y).slice(2)}`,
+      euroSum: 0,
+    });
+  }
+  const keyToIdx = new Map(rows.map((r, idx) => [r.key, idx]));
+  for (const o of logistics.orders) {
+    if (o.status !== ORDER_STATUS.DELIVERED) continue;
+    const key = o.createdAt.slice(0, 7);
+    const idx = keyToIdx.get(key);
+    if (idx === undefined) continue;
+    rows[idx].euroSum += Number(o.costEuro) || 0;
+  }
+  return rows.map(({ month, euroSum }) => ({
+    month,
+    k: Math.round((euroSum / 1000) * 10) / 10,
+  }));
+}
+
+export const monthlyRevenueFromOrders = computed(() => getMonthlyDeliveredKiloEuroSeries());
+
+/** Pedidos não rejeitados com loja atribuída, por ponto de recolha. */
+export const pickupsByStore = computed(() => {
+  const map = {};
+  for (const o of logistics.orders) {
+    if (o.status === ORDER_STATUS.REJECTED || !o.storeId) continue;
+    map[o.storeId] = (map[o.storeId] || 0) + 1;
+  }
+  return Object.entries(map)
+    .map(([storeId, count]) => ({
+      storeId,
+      name: getStoreById(storeId)?.name || storeId,
+      count,
+    }))
+    .sort((a, b) => b.count - a.count);
+});
 
 export function cancellationRatePct() {
   const t = logistics.orders.length;
@@ -911,7 +1095,7 @@ export function exportOrdersCsv() {
 export function exportFullReportCsv() {
   const pack = ['tipo', 'packs_mais_vendidos', ...logistics.packSales.map((p) => `${p.name}|${p.units}`)].join(';');
   const zones = ['tipo', 'top_zonas', ...logistics.deliveriesByZone.map((z) => `${z.zone}|${z.count}`)].join(';');
-  const rev = ['tipo', 'receita_mensal_kEUR', ...monthlyRevenueSeries.map((m) => `${m.month}|${m.k}`)].join(';');
+  const rev = ['tipo', 'custo_entregues_kEUR_6m', ...getMonthlyDeliveredKiloEuroSeries().map((m) => `${m.month}|${m.k}`)].join(';');
   return [exportOrdersCsv(), '', pack, zones, rev, '', `taxa_cancelamento_pct;${cancellationRatePct()}`].join('\n');
 }
 
