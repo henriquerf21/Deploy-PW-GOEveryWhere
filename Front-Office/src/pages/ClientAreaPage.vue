@@ -25,22 +25,30 @@
 
         <div class="dashboard-grid">
           <router-link to="/order/select" class="dash-card">
-            <span class="dash-icon">🛒</span>
+            <span class="dash-icon" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="9" cy="21" r="1"/><circle cx="20" cy="21" r="1"/><path d="M1 1h4l2.68 13.39a2 2 0 0 0 2 1.61h9.72a2 2 0 0 0 2-1.61L23 6H6"/></svg>
+            </span>
             <h3>Nova Encomenda</h3>
             <p>Encomendar GoGummies</p>
           </router-link>
           <router-link to="/order/tracking" class="dash-card">
-            <span class="dash-icon">📦</span>
+            <span class="dash-icon" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+            </span>
             <h3>Encomendas Ativas</h3>
             <p>Ver tracking em tempo real</p>
           </router-link>
           <router-link to="/order/history" class="dash-card">
-            <span class="dash-icon">📋</span>
+            <span class="dash-icon" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
+            </span>
             <h3>Histórico</h3>
             <p>Encomendas anteriores</p>
           </router-link>
           <div class="dash-card">
-            <span class="dash-icon">⚙️</span>
+            <span class="dash-icon" aria-hidden="true">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </span>
             <h3>Definições</h3>
             <p>Dados e preferências</p>
           </div>
@@ -69,17 +77,13 @@
       </div>
     </main>
 
-    <footer class="site-footer">
-      <div class="footer-inner">
-        <div class="footer-brand"><span class="footer-logo">G</span><span>GoEverywhere</span></div>
-        <p class="copyright">© 2026 GoEverywhere, Lda. Todos os direitos reservados.</p>
-      </div>
-    </footer>
+    <SiteFooter />
   </div>
 </template>
 
 <script setup>
 import SiteHeader from '../components/SiteHeader.vue';
+import SiteFooter from '../components/SiteFooter.vue';
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore, logout, isAuthenticated } from '../stores/authStore.js';
@@ -126,7 +130,13 @@ function handleLogout() {
 .dash-card:nth-child(4) { animation-delay: 0.4s; }
 @keyframes gridIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
 .dash-card:hover { border-color: #00c853; transform: translateY(-4px); box-shadow: 0 12px 32px rgba(0,0,0,0.1); }
-.dash-icon { font-size: 32px; display: block; margin-bottom: 12px; }
+.dash-icon {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  color: #00a344;
+}
+.dash-icon svg { flex-shrink: 0; }
 .dash-card h3 { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
 .dash-card p { font-size: 13px; color: #6b7280; }
 
@@ -138,15 +148,8 @@ function handleLogout() {
 .info-label { font-size: 13px; color: #6b7280; font-weight: 500; }
 .info-value { font-size: 14px; font-weight: 600; color: #111827; }
 
-.site-footer { background: #111827; color: #fff; padding: 32px; }
-.footer-inner { max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
-.footer-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; }
-.footer-logo { width: 32px; height: 32px; border-radius: 10px; background: #00c853; display: flex; align-items: center; justify-content: center; font-weight: 700; }
-.copyright { font-size: 13px; color: #9ca3af; }
-
 @media (max-width: 768px) {
   .dashboard-grid { grid-template-columns: 1fr; }
-  .footer-inner { flex-direction: column; gap: 16px; text-align: center; }
   .info-row { flex-direction: column; align-items: flex-start; gap: 4px; }
 }
 </style>

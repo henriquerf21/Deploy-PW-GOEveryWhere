@@ -32,17 +32,13 @@
       </div>
     </main>
 
-    <footer class="site-footer">
-      <div class="footer-inner">
-        <div class="footer-brand"><span class="footer-logo">G</span><span>GoEverywhere</span></div>
-        <p class="copyright">© 2026 GoEverywhere, Lda. Todos os direitos reservados.</p>
-      </div>
-    </footer>
+    <SiteFooter />
   </div>
 </template>
 
 <script setup>
 import SiteHeader from '../components/SiteHeader.vue';
+import SiteFooter from '../components/SiteFooter.vue';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { loginWithGoogle } from '../stores/authStore.js';
@@ -106,14 +102,7 @@ async function handleGoogleLogin() {
 .continue-link { color: #6b7280; font-size: 14px; text-decoration: none; transition: color 0.2s; }
 .continue-link:hover { color: #00c853; }
 
-.site-footer { background: #111827; color: #fff; padding: 32px; }
-.footer-inner { max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
-.footer-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; }
-.footer-logo { width: 32px; height: 32px; border-radius: 10px; background: #00c853; display: flex; align-items: center; justify-content: center; font-weight: 700; }
-.copyright { font-size: 13px; color: #9ca3af; }
-
 @media (max-width: 768px) {
   .auth-card { padding: 32px 24px; }
-  .footer-inner { flex-direction: column; gap: 16px; text-align: center; }
 }
 </style>

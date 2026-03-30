@@ -89,17 +89,13 @@
       </div>
     </main>
 
-    <footer class="site-footer">
-      <div class="footer-inner">
-        <div class="footer-brand"><span class="footer-logo">G</span><span>GoEverywhere</span></div>
-        <p class="copyright">© 2026 GoEverywhere, Lda. Todos os direitos reservados.</p>
-      </div>
-    </footer>
+    <SiteFooter />
   </div>
 </template>
 
 <script setup>
 import SiteHeader from '../components/SiteHeader.vue';
+import SiteFooter from '../components/SiteFooter.vue';
 import { ref, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { register, loginWithGoogle } from '../stores/authStore.js';
@@ -269,17 +265,10 @@ async function handleGoogleRegister() {
 .switch-text { text-align: center; margin-top: 24px; font-size: 13px; color: #6b7280; }
 .switch-link { color: #00c853; font-weight: 600; text-decoration: none; }
 
-.site-footer { background: #111827; color: #fff; padding: 32px; }
-.footer-inner { max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
-.footer-brand { display: flex; align-items: center; gap: 10px; font-weight: 600; }
-.footer-logo { width: 32px; height: 32px; border-radius: 10px; background: #00c853; display: flex; align-items: center; justify-content: center; font-weight: 700; }
-.copyright { font-size: 13px; color: #9ca3af; }
-
 @keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
 
 @media (max-width: 768px) {
   .auth-card { padding: 32px 24px; }
   .form-row-2col { grid-template-columns: 1fr; }
-  .footer-inner { flex-direction: column; gap: 16px; text-align: center; }
 }
 </style>

@@ -3,7 +3,7 @@
     <div class="header-inner">
       <router-link to="/" class="logo">
         <img :src="MEDIA.brandLogo" alt="GoEverywhere" class="logo-img" />
-        <span class="logo-text">GoEverywhere</span>
+        <span class="logo-text"><span class="logo-go">GO</span>Everywhere</span>
       </router-link>
       <nav class="header-nav">
         <router-link to="/product" class="nav-item">Produtos</router-link>
@@ -85,7 +85,7 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll));
 
 <style scoped>
 .site-header {
-  font-family: 'Poppins', sans-serif;
+  font-family: 'Inter', system-ui, sans-serif;
   background: rgba(255, 255, 255, 0.75);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
@@ -105,27 +105,34 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll));
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 12px 32px;
+  padding: 14px 32px;
 }
 .logo {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 14px;
   text-decoration: none;
   color: #111827;
   transition: opacity 0.2s;
 }
 .logo:hover { opacity: 0.8; }
 .logo-img {
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
+  width: 52px;
+  height: 52px;
+  border-radius: 14px;
   object-fit: contain;
 }
 .logo-text {
+  font-family: 'Oswald', 'Inter', sans-serif;
+  font-weight: 600;
+  font-size: clamp(1.25rem, 2.5vw, 1.5rem);
+  letter-spacing: 0.02em;
+  color: #0f172a;
+}
+.logo-go {
   font-weight: 700;
-  font-size: 16px;
-  letter-spacing: -0.02em;
+  letter-spacing: 0.06em;
+  margin-right: 1px;
 }
 .header-nav {
   display: flex;
@@ -146,7 +153,7 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll));
   left: 0;
   width: 0;
   height: 2px;
-  background: #00c853;
+  background: #0f172a;
   border-radius: 1px;
   transition: width 0.3s ease;
 }
@@ -170,12 +177,12 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll));
   font-weight: 500;
   transition: color 0.2s;
 }
-.action-btn:hover { color: #00c853; }
+.action-btn:hover { color: #0f172a; }
 .user-avatar {
   width: 30px;
   height: 30px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #00c853, #00e676);
+  background: linear-gradient(135deg, #334155, #0f172a);
   color: #fff;
   display: flex;
   align-items: center;
@@ -188,20 +195,19 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll));
   align-items: center;
   gap: 6px;
   text-decoration: none;
-  background: #00c853;
-  color: #fff;
+  background: #fff;
+  color: #0f172a;
   padding: 10px 22px;
   border-radius: 12px;
   font-weight: 600;
   font-size: 13px;
   font-family: inherit;
-  transition: all 0.3s ease;
-  box-shadow: 0 2px 12px rgba(0,200,83,0.25);
+  transition: all 0.2s ease;
+  border: 1px solid #e2e8f0;
 }
 .btn-login:hover {
-  background: #00b048;
+  border-color: #0f172a;
   transform: translateY(-1px);
-  box-shadow: 0 4px 16px rgba(0,200,83,0.35);
 }
 .btn-logout {
   display: flex;
@@ -259,8 +265,8 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll));
   width: 100%;
   transition: color 0.2s;
 }
-.mobile-link:hover { color: #00c853; }
-.mobile-link.accent { color: #00c853; }
+.mobile-link:hover { color: #0f172a; }
+.mobile-link.accent { color: #0f172a; font-weight: 700; }
 .mobile-link.logout { color: #ef4444; }
 .mobile-link:last-child { border-bottom: none; }
 

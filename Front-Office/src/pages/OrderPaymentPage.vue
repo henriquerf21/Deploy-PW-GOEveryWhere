@@ -1,239 +1,308 @@
 <template>
-  <div class="page-wrapper">
+  <div class="page-wrapper cf-checkout">
     <SiteHeader />
+    <CheckoutWizardSteps :current-step="3" />
 
-    <!-- Wizard Steps -->
-    <div class="wizard-steps">
-      <router-link to="/order/select" class="step done">
-        <div class="step-dot"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>
-        <span>Carrinho</span>
-      </router-link>
-      <div class="step-line done-line"></div>
-      <router-link to="/order/delivery" class="step done">
-        <div class="step-dot"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg></div>
-        <span>Entrega</span>
-      </router-link>
-      <div class="step-line done-line"></div>
-      <div class="step active"><div class="step-dot"></div><span>Pagamento</span></div>
-    </div>
+    <main class="cf-checkout-main">
+      <router-link to="/order/delivery" class="cf-back-link">← Voltar à entrega</router-link>
 
-    <main class="payment-main">
+      <header class="cf-checkout-head">
+        <p class="cf-checkout-kicker">Último passo</p>
+        <h1 class="cf-checkout-title">Pagamento</h1>
+        <p class="cf-checkout-sub">
+          Confirma o resumo, escolhe o método e finaliza. O total inclui portes e opções que selecionaste.
+        </p>
+      </header>
+
       <div class="payment-layout">
-        <!-- Left: Order Summary -->
-        <div class="summary-card">
-          <h2>Resumo</h2>
-          <div v-for="item in cartItems" :key="item.id" class="summary-line">
-            <span class="summary-product">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="#00c853" stroke="none"><circle cx="12" cy="12" r="6"/></svg>
-              {{ item.qty }}x {{ item.name }}
-            </span>
-            <span>€{{ item.lineTotal.toFixed(2) }}</span>
-          </div>
-          <div class="summary-divider"></div>
+        <aside class="summary-card cf-panel" aria-labelledby="summary-heading">
+          <h2 id="summary-heading" class="side-title">Resumo</h2>
+          <ul class="summary-list">
+            <li v-for="item in cartItems" :key="item.id" class="summary-line">
+              <span class="summary-product">{{ item.qty }}× {{ item.name }}</span>
+              <span class="summary-amount">€{{ item.lineTotal.toFixed(2) }}</span>
+            </li>
+          </ul>
+          <hr class="inner-rule" />
           <div class="summary-line muted">
-            <span>Subtotal</span><span>€{{ subTotal.toFixed(2) }}</span>
+            <span>Subtotal</span>
+            <span>€{{ subTotal.toFixed(2) }}</span>
           </div>
           <div class="summary-line muted">
-            <span class="summary-product">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-              Entrega
-            </span>
-            <span :class="{ 'free-delivery': deliveryFeeVal === 0 }">
-              {{ deliveryFeeVal === 0 ? 'Grátis' : '€' + deliveryFeeVal.toFixed(2) }}
+            <span>Portes</span>
+            <span :class="{ 'price-free': deliveryFeeVal === 0 }">
+              {{ deliveryFeeVal === 0 ? 'Grátis' : `€${deliveryFeeVal.toFixed(2)}` }}
             </span>
           </div>
-          <div v-if="urgentFeeVal > 0" class="summary-line urgent-line">
-            <span class="summary-product">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#e65100" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-              Taxa urgente
-            </span>
+          <div v-if="urgentFeeVal > 0" class="summary-line warn-line">
+            <span>Urgente</span>
             <span>€{{ urgentFeeVal.toFixed(2) }}</span>
           </div>
           <div v-if="discountVal > 0" class="summary-line discount-line">
-            <span class="summary-product">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-              Desconto GoPoints
-            </span>
-            <span>-€{{ discountVal.toFixed(2) }}</span>
+            <span>GoPoints</span>
+            <span>−€{{ discountVal.toFixed(2) }}</span>
           </div>
-          <div class="summary-divider"></div>
-          <div class="summary-line total">
-            <span>Total</span><span>€{{ total.toFixed(2) }}</span>
+          <hr class="inner-rule" />
+          <div class="summary-line total-line">
+            <span>Total</span>
+            <span>€{{ total.toFixed(2) }}</span>
           </div>
 
-          <div class="points-earned">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f57f17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
-            <span>+{{ pointsEarned }} GoPoints com esta compra</span>
+          <div v-if="pointsEarned > 0" class="points-earned">
+            <Award :size="18" :stroke-width="1.75" aria-hidden="true" />
+            <span>+{{ pointsEarned }} GoPoints após confirmação</span>
           </div>
-        </div>
+        </aside>
 
-        <!-- Right: Delivery + Payment -->
-        <div class="details-card">
-          <section class="delivery-section">
-            <h3>Entrega</h3>
+        <div class="details-card cf-panel">
+          <section class="pay-section" aria-labelledby="delivery-review">
+            <h2 id="delivery-review" class="side-title">Entrega</h2>
             <div class="detail-row">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+              <User :size="16" :stroke-width="1.75" class="detail-ic" aria-hidden="true" />
               <span>{{ store.delivery.name }} · {{ store.delivery.phone }}</span>
             </div>
             <div class="detail-row">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+              <Home :size="16" :stroke-width="1.75" class="detail-ic" aria-hidden="true" />
               <span>{{ store.delivery.address }}, {{ store.delivery.postalCode }} {{ store.delivery.city }}</span>
             </div>
-            <div class="detail-row" v-if="store.delivery.assignedStore">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+            <div v-if="store.delivery.assignedStore" class="detail-row">
+              <Store :size="16" :stroke-width="1.75" class="detail-ic" aria-hidden="true" />
               <span>{{ store.delivery.assignedStore.name }}</span>
             </div>
             <div class="detail-row">
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#6b7280" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-              <span>~{{ eta }} min{{ store.cart.urgentDelivery ? ' (urgente)' : '' }}</span>
+              <Clock :size="16" :stroke-width="1.75" class="detail-ic" aria-hidden="true" />
+              <span>Chegada indicativa ~{{ eta }} min{{ store.cart.urgentDelivery ? ' (urgente)' : '' }}</span>
             </div>
-            <div v-if="store.cart.urgentDelivery" class="urgent-badge">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-              Entrega Urgente Ativada
-            </div>
+            <p v-if="store.cart.urgentDelivery" class="urgent-pill">
+              <Zap :size="14" :stroke-width="1.75" aria-hidden="true" />
+              Entrega urgente ativa
+            </p>
           </section>
 
-          <div class="section-divider"></div>
+          <hr class="cf-divider" />
 
-          <!-- GoPoints Redemption (RF12) -->
-          <section v-if="store.goPoints.balance >= 500" class="gopoints-section">
-            <h3>GoPoints</h3>
-            <p class="gopoints-balance">Saldo: <strong>{{ store.goPoints.balance }} pts</strong></p>
+          <section v-if="store.goPoints.balance >= 500" class="pay-section" aria-labelledby="gopoints-h">
+            <h2 id="gopoints-h" class="side-title">GoPoints</h2>
+            <p class="gopoints-intro">Saldo: <strong>{{ store.goPoints.balance }} pts</strong></p>
             <div class="gopoints-options">
-              <div
+              <button
+                v-if="store.goPoints.balance >= 500"
+                type="button"
                 class="gopoints-option"
                 :class="{ active: store.payment.useGoPoints && store.payment.goPointsRedemption === 'delivery_free' }"
                 @click="togglePoints('delivery_free')"
-                v-if="store.goPoints.balance >= 500"
               >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-                <div>
-                  <span class="gp-title">Entrega Grátis</span>
-                  <span class="gp-cost">500 pts</span>
-                </div>
-              </div>
-              <div
+                <Truck :size="22" :stroke-width="1.5" aria-hidden="true" />
+                <span class="gp-title">Portes grátis</span>
+                <span class="gp-cost">500 pts</span>
+              </button>
+              <button
+                v-if="store.goPoints.balance >= 1000"
+                type="button"
                 class="gopoints-option"
                 :class="{ active: store.payment.useGoPoints && store.payment.goPointsRedemption === 'product_free' }"
                 @click="togglePoints('product_free')"
-                v-if="store.goPoints.balance >= 1000"
               >
-                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-                <div>
-                  <span class="gp-title">Produto Grátis</span>
-                  <span class="gp-cost">1000 pts</span>
-                </div>
-              </div>
+                <Tag :size="22" :stroke-width="1.5" aria-hidden="true" />
+                <span class="gp-title">Desconto em produto</span>
+                <span class="gp-cost">1000 pts</span>
+              </button>
             </div>
           </section>
 
-          <div v-if="store.goPoints.balance >= 500" class="section-divider"></div>
+          <hr v-if="store.goPoints.balance >= 500" class="cf-divider" />
 
-          <section class="payment-section">
-            <h3>Método de pagamento</h3>
-            <div class="payment-methods">
-              <button class="pay-method" :class="{ active: store.payment.method === 'card' }" @click="setMethod('card')">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="1" y="4" width="22" height="16" rx="2"/><line x1="1" y1="10" x2="23" y2="10"/></svg>
+          <section class="pay-section" aria-labelledby="pay-methods-h">
+            <h2 id="pay-methods-h" class="side-title">Método</h2>
+            <div class="payment-methods" role="radiogroup" aria-label="Método de pagamento">
+              <button
+                type="button"
+                class="pay-method"
+                :class="{ active: store.payment.method === 'card' }"
+                role="radio"
+                :aria-checked="store.payment.method === 'card'"
+                @click="setMethod('card')"
+              >
+                <CreditCard :size="20" :stroke-width="1.5" aria-hidden="true" />
                 Cartão
               </button>
-              <button class="pay-method" :class="{ active: store.payment.method === 'mbway' }" @click="setMethod('mbway')">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
+              <button
+                type="button"
+                class="pay-method"
+                :class="{ active: store.payment.method === 'mbway' }"
+                role="radio"
+                :aria-checked="store.payment.method === 'mbway'"
+                @click="setMethod('mbway')"
+              >
+                <Smartphone :size="20" :stroke-width="1.5" aria-hidden="true" />
                 MB Way
               </button>
-              <button class="pay-method" :class="{ active: store.payment.method === 'multibanco' }" @click="setMethod('multibanco')">
-                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><line x1="2" y1="10" x2="22" y2="10"/><rect x="6" y="14" width="4" height="2" rx="1"/></svg>
+              <button
+                type="button"
+                class="pay-method"
+                :class="{ active: store.payment.method === 'multibanco' }"
+                role="radio"
+                :aria-checked="store.payment.method === 'multibanco'"
+                @click="setMethod('multibanco')"
+              >
+                <Building2 :size="20" :stroke-width="1.5" aria-hidden="true" />
                 Multibanco
               </button>
             </div>
 
-            <!-- Card fields -->
             <div v-if="store.payment.method === 'card'" class="payment-fields">
-              <div class="form-group">
-                <label for="card-name">Nome no cartão</label>
-                <input id="card-name" type="text" v-model="store.payment.cardName" placeholder="Nome completo" />
+              <div class="cf-field">
+                <label class="cf-label" for="card-name">Nome no cartão</label>
+                <input
+                  id="card-name"
+                  v-model="store.payment.cardName"
+                  class="cf-input"
+                  type="text"
+                  autocomplete="cc-name"
+                  placeholder="Como está no cartão"
+                />
               </div>
-              <div class="form-group">
-                <label for="card-number">Número do cartão</label>
-                <input id="card-number" type="text" v-model="store.payment.cardNumber" placeholder="4242 4242 4242 4242" maxlength="19" />
+              <div class="cf-field">
+                <label class="cf-label" for="card-number">Número</label>
+                <input
+                  id="card-number"
+                  v-model="store.payment.cardNumber"
+                  class="cf-input"
+                  type="text"
+                  inputmode="numeric"
+                  autocomplete="cc-number"
+                  placeholder="0000 0000 0000 0000"
+                  maxlength="19"
+                />
               </div>
               <div class="form-row-2col">
-                <div class="form-group">
-                  <label for="card-expiry">Validade</label>
-                  <input id="card-expiry" type="text" v-model="store.payment.cardExpiry" placeholder="MM/AA" maxlength="5" />
+                <div class="cf-field">
+                  <label class="cf-label" for="card-expiry">Validade</label>
+                  <input
+                    id="card-expiry"
+                    v-model="store.payment.cardExpiry"
+                    class="cf-input"
+                    type="text"
+                    autocomplete="cc-exp"
+                    placeholder="MM / AA"
+                    maxlength="7"
+                  />
                 </div>
-                <div class="form-group">
-                  <label for="card-cvv">CVV</label>
-                  <input id="card-cvv" type="password" v-model="store.payment.cardCvv" placeholder="•••" maxlength="4" />
+                <div class="cf-field">
+                  <label class="cf-label" for="card-cvv">CVC</label>
+                  <input
+                    id="card-cvv"
+                    v-model="store.payment.cardCvv"
+                    class="cf-input"
+                    type="password"
+                    autocomplete="cc-csc"
+                    placeholder="•••"
+                    maxlength="4"
+                  />
                 </div>
               </div>
             </div>
 
-            <!-- MB Way fields -->
             <div v-if="store.payment.method === 'mbway'" class="payment-fields">
-              <div class="form-group">
-                <label for="mbway-phone">Número de telemóvel</label>
-                <input id="mbway-phone" type="tel" v-model="store.payment.mbwayPhone" placeholder="912 345 678" />
+              <div class="cf-field">
+                <label class="cf-label" for="mbway-phone">Telemóvel MB Way</label>
+                <input
+                  id="mbway-phone"
+                  v-model="store.payment.mbwayPhone"
+                  class="cf-input"
+                  type="tel"
+                  inputmode="tel"
+                  autocomplete="tel"
+                  placeholder="912 345 678"
+                />
               </div>
-              <div class="info-note">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12.01" y2="18"/></svg>
-                <span>Receberás uma notificação no teu telemóvel para confirmar o pagamento.</span>
-              </div>
+              <p class="info-note">
+                <Info :size="16" :stroke-width="1.75" aria-hidden="true" />
+                Vais receber um pedido de pagamento na app. Confirma para concluir a encomenda.
+              </p>
             </div>
 
-            <!-- Multibanco reference -->
             <div v-if="store.payment.method === 'multibanco'" class="payment-fields">
               <div class="mb-reference">
-                <div class="mb-row"><span class="mb-label">Entidade:</span><span class="mb-value">21 312</span></div>
-                <div class="mb-row"><span class="mb-label">Referência:</span><span class="mb-value">{{ mbRef }}</span></div>
-                <div class="mb-row"><span class="mb-label">Montante:</span><span class="mb-value">€{{ total.toFixed(2) }}</span></div>
+                <div class="mb-row"><span class="mb-label">Entidade</span><span class="mb-value">21 312</span></div>
+                <div class="mb-row"><span class="mb-label">Referência</span><span class="mb-value">{{ mbRef }}</span></div>
+                <div class="mb-row"><span class="mb-label">Montante</span><span class="mb-value">€{{ total.toFixed(2) }}</span></div>
               </div>
-              <div class="info-note">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-                <span>Paga no Multibanco ou homebanking. A encomenda será processada após confirmação.</span>
-              </div>
+              <p class="info-note">
+                <Info :size="16" :stroke-width="1.75" aria-hidden="true" />
+                Usa o teu homebanking ou ATM. A encomenda segue após confirmação do pagamento.
+              </p>
             </div>
           </section>
 
-          <p class="estafeta-note">Um estafeta GoEverywhere será atribuído automaticamente à tua encomenda.</p>
+          <div class="cf-trust-inline">
+            <span><Lock :size="14" :stroke-width="1.75" aria-hidden="true" /> Ligação segura (simulação)</span>
+            <span><ShieldCheck :size="14" :stroke-width="1.75" aria-hidden="true" /> Estafeta atribuído após pagamento</span>
+          </div>
 
-          <button
-            class="btn-continue"
-            @click="confirmOrder"
-            :disabled="processing"
-          >
-            <svg v-if="processing" class="spinner-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><path d="M21 12a9 9 0 1 1-6.219-8.56"/></svg>
-            <span v-if="processing">A processar...</span>
-            <span v-else>Confirmar e Pagar — €{{ total.toFixed(2) }}</span>
+          <p class="estafeta-note">
+            A GoEverywhere atribui automaticamente um estafeta disponível na tua zona.
+          </p>
+
+          <button type="button" class="cf-btn-primary pay-submit" :disabled="processing" @click="confirmOrder">
+            <Loader2 v-if="processing" class="spin" :size="18" :stroke-width="2" aria-hidden="true" />
+            <span v-if="processing">A processar…</span>
+            <span v-else>Pagar €{{ total.toFixed(2) }}</span>
           </button>
         </div>
       </div>
     </main>
 
-    <!-- Notification Toast -->
     <Transition name="toast">
-      <div v-if="showToast" class="toast-notification">
-        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-        <span>Pedido submetido com sucesso! A redirecionar para tracking...</span>
+      <div v-if="showToast" class="toast-notification" role="status">
+        <CheckCircle2 :size="18" :stroke-width="1.75" aria-hidden="true" />
+        <span>Encomenda registada. A abrir o acompanhamento…</span>
       </div>
     </Transition>
 
-    <footer class="site-footer">
-      <div class="footer-inner">
-        <div class="footer-brand"><span class="footer-logo">G</span><span>GoEverywhere</span></div>
-        <p class="copyright">© 2026 GoEverywhere, Lda. Todos os direitos reservados.</p>
-      </div>
-    </footer>
+    <SiteFooter />
   </div>
 </template>
 
 <script setup>
 import SiteHeader from '../components/SiteHeader.vue';
+import SiteFooter from '../components/SiteFooter.vue';
+import CheckoutWizardSteps from '../components/CheckoutWizardSteps.vue';
 import { computed, ref, onMounted } from 'vue';
 import { useRouter } from 'vue-router';
 import {
-  useOrderStore, cartProducts, subtotal, deliveryFee, urgentFee,
-  productDiscount, orderTotal, estimatedETA, pointsToEarn,
-  setPaymentMethod, toggleGoPoints, submitOrder, isCartValid, isDeliveryValid
+  Award,
+  Building2,
+  CheckCircle2,
+  Clock,
+  CreditCard,
+  Home,
+  Info,
+  Loader2,
+  Lock,
+  ShieldCheck,
+  Smartphone,
+  Store,
+  Tag,
+  Truck,
+  User,
+  Zap,
+} from 'lucide-vue-next';
+import {
+  useOrderStore,
+  cartProducts,
+  subtotal,
+  deliveryFee,
+  urgentFee,
+  productDiscount,
+  orderTotal,
+  estimatedETA,
+  pointsToEarn,
+  setPaymentMethod,
+  toggleGoPoints,
+  submitOrder,
+  isCartValid,
+  isDeliveryValid,
 } from '../stores/orderStore.js';
 
 const router = useRouter();
@@ -285,110 +354,393 @@ function confirmOrder() {
 </script>
 
 <style scoped>
-@import url('https://fonts.googleapis.com/css2?family=Lora:wght@400;500;600;700&family=Raleway:wght@300;400;500;600;700;800&display=swap');
-* { box-sizing: border-box; margin: 0; padding: 0; }
+.page-wrapper {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
 
-.page-wrapper { font-family: 'Poppins', sans-serif; background: #f6f7f7; color: #111827; min-height: 100vh; display: flex; flex-direction: column; }
+.payment-layout {
+  display: grid;
+  grid-template-columns: minmax(0, 340px) minmax(0, 1fr);
+  gap: 1.5rem;
+  align-items: start;
+  max-width: 1000px;
+  margin: 0 auto;
+}
 
-.site-header { background: rgba(255,255,255,0.88); backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); border-bottom: 1px solid rgba(0,0,0,0.06); position: sticky; top: 0; z-index: 100; }
-.header-inner { max-width: 1280px; margin: 0 auto; display: flex; align-items: center; padding: 14px 32px; }
-.logo { display: flex; align-items: center; gap: 10px; text-decoration: none; color: #111827; transition: opacity 0.2s; }
-.logo:hover { opacity: 0.8; }
-.logo-img { width: 44px; height: 44px; border-radius: 14px; object-fit: cover; }
-.logo-text { font-family: 'Lora', serif; font-weight: 700; font-size: 16px; letter-spacing: -0.02em; }
+.summary-card,
+.details-card {
+  padding: 1.5rem 1.5rem 1.75rem;
+}
 
-.wizard-steps { max-width: 400px; margin: 28px auto 12px; display: flex; align-items: center; gap: 8px; padding: 0 32px; }
-.step { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: #9ca3af; text-decoration: none; cursor: default; }
-.step.active { color: #00c853; }
-.step.done { color: #00c853; cursor: pointer; }
-.step-dot { width: 12px; height: 12px; border-radius: 50%; background: #d1d5db; display: flex; align-items: center; justify-content: center; transition: all 0.25s; }
-.step.active .step-dot { background: #00c853; box-shadow: 0 0 0 4px rgba(0,200,83,0.15); }
-.step.done .step-dot { background: #00c853; width: 18px; height: 18px; }
-.step-line { flex: 1; height: 2px; background: #e5e7eb; border-radius: 1px; }
-.done-line { background: #00c853; }
+.summary-card {
+  position: sticky;
+  top: 5.5rem;
+}
 
-.payment-main { flex: 1; padding: 12px 32px 60px; animation: contentIn 0.5s ease-out; }
-@keyframes contentIn { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: translateY(0); } }
-.payment-layout { max-width: 1000px; margin: 0 auto; display: grid; grid-template-columns: 1fr 1fr; gap: 32px; align-items: start; }
+.side-title {
+  margin: 0 0 1rem;
+  font-family: var(--cf-display);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--cf-muted);
+}
 
-/* Summary */
-.summary-card { background: #fff; border-radius: 20px; padding: 32px; box-shadow: 0 8px 32px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.03); position: sticky; top: 90px; }
-.summary-card h2 { font-family: 'Lora', serif; font-size: 14px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 20px; }
-.summary-line { display: flex; justify-content: space-between; padding: 8px 0; font-size: 14px; font-weight: 500; }
-.summary-product { display: flex; align-items: center; gap: 8px; }
-.summary-line.muted { color: #6b7280; }
-.summary-line.urgent-line { color: #e65100; }
-.summary-line.discount-line { color: #059669; }
-.summary-line.total { font-family: 'Lora', serif; font-size: 20px; font-weight: 700; color: #00c853; }
-.summary-divider { height: 1px; background: #e5e7eb; margin: 8px 0; }
-.free-delivery { color: #059669; font-weight: 700; }
-.points-earned { display: flex; align-items: center; gap: 10px; background: linear-gradient(135deg, #fffde7, #fff8e1); border: 1px solid #ffd54f; border-radius: 12px; padding: 14px 16px; font-size: 13px; font-weight: 600; color: #f57f17; margin-top: 18px; }
+.summary-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
 
-/* Details */
-.details-card { background: #fff; border-radius: 20px; padding: 32px; box-shadow: 0 8px 32px rgba(0,0,0,0.06); border: 1px solid rgba(0,0,0,0.03); }
-.details-card h3 { font-family: 'Lora', serif; font-size: 14px; font-weight: 600; color: #6b7280; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 16px; }
-.detail-row { display: flex; align-items: center; gap: 12px; font-size: 14px; padding: 6px 0; }
-.urgent-badge { display: inline-flex; align-items: center; gap: 8px; background: #fff3e0; color: #e65100; font-size: 13px; font-weight: 600; padding: 10px 16px; border-radius: 10px; margin-top: 14px; }
+.summary-line {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 1rem;
+  padding: 0.35rem 0;
+  font-size: 0.875rem;
+  font-weight: 500;
+}
 
-.section-divider { height: 1px; background: #e5e7eb; margin: 24px 0; }
+.summary-product {
+  color: var(--cf-ink);
+  line-height: 1.35;
+}
 
-/* GoPoints */
-.gopoints-balance { font-size: 14px; color: #6b7280; margin-bottom: 14px; }
-.gopoints-options { display: flex; gap: 12px; }
-.gopoints-option { flex: 1; display: flex; align-items: center; gap: 14px; padding: 18px; border: 2px solid #e5e7eb; border-radius: 14px; cursor: pointer; transition: all 0.25s ease; color: #374151; }
-.gopoints-option:hover { border-color: #fbbf24; background: #fffbeb; }
-.gopoints-option.active { border-color: #f59e0b; background: #fffbeb; box-shadow: 0 2px 8px rgba(245,158,11,0.1); }
-.gp-title { display: block; font-weight: 700; font-size: 14px; }
-.gp-cost { display: block; font-size: 12px; color: #9ca3af; }
+.summary-amount {
+  font-weight: 600;
+  flex-shrink: 0;
+}
 
-/* Payment Methods */
-.payment-methods { display: flex; gap: 12px; margin-bottom: 18px; }
-.pay-method { flex: 1; display: flex; align-items: center; justify-content: center; gap: 8px; padding: 14px; border: 2px solid #e5e7eb; border-radius: 14px; background: #fff; font-family: 'Raleway', sans-serif; font-weight: 600; font-size: 14px; cursor: pointer; transition: all 0.25s ease; color: #374151; }
-.pay-method.active { border-color: #00c853; background: #f0fdf4; color: #00c853; }
-.pay-method:hover { border-color: #00c853; }
+.summary-line.muted {
+  color: var(--cf-muted);
+  font-size: 0.8125rem;
+}
 
-.payment-fields { animation: fadeIn 0.3s ease; }
-.form-group { display: flex; flex-direction: column; gap: 6px; margin-bottom: 14px; }
-.form-group label { font-size: 13px; font-weight: 600; color: #374151; }
-.form-group input { width: 100%; border: 1.5px solid #e5e7eb; border-radius: 12px; padding: 12px 14px; font-size: 14px; font-family: 'Poppins', sans-serif; background: #f9fafb; outline: none; transition: border-color 0.25s ease, background 0.25s ease, box-shadow 0.25s ease; }
-.form-group input:focus { border-color: #00c853; background: #fff; box-shadow: 0 0 0 3px rgba(0,200,83,0.08); }
-.form-row-2col { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.warn-line {
+  color: var(--cf-warn);
+  font-size: 0.8125rem;
+}
 
-.info-note { display: flex; align-items: flex-start; gap: 10px; background: #f0fdf4; border-radius: 10px; padding: 14px 16px; font-size: 13px; color: #059669; margin-top: 8px; line-height: 1.5; }
-.mb-reference { background: #f9fafb; border-radius: 14px; padding: 22px; border: 1px solid #e5e7eb; }
-.mb-row { display: flex; justify-content: space-between; padding: 6px 0; font-size: 15px; }
-.mb-label { color: #6b7280; }
-.mb-value { font-weight: 700; font-family: 'Lora', serif; font-size: 16px; }
+.discount-line {
+  color: var(--cf-success);
+  font-size: 0.8125rem;
+}
 
-.estafeta-note { font-size: 13px; color: #6b7280; margin: 22px 0 10px; text-align: center; }
+.inner-rule {
+  border: none;
+  height: 1px;
+  background: var(--cf-line);
+  margin: 0.75rem 0;
+}
 
-.btn-continue { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; background: #00c853; color: #fff; padding: 16px; border-radius: 14px; font-weight: 700; font-size: 15px; border: none; cursor: pointer; font-family: 'Poppins', sans-serif; transition: all 0.3s ease; box-shadow: 0 4px 16px rgba(0,200,83,0.25); letter-spacing: 0.01em; }
-.btn-continue:hover:not(:disabled) { background: #00b048; transform: translateY(-2px); box-shadow: 0 8px 24px rgba(0,200,83,0.35); }
-.btn-continue:active:not(:disabled) { transform: translateY(0); }
-.btn-continue:disabled { opacity: 0.7; cursor: wait; }
-.spinner-icon { animation: spin 1s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
+.total-line {
+  font-family: var(--cf-display);
+  font-size: 1.125rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  padding-top: 0.25rem;
+}
 
-/* Toast */
-.toast-notification { position: fixed; bottom: 32px; left: 50%; transform: translateX(-50%); background: #059669; color: #fff; padding: 16px 28px; border-radius: 14px; font-weight: 600; font-size: 14px; display: flex; align-items: center; gap: 10px; box-shadow: 0 8px 32px rgba(0,0,0,0.2); z-index: 999; }
-.toast-enter-active { animation: toastIn 0.4s ease; }
-.toast-leave-active { animation: toastOut 0.3s ease; }
-@keyframes toastIn { from { opacity: 0; transform: translateX(-50%) translateY(20px); } to { opacity: 1; transform: translateX(-50%) translateY(0); } }
-@keyframes toastOut { from { opacity: 1; } to { opacity: 0; transform: translateX(-50%) translateY(20px); } }
+.total-line span:last-child {
+  color: var(--cf-cta);
+}
 
-.site-footer { background: #111827; color: #fff; padding: 32px; }
-.footer-inner { max-width: 1280px; margin: 0 auto; display: flex; justify-content: space-between; align-items: center; }
-.footer-brand { display: flex; align-items: center; gap: 10px; font-weight: 700; font-family: 'Lora', serif; }
-.footer-logo { width: 34px; height: 34px; border-radius: 10px; background: #00c853; display: flex; align-items: center; justify-content: center; font-weight: 700; font-size: 14px; }
-.copyright { font-size: 13px; color: #9ca3af; }
+.price-free {
+  font-weight: 700;
+  color: var(--cf-success);
+}
 
-@keyframes fadeIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: translateY(0); } }
+.points-earned {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin-top: 1rem;
+  padding: 0.75rem 0.875rem;
+  border-radius: var(--cf-radius);
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #b45309;
+}
 
-@media (max-width: 768px) {
-  .payment-layout { grid-template-columns: 1fr; }
-  .payment-methods { flex-direction: column; }
-  .gopoints-options { flex-direction: column; }
-  .summary-card { position: static; }
-  .footer-inner { flex-direction: column; gap: 16px; text-align: center; }
+.pay-section {
+  margin: 0;
+}
+
+.detail-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.65rem;
+  font-size: 0.875rem;
+  line-height: 1.45;
+  padding: 0.35rem 0;
+  color: var(--cf-ink);
+}
+
+.detail-ic {
+  flex-shrink: 0;
+  color: var(--cf-muted);
+  margin-top: 2px;
+}
+
+.urgent-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  margin: 0.75rem 0 0;
+  padding: 0.4rem 0.65rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  background: var(--cf-warn-soft);
+  color: var(--cf-warn);
+}
+
+.gopoints-intro {
+  margin: 0 0 0.75rem;
+  font-size: 0.875rem;
+  color: var(--cf-muted);
+}
+
+.gopoints-options {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.gopoints-option {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  padding: 1rem;
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius);
+  background: #fff;
+  cursor: pointer;
+  text-align: left;
+  font-family: var(--cf-font);
+  color: var(--cf-ink);
+  transition: border-color 0.2s ease, background 0.2s ease, box-shadow 0.2s ease;
+}
+
+.gopoints-option:hover {
+  border-color: #cbd5e1;
+}
+
+.gopoints-option.active {
+  border-color: var(--cf-cta);
+  background: var(--cf-cta-soft);
+  box-shadow: 0 0 0 1px var(--cf-cta-soft);
+}
+
+.gopoints-option svg {
+  color: var(--cf-muted);
+}
+
+.gopoints-option.active svg {
+  color: var(--cf-cta);
+}
+
+.gp-title {
+  font-weight: 700;
+  font-size: 0.875rem;
+}
+
+.gp-cost {
+  font-size: 0.75rem;
+  color: var(--cf-muted);
+}
+
+.payment-methods {
+  display: flex;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.pay-method {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.75rem 0.5rem;
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius);
+  background: #fff;
+  font-family: var(--cf-font);
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--cf-muted);
+  cursor: pointer;
+  transition: border-color 0.2s ease, color 0.2s ease, background 0.2s ease;
+}
+
+.pay-method:hover {
+  border-color: #cbd5e1;
+  color: var(--cf-ink);
+}
+
+.pay-method.active {
+  border-color: var(--cf-cta);
+  background: var(--cf-cta-soft);
+  color: var(--cf-cta-hover);
+}
+
+.pay-method:focus-visible {
+  outline: 2px solid var(--cf-ink);
+  outline-offset: 2px;
+}
+
+.payment-fields {
+  margin-top: 0.25rem;
+}
+
+.form-row-2col {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
+.info-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.875rem 1rem;
+  border-radius: var(--cf-radius);
+  background: #f8fafc;
+  border: 1px solid var(--cf-line);
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--cf-muted);
+}
+
+.info-note svg {
+  flex-shrink: 0;
+  color: var(--cf-cta);
+  margin-top: 2px;
+}
+
+.mb-reference {
+  padding: 1.25rem;
+  border-radius: var(--cf-radius);
+  background: #f8fafc;
+  border: 1px solid var(--cf-line);
+}
+
+.mb-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  padding: 0.35rem 0;
+  font-size: 0.9375rem;
+}
+
+.mb-label {
+  color: var(--cf-muted);
+  font-size: 0.8125rem;
+}
+
+.mb-value {
+  font-family: var(--cf-display);
+  font-weight: 700;
+  letter-spacing: 0.03em;
+}
+
+.estafeta-note {
+  margin: 0 0 1rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  color: var(--cf-muted);
+  text-align: center;
+}
+
+.pay-submit {
+  margin-top: 0.25rem;
+}
+
+.spin {
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.toast-notification {
+  position: fixed;
+  bottom: 1.5rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 999;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 0.875rem 1.25rem;
+  border-radius: var(--cf-radius);
+  background: var(--cf-ink);
+  color: #fff;
+  font-size: 0.875rem;
+  font-weight: 600;
+  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.25);
+  max-width: calc(100vw - 2rem);
+}
+
+.toast-enter-active {
+  animation: toastIn 0.35s ease;
+}
+
+.toast-leave-active {
+  animation: toastOut 0.25s ease;
+}
+
+@keyframes toastIn {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+@keyframes toastOut {
+  to {
+    opacity: 0;
+    transform: translateX(-50%) translateY(10px);
+  }
+}
+
+@media (max-width: 900px) {
+  .payment-layout {
+    grid-template-columns: 1fr;
+  }
+
+  .summary-card {
+    position: static;
+  }
+
+  .payment-methods {
+    flex-direction: column;
+  }
+
+  .gopoints-options {
+    flex-direction: column;
+  }
+
+  .form-row-2col {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

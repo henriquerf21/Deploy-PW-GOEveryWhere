@@ -1,0 +1,57 @@
+/**
+ * Tokens inspirados nos exports Figma (sidebar #2a3042, fundo #f5f6fa, marca #1b8a4a).
+ * Ajustes: sidebar ligeiramente mais profunda, acentos teal para contraste.
+ */
+:root {
+  --bo-sidebar: #252b3d;
+  --bo-sidebar-border: rgba(255, 255, 255, 0.06);
+  --bo-sidebar-muted: rgba(255, 255, 255, 0.45);
+  --bo-sidebar-dim: rgba(255, 255, 255, 0.28);
+  --bo-menu-label: rgba(255, 255, 255, 0.32);
+  --bo-brand: #1b8a4a;
+  --bo-brand-hover: #157a42;
+  --bo-brand-soft: #ecfdf5;
+  --bo-brand-mid: #6ee7b7;
+  --bo-page: #f5f6fa;
+  --bo-surface: #ffffff;
+  --bo-text: #111827;
+  --bo-text-secondary: #6b7280;
+  --bo-border: #e5e7eb;
+  --bo-radius-sm: 8px;
+  --bo-radius: 12px;
+  --bo-radius-lg: 16px;
+  --bo-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
+  --bo-shadow-md: 0 8px 30px rgba(15, 23, 42, 0.08);
+  --bo-header-h: 64px;
+  --bo-sidebar-w: 252px;
+  --bo-content-max: 1400px;
+  --bo-font: 'Inter', system-ui, sans-serif;
+  --bo-font-display: 'Poppins', var(--bo-font);
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--bo-font);
+  color: var(--bo-text);
+  background: var(--bo-page);
+  -webkit-font-smoothing: antialiased;
+}
+
+a {
+  color: inherit;
+}
+
+button {
+  font-family: inherit;
+  cursor: pointer;
+}
+
+input {
+  font-family: inherit;
+}

@@ -17,8 +17,6 @@ const transitionName = computed(() => 'page-fade');
 </script>
 
 <style>
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap');
-
 *, *::before, *::after {
   box-sizing: border-box;
 }
@@ -29,8 +27,8 @@ html, body {
   margin: 0;
   padding: 0;
   overflow-x: hidden;
-  background: #f6f7f7;
-  font-family: 'Poppins', sans-serif;
+  background: #ffffff;
+  font-family: 'Inter', system-ui, sans-serif;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }

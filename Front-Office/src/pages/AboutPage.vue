@@ -188,43 +188,7 @@
         </div>
       </section>
 
-      <!-- Footer -->
-      <footer class="site-footer">
-        <div class="footer-inner">
-          <div class="footer-top">
-            <div class="footer-brand">
-              <span class="footer-logo">G</span>
-              <div>
-                <span class="footer-name">GoEverywhere</span>
-                <p>A plataforma líder em entregas rápidas de saúde e conveniência em Portugal.</p>
-              </div>
-            </div>
-            <div class="footer-links">
-              <div class="footer-col">
-                <h4>Links Rápidos</h4>
-                <a href="#">Privacy Policy</a>
-                <a href="#">Terms of Service</a>
-              </div>
-              <div class="footer-col">
-                <h4>Suporte</h4>
-                <a href="mailto:info@goeverywhere.pt">Contact Us</a>
-                <a href="#">Shipping Info</a>
-              </div>
-              <div class="footer-col">
-                <h4>Social</h4>
-                <div class="social-icons">
-                  <a href="#" aria-label="Instagram"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"/><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"/><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"/></svg></a>
-                  <a href="#" aria-label="LinkedIn"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg></a>
-                  <a href="#" aria-label="Twitter"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M23 3a10.9 10.9 0 0 1-3.14 1.53 4.48 4.48 0 0 0-7.86 3v1A10.66 10.66 0 0 1 3 4s-4 9 5 13a11.64 11.64 0 0 1-7 2c9 5 20 0 20-11.5a4.5 4.5 0 0 0-.08-.83A7.72 7.72 0 0 0 23 3z"/></svg></a>
-                </div>
-              </div>
-            </div>
-          </div>
-          <div class="footer-bottom">
-            <span>© 2024 GoEverywhere. Vitality Curated.</span>
-          </div>
-        </div>
-      </footer>
+      <SiteFooter />
 
       </div><!-- .post-animation -->
     </main>
@@ -234,6 +198,7 @@
 <script setup>
 import { computed, onMounted, onUnmounted, ref } from 'vue';
 import SiteHeader from '../components/SiteHeader.vue';
+import SiteFooter from '../components/SiteFooter.vue';
 import { MEDIA } from '../config/media.js';
 
 const aboutVideoMaskCss = `url('${MEDIA.aboutVideoMask}')`;
@@ -454,7 +419,13 @@ onUnmounted(() => {
 <style scoped>
 * { box-sizing: border-box; }
 
-.about-page { font-family: 'Poppins', sans-serif; background: #f3f6f4; color: #101828; }
+.about-page {
+  font-family: 'Poppins', sans-serif;
+  background: #f3f6f4;
+  color: #101828;
+  /* Altura do SiteHeader (logo + padding) — evita texto por baixo do sticky header */
+  --about-header-clearance: calc(5.75rem + env(safe-area-inset-top, 0px));
+}
 
 /* Scroll reveal */
 .reveal { opacity: 0; transform: translateY(24px); transition: opacity 0.6s ease, transform 0.6s ease; }
@@ -473,7 +444,15 @@ onUnmounted(() => {
 .frame-overlay.scene-gate { background: linear-gradient(180deg, rgba(22,30,23,0.2) 0%, rgba(17,24,39,0.15) 60%, rgba(17,24,39,0.48) 100%); }
 .frame-overlay.scene-city { background: linear-gradient(180deg, rgba(7,16,12,0.24) 0%, rgba(17,24,39,0.22) 55%, rgba(17,24,39,0.56) 100%); }
 .frame-overlay.scene-night { background: linear-gradient(180deg, rgba(3,8,20,0.44) 0%, rgba(8,13,28,0.38) 52%, rgba(8,13,28,0.74) 100%); }
-.scene-content { position: relative; max-width: 1280px; margin: 0 auto; height: 100%; padding: 7vh 32px 4vh; display: flex; flex-direction: column; }
+.scene-content {
+  position: relative;
+  max-width: 1280px;
+  margin: 0 auto;
+  height: 100%;
+  padding: calc(7vh + var(--about-header-clearance)) 32px 4vh;
+  display: flex;
+  flex-direction: column;
+}
 .scene-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 22px; }
 .scene-title span { display: inline-block; font-size: 12px; text-transform: uppercase; letter-spacing: 0.12em; color: #86efac; font-weight: 700; margin-bottom: 10px; }
 .scene-title h1 { margin: 0; max-width: 760px; font-size: clamp(32px,5vw,64px); line-height: 1.04; letter-spacing: -0.02em; color: #f9fafb; }
@@ -486,7 +465,13 @@ onUnmounted(() => {
 .kpi-strip article { background: rgba(255,255,255,0.9); border: 1px solid rgba(255,255,255,0.36); border-radius: 14px; padding: 12px 14px; backdrop-filter: blur(6px); min-height: 72px; }
 .kpi-strip strong { display: block; color: #0f8f4f; font-size: clamp(20px,2.2vw,24px); line-height: 1.15; }
 .kpi-strip span { display: block; margin-top: 3px; color: #4f5d58; font-size: 12px; font-weight: 600; }
-.info-panels { position: absolute; right: 32px; top: clamp(180px,33vh,360px); width: min(36vw,420px); min-height: 230px; }
+.info-panels {
+  position: absolute;
+  right: 32px;
+  top: clamp(calc(200px + var(--about-header-clearance)), calc(28vh + var(--about-header-clearance)), calc(360px + 2rem));
+  width: min(36vw, 420px);
+  min-height: 230px;
+}
 .info-card { position: absolute; inset: 0; border-radius: 20px; background: rgba(16,24,40,0.78); color: #fff; padding: 26px; backdrop-filter: blur(10px); border: 1px solid rgba(255,255,255,0.15); opacity: 0; transform: translateY(24px) scale(0.98); transition: all 0.35s ease; }
 .info-card.active { opacity: 1; transform: translateY(0) scale(1); }
 .info-card small { color: #87f2b6; text-transform: uppercase; letter-spacing: 0.11em; font-weight: 700; font-size: 11px; }
@@ -534,7 +519,7 @@ onUnmounted(() => {
   flex-direction: column;
   justify-content: center;
   gap: 32px;
-  padding: 0 clamp(32px, 5vw, 80px);
+  padding: var(--about-header-clearance) clamp(32px, 5vw, 80px) 0;
   max-width: 620px;
 }
 
@@ -764,33 +749,12 @@ onUnmounted(() => {
 .contact-form input:focus, .contact-form textarea:focus { border-color: #00c853; background: rgba(0,200,83,0.06); }
 .contact-form textarea { resize: vertical; min-height: 100px; }
 
-/* ── Footer ── */
-.site-footer { background: #0d1117; padding: 60px 32px 32px; color: #fff; }
-.footer-inner { max-width: 1200px; margin: 0 auto; }
-.footer-top { display: grid; grid-template-columns: 1.5fr 2fr; gap: 60px; padding-bottom: 40px; border-bottom: 1px solid rgba(255,255,255,0.08); }
-.footer-brand { display: flex; gap: 16px; }
-.footer-logo { width: 44px; height: 44px; border-radius: 14px; background: #00c853; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 18px; flex-shrink: 0; }
-.footer-name { font-weight: 700; font-size: 16px; display: block; margin-bottom: 6px; }
-.footer-brand p { font-size: 13px; color: #6b7280; line-height: 1.6; max-width: 280px; }
-.footer-links { display: grid; grid-template-columns: repeat(3,1fr); gap: 32px; }
-.footer-col h4 { font-size: 13px; font-weight: 600; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.06em; margin-bottom: 16px; }
-.footer-col a { display: block; color: #d1d5db; font-size: 14px; text-decoration: none; margin-bottom: 10px; transition: color 0.2s; }
-.footer-col a:hover { color: #00c853; }
-.social-icons { display: flex; gap: 12px; }
-.social-icons a { color: #6b7280; transition: color 0.2s; margin-bottom: 0; }
-.social-icons a:hover { color: #00c853; }
-.footer-bottom { padding-top: 24px; text-align: center; }
-.footer-bottom span { font-size: 13px; color: #6b7280; }
-
 /* ══════════════════════════════════════════
    RESPONSIVE
    ══════════════════════════════════════════ */
-@media (max-width: 1024px) {
-  .footer-top { grid-template-columns: 1fr; gap: 40px; }
-}
 @media (max-width: 980px) {
   .scroll-spacer { height: 350vh; }
-  .scene-content { padding: 7vh 24px 4vh; }
+  .scene-content { padding: calc(7vh + var(--about-header-clearance)) 24px 4vh; }
   .scene-title h1 { max-width: 620px; }
   .info-panels { width: min(46vw,360px); right: 24px; }
   .kpi-strip { grid-template-columns: 1fr 1fr; gap: 10px; }
@@ -798,7 +762,6 @@ onUnmounted(() => {
 }
 @media (max-width: 768px) {
   .contact-inner { grid-template-columns: 1fr; }
-  .footer-links { grid-template-columns: repeat(2,1fr); }
   .carousel-fixed { grid-template-columns: 50% 50%; }
   .carousel-left { padding: 0 24px; max-width: 100%; }
   .carousel-slides { min-height: 200px; }
@@ -811,7 +774,7 @@ onUnmounted(() => {
   .scroll-spacer { height: 300vh; }
   .scene-head { flex-direction: column; gap: 8px; }
   .story-progress { min-width: 0; width: 100%; }
-  .scene-content { padding: 8vh 18px 7vh; }
+  .scene-content { padding: calc(8vh + var(--about-header-clearance)) 18px 7vh; }
   .scene-title h1 { max-width: 96%; font-size: clamp(30px,8.2vw,44px); }
   .scene-title p { max-width: 100%; margin-top: 12px; }
   .info-panels { left: 18px; right: 18px; width: auto; top: auto; bottom: 135px; min-height: 205px; }
@@ -821,14 +784,13 @@ onUnmounted(() => {
 @media (max-width: 480px) {
   .scroll-spacer { height: 280vh; }
   .sequence-frame { object-position: 62% center; }
-  .scene-content { padding: 7.5vh 14px 6vh; }
+  .scene-content { padding: calc(7.5vh + var(--about-header-clearance)) 14px 6vh; }
   .story-progress { max-width: 100%; }
   .info-panels { left: 14px; right: 14px; bottom: 124px; min-height: 190px; }
   .info-card { padding: 18px; border-radius: 16px; }
   .info-card p { font-size: 13px; line-height: 1.45; }
   .kpi-strip article { min-height: 64px; padding: 10px 12px; }
   .company-data { padding: 72px 16px 84px; }
-  .footer-links { grid-template-columns: 1fr; }
   .carousel-spacer { height: 200vh; }
   .carousel-fixed { grid-template-columns: 1fr; grid-template-rows: 1fr auto; }
   .carousel-left { padding: 16px 14px 0; max-width: 100%; }

@@ -4,6 +4,13 @@
  */
 export const MEDIA = {
   brandLogo: '/media/brand/logo-goeverywhere.png',
+  /** Landing GoGummies (imagens em /public/media/gogummies/) */
+  gogummies: {
+    heroJar: '/media/gogummies/hero-jar.png',
+    heroProduct: '/media/gogummies/hero-product.png',
+    heroGym: '/media/gogummies/hero-gym.png',
+    productDetail: '/media/gogummies/product-detail.png',
+  },
   /** Vídeo do carrossel de serviços (About) */
   servicesCarouselVideo: '/media/services/carousel.mp4',
   /** Frame PNG da sequência scroll-driven (About) */
