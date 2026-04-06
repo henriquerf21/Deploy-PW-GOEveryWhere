@@ -5,7 +5,7 @@
     <!-- Ficha de produto: tudo o necessário para comprar num só sítio -->
     <main id="comprar" class="shop" aria-label="Comprar GoGummies">
       <div class="shop-inner">
-        <div class="shop-grid">
+        <div class="shop-grid shop-grid-entrance">
           <div class="shop-gallery">
             <img
               class="shop-img"
@@ -69,7 +69,7 @@
           </div>
         </div>
 
-        <div class="shop-trust" aria-label="Vantagens">
+        <div class="shop-trust reveal" aria-label="Vantagens">
           <div class="shop-trust-item">
             <Package :size="20" :stroke-width="1.5" aria-hidden="true" />
             <span>Entrega rápida na tua zona</span>
@@ -105,7 +105,7 @@
 
     <section id="info-produto" class="info-section" aria-labelledby="info-heading">
       <div class="info-inner">
-        <div class="info-hero">
+        <div class="info-hero reveal">
           <div class="info-hero-visual">
             <img
               class="info-hero-img"
@@ -132,14 +132,14 @@
         </div>
 
         <ul class="info-cards" aria-label="Destaques do produto">
-          <li v-for="card in infoCards" :key="card.title" class="info-card">
+          <li v-for="(card, idx) in infoCards" :key="card.title" class="info-card reveal" :data-delay="idx + 1">
             <component :is="card.icon" class="info-card-ic" :size="22" :stroke-width="1.5" aria-hidden="true" />
             <h3 class="info-card-title">{{ card.title }}</h3>
             <p class="info-card-text">{{ card.text }}</p>
           </li>
         </ul>
 
-        <div class="info-delivery">
+        <div class="info-delivery reveal" data-delay="2">
           <Truck :size="20" :stroke-width="1.5" class="info-delivery-ic" aria-hidden="true" />
           <p>
             <strong>Entrega GoEverywhere.</strong>
@@ -216,13 +216,13 @@ const infoCards = [
 
 <style scoped>
 .page {
-  --cta: #10b981;
-  --cta-hover: #059669;
-  --ink: #0f172a;
-  --muted: #64748b;
-  --line: #e2e8f0;
-  --surface: #f8fafc;
-  font-family: 'Inter', system-ui, sans-serif;
+  --cta: var(--go-primary);
+  --cta-hover: var(--go-primary-hover);
+  --ink: var(--go-ink);
+  --muted: var(--go-muted);
+  --line: var(--go-line);
+  --surface: var(--go-surface-light);
+  font-family: var(--go-font-body);
   color: var(--ink);
   background: #fff;
   min-height: 100vh;
@@ -252,7 +252,20 @@ const infoCards = [
   border-radius: 1rem;
   overflow: hidden;
   background: #fff;
-  box-shadow: 0 16px 48px rgba(15, 23, 42, 0.06);
+  box-shadow: var(--go-shadow-xl);
+}
+.shop-grid-entrance {
+  animation: shopGridIn 0.6s var(--go-ease) both;
+}
+@keyframes shopGridIn {
+  from {
+    opacity: 0;
+    transform: translateY(20px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
 }
 .shop-gallery {
   background: var(--surface);
@@ -352,11 +365,15 @@ const infoCards = [
   background: #fafafa;
   cursor: pointer;
   font-family: inherit;
-  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  transition: border-color var(--go-duration-fast),
+              background var(--go-duration-fast),
+              box-shadow var(--go-duration-fast),
+              transform var(--go-duration) var(--go-ease);
 }
 .pack-tile:hover {
   border-color: #cbd5e1;
   background: #fff;
+  transform: scale(1.02);
 }
 .pack-tile:focus-visible {
   outline: 2px solid var(--cta);
@@ -443,8 +460,28 @@ const infoCards = [
   text-decoration: none;
   border: none;
   cursor: pointer;
-  transition: background 0.2s, transform 0.2s, box-shadow 0.2s;
-  box-shadow: 0 4px 18px rgba(16, 185, 129, 0.28);
+  transition: background var(--go-duration-fast),
+              transform var(--go-duration) var(--go-ease),
+              box-shadow var(--go-duration) var(--go-ease);
+  box-shadow: 0 4px 18px var(--go-primary-glow);
+  position: relative;
+  overflow: hidden;
+}
+.btn-cta::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: -100%;
+  width: 100%;
+  height: 100%;
+  background: linear-gradient(90deg, transparent, rgba(255,255,255,0.15), transparent);
+  transition: none;
+}
+.btn-cta:hover::after {
+  animation: btnShimmer 0.6s ease;
+}
+@keyframes btnShimmer {
+  to { left: 100%; }
 }
 .btn-cta:hover {
   background: var(--cta-hover);

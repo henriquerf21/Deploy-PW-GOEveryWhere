@@ -20,19 +20,20 @@
     </div>
 
     <div class="grid">
-      <section class="card block">
+      <div
+        v-if="order.storeId && order.courierId && [ORDER_STATUS.ASSIGNED, ORDER_STATUS.IN_TRANSIT].includes(order.status)"
+        class="card block wide"
+      >
         <div class="row-links">
-          <RouterLink
-            v-if="order.storeId && order.courierId && [ORDER_STATUS.ASSIGNED, ORDER_STATUS.IN_TRANSIT].includes(order.status)"
-            class="map-link"
-            :to="{ name: 'map', query: { order: order.id } }"
-          >
+          <RouterLink class="map-link" :to="{ name: 'map', query: { order: order.id } }">
             Ver rota no mapa →
           </RouterLink>
         </div>
+      </div>
+
+      <section v-if="canApprove" class="card block">
         <h3>Aprovar pedido</h3>
         <p class="hint">Loja Continente de recolha, custo, tempo estimado e recursos necessários.</p>
-        <fieldset class="fieldset" :disabled="!canApprove">
         <form class="form" @submit.prevent="doApprove">
           <label>Loja Continente</label>
           <select v-model="ap.storeId" class="inp" required>
@@ -47,7 +48,6 @@
           <textarea v-model="ap.resources" class="inp ta" rows="2" required placeholder="Ex.: Mota, caixa isotérmica M" />
           <button type="submit" class="btn btn--go">Aprovar</button>
         </form>
-        </fieldset>
       </section>
 
       <section class="card block">

@@ -9,11 +9,43 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
 
 const route = useRoute();
-const transitionName = computed(() => 'page-fade');
+const transitionName = computed(() => 'page-slide');
+
+/* ── Global scroll-reveal via IntersectionObserver ── */
+onMounted(() => {
+  if (typeof IntersectionObserver === 'undefined') return;
+
+  const observer = new IntersectionObserver(
+    (entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add('visible');
+          observer.unobserve(entry.target);
+        }
+      });
+    },
+    { threshold: 0.12, rootMargin: '0px 0px -40px 0px' }
+  );
+
+  /* Observe existing .reveal elements */
+  document.querySelectorAll('.reveal').forEach((el) => observer.observe(el));
+
+  /* Observe future .reveal elements via MutationObserver */
+  const mo = new MutationObserver((mutations) => {
+    mutations.forEach((m) => {
+      m.addedNodes.forEach((node) => {
+        if (node.nodeType !== 1) return;
+        if (node.classList?.contains('reveal')) observer.observe(node);
+        node.querySelectorAll?.('.reveal').forEach((el) => observer.observe(el));
+      });
+    });
+  });
+  mo.observe(document.getElementById('app-root'), { childList: true, subtree: true });
+});
 </script>
 
 <style>
@@ -28,7 +60,7 @@ html, body {
   padding: 0;
   overflow-x: hidden;
   background: #ffffff;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: var(--go-font-body, 'Inter', system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
@@ -36,18 +68,41 @@ html, body {
   min-height: 100vh;
 }
 
+/* ── Page transition: smooth slide-up + fade ── */
+.page-slide-enter-active {
+  animation: pageSlideIn 0.4s var(--go-ease, cubic-bezier(0.22, 1, 0.36, 1));
+  will-change: opacity, transform;
+}
+.page-slide-leave-active {
+  animation: pageSlideOut 0.22s ease-in;
+  will-change: opacity, transform;
+}
+@keyframes pageSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(16px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes pageSlideOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(-8px);
+  }
+}
+
+/* ── Legacy fallback: keep page-fade for anything still referencing it ── */
 .page-fade-enter-active {
-  animation: pageFadeIn 0.35s ease-out;
+  animation: pageSlideIn 0.35s ease-out;
 }
 .page-fade-leave-active {
-  animation: pageFadeOut 0.2s ease-in;
-}
-@keyframes pageFadeIn {
-  from { opacity: 0; transform: translateY(8px); }
-  to { opacity: 1; transform: translateY(0); }
-}
-@keyframes pageFadeOut {
-  from { opacity: 1; }
-  to { opacity: 0; }
+  animation: pageSlideOut 0.2s ease-in;
 }
 </style>

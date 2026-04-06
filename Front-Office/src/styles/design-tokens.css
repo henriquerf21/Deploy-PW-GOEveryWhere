@@ -1,0 +1,81 @@
+/**
+ * GoEverywhere — Design Tokens
+ * Single source of truth for colors, typography, spacing, and motion.
+ * Import in main.js or App.vue so every page inherits these variables.
+ */
+
+/* ── Google Fonts (Inter + Oswald — replaces Poppins everywhere) ── */
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&family=Oswald:wght@500;600;700&display=swap');
+
+:root {
+  /* ─── Brand Colors ─── */
+  --go-primary:        #10b981;
+  --go-primary-hover:  #059669;
+  --go-primary-soft:   rgba(16, 185, 129, 0.12);
+  --go-primary-ring:   rgba(16, 185, 129, 0.22);
+  --go-primary-glow:   rgba(16, 185, 129, 0.28);
+
+  /* ─── Ink & Neutrals ─── */
+  --go-ink:            #0f172a;
+  --go-ink-light:      #1e293b;
+  --go-muted:          #64748b;
+  --go-subtle:         #94a3b8;
+  --go-line:           #e2e8f0;
+  --go-surface:        #f1f5f9;
+  --go-surface-light:  #f8fafc;
+  --go-card:           #ffffff;
+
+  /* ─── Feedback ─── */
+  --go-danger:         #dc2626;
+  --go-danger-soft:    #fef2f2;
+  --go-danger-border:  #fecaca;
+  --go-warn:           #ea580c;
+  --go-warn-soft:      #fff7ed;
+  --go-success:        #059669;
+
+  /* ─── Typography ─── */
+  --go-font-body:      'Inter', system-ui, -apple-system, sans-serif;
+  --go-font-display:   'Oswald', 'Inter', sans-serif;
+
+  /* ─── Spacing & Shape ─── */
+  --go-radius:         12px;
+  --go-radius-lg:      16px;
+  --go-radius-xl:      24px;
+  --go-shadow-sm:      0 1px 3px rgba(15, 23, 42, 0.06);
+  --go-shadow:         0 1px 3px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06);
+  --go-shadow-lg:      0 8px 40px rgba(15, 23, 42, 0.08);
+  --go-shadow-xl:      0 16px 48px rgba(15, 23, 42, 0.06);
+
+  /* ─── Motion ─── */
+  --go-ease:           cubic-bezier(0.22, 1, 0.36, 1);
+  --go-ease-bounce:    cubic-bezier(0.34, 1.56, 0.64, 1);
+  --go-duration-fast:  0.2s;
+  --go-duration:       0.3s;
+  --go-duration-slow:  0.5s;
+}
+
+/* ─── Scroll-reveal utility ─── */
+.reveal {
+  opacity: 0;
+  transform: translateY(24px);
+  transition: opacity 0.6s var(--go-ease), transform 0.6s var(--go-ease);
+}
+.reveal.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+/* Stagger children: add data-delay="1", "2", etc.  */
+.reveal[data-delay="1"] { transition-delay: 0.1s; }
+.reveal[data-delay="2"] { transition-delay: 0.2s; }
+.reveal[data-delay="3"] { transition-delay: 0.3s; }
+.reveal[data-delay="4"] { transition-delay: 0.4s; }
+.reveal[data-delay="5"] { transition-delay: 0.5s; }
+
+/* ─── Reduced motion ─── */
+@media (prefers-reduced-motion: reduce) {
+  .reveal {
+    opacity: 1;
+    transform: none;
+    transition: none;
+  }
+}

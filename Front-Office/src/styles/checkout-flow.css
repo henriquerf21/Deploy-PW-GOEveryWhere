@@ -4,24 +4,24 @@
  */
 
 .cf-checkout {
-  --cf-cta: #10b981;
-  --cf-cta-hover: #059669;
-  --cf-cta-soft: rgba(16, 185, 129, 0.12);
-  --cf-cta-ring: rgba(16, 185, 129, 0.22);
-  --cf-ink: #0f172a;
-  --cf-muted: #64748b;
-  --cf-line: #e2e8f0;
-  --cf-surface: #f1f5f9;
-  --cf-card: #ffffff;
+  --cf-cta: var(--go-primary);
+  --cf-cta-hover: var(--go-primary-hover);
+  --cf-cta-soft: var(--go-primary-soft);
+  --cf-cta-ring: var(--go-primary-ring);
+  --cf-ink: var(--go-ink);
+  --cf-muted: var(--go-muted);
+  --cf-line: var(--go-line);
+  --cf-surface: var(--go-surface);
+  --cf-card: var(--go-card);
   --cf-warn: #ea580c;
   --cf-warn-soft: #fff7ed;
-  --cf-danger: #dc2626;
-  --cf-success: #059669;
-  --cf-radius: 12px;
-  --cf-radius-lg: 16px;
-  --cf-shadow: 0 1px 3px rgba(15, 23, 42, 0.06), 0 8px 24px rgba(15, 23, 42, 0.06);
-  --cf-font: 'Inter', system-ui, -apple-system, sans-serif;
-  --cf-display: 'Oswald', 'Inter', sans-serif;
+  --cf-danger: var(--go-danger);
+  --cf-success: var(--go-success);
+  --cf-radius: var(--go-radius);
+  --cf-radius-lg: var(--go-radius-lg);
+  --cf-shadow: var(--go-shadow);
+  --cf-font: var(--go-font-body);
+  --cf-display: var(--go-font-display);
   font-family: var(--cf-font);
   color: var(--cf-ink);
   background: var(--cf-surface);
@@ -215,6 +215,19 @@
   border: 1px solid var(--cf-line);
   border-radius: var(--cf-radius-lg);
   box-shadow: var(--cf-shadow);
+  animation: cfPanelIn 0.45s var(--go-ease) both;
+}
+
+@keyframes cfPanelIn {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
 }
 
 /* Formulários */
@@ -427,12 +440,14 @@ button.cf-tab.is-active {
 }
 
 @media (prefers-reduced-motion: reduce) {
+
   .cf-btn-primary,
   .cf-wizard-badge,
   .cf-input,
   .cf-textarea {
     transition: none;
   }
+
   .cf-btn-primary:hover:not(:disabled) {
     transform: none;
   }

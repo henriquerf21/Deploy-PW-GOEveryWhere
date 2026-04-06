@@ -267,7 +267,7 @@ function onToggleOnline(e) {
 }
 
 function onMax(v) {
-  setCourierMaxConcurrent(c.value.id, v);
+  setCourierMaxConcurrent(c.value.id, Number(v));
   toast('Limite atualizado.', 'success');
 }
 

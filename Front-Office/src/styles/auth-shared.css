@@ -1,0 +1,438 @@
+/**
+ * GoEverywhere — Shared Auth Styles
+ * Used by LoginPage, RegisterPage, LoginWelcomePage, ClientAreaPage.
+ * Requires design-tokens.css to be loaded first (via main.js).
+ */
+
+/* ── Page wrapper ── */
+.auth-page {
+    font-family: var(--go-font-body);
+    background: var(--go-surface);
+    color: var(--go-ink);
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+/* ── Centered main ── */
+.auth-main {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 60px 32px;
+}
+
+/* ── Card ── */
+.auth-card {
+    background: var(--go-card);
+    border-radius: var(--go-radius-xl);
+    padding: 48px;
+    max-width: 480px;
+    width: 100%;
+    box-shadow: var(--go-shadow-lg);
+    animation: authCardIn var(--go-duration-slow) var(--go-ease) both;
+}
+
+@keyframes authCardIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px) scale(0.97);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
+}
+
+/* ── Back link ── */
+.auth-back-link {
+    display: inline-flex;
+    align-items: center;
+    gap: 4px;
+    color: var(--go-muted);
+    font-size: 13px;
+    font-weight: 500;
+    text-decoration: none;
+    margin-bottom: 24px;
+    transition: color var(--go-duration-fast) ease;
+}
+
+.auth-back-link:hover {
+    color: var(--go-primary);
+}
+
+/* ── Header ── */
+.auth-header {
+    margin-bottom: 28px;
+}
+
+.auth-header h1 {
+    font-family: var(--go-font-display);
+    font-size: 28px;
+    font-weight: 700;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+    margin-bottom: 4px;
+    line-height: 1.15;
+}
+
+.auth-header p {
+    color: var(--go-muted);
+    font-size: 14px;
+}
+
+/* ── Error banner ── */
+.auth-error-banner {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--go-danger-soft);
+    border: 1px solid var(--go-danger-border);
+    color: var(--go-danger);
+    padding: 12px 16px;
+    border-radius: var(--go-radius);
+    font-size: 13px;
+    font-weight: 500;
+    margin-bottom: 16px;
+}
+
+.shake-enter-active {
+    animation: authShake 0.4s var(--go-ease);
+}
+
+@keyframes authShake {
+
+    0%,
+    100% {
+        transform: translateX(0);
+    }
+
+    20% {
+        transform: translateX(-6px);
+    }
+
+    40% {
+        transform: translateX(6px);
+    }
+
+    60% {
+        transform: translateX(-4px);
+    }
+
+    80% {
+        transform: translateX(4px);
+    }
+}
+
+/* ── Form ── */
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 16px;
+}
+
+.auth-form-group {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
+.auth-form-group label {
+    font-size: 13px;
+    font-weight: 600;
+    color: var(--go-ink-light);
+}
+
+.auth-form-group.has-error .auth-input-wrap {
+    border-color: var(--go-danger);
+    background: var(--go-danger-soft);
+}
+
+.auth-form-group.has-error input:not([type="checkbox"]) {
+    border-color: var(--go-danger);
+    background: var(--go-danger-soft);
+}
+
+/* Input wrap (icon + input) */
+.auth-input-wrap {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    border: 1.5px solid var(--go-line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    background: var(--go-surface-light);
+    transition: border-color var(--go-duration-fast) ease,
+        background var(--go-duration-fast) ease,
+        box-shadow var(--go-duration-fast) ease;
+}
+
+.auth-input-wrap:focus-within {
+    border-color: var(--go-primary);
+    background: var(--go-card);
+    box-shadow: 0 0 0 3px var(--go-primary-soft);
+}
+
+.auth-input-wrap input {
+    flex: 1;
+    border: none;
+    outline: none;
+    font-size: 14px;
+    font-family: var(--go-font-body);
+    background: transparent;
+    color: var(--go-ink);
+}
+
+.auth-input-wrap input::placeholder {
+    color: var(--go-subtle);
+}
+
+/* Standalone input (no icon wrapper) */
+.auth-input {
+    border: 1.5px solid var(--go-line);
+    border-radius: 10px;
+    padding: 12px 14px;
+    font-size: 14px;
+    font-family: var(--go-font-body);
+    background: var(--go-surface-light);
+    color: var(--go-ink);
+    outline: none;
+    width: 100%;
+    transition: border-color var(--go-duration-fast) ease,
+        background var(--go-duration-fast) ease,
+        box-shadow var(--go-duration-fast) ease;
+}
+
+.auth-input:focus {
+    border-color: var(--go-primary);
+    background: var(--go-card);
+    box-shadow: 0 0 0 3px var(--go-primary-soft);
+}
+
+.auth-input::placeholder {
+    color: var(--go-subtle);
+}
+
+/* Password toggle */
+.auth-toggle-pw {
+    background: none;
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    padding: 2px;
+    transition: opacity var(--go-duration-fast);
+}
+
+.auth-toggle-pw:hover {
+    opacity: 0.7;
+}
+
+/* Field error */
+.auth-field-error {
+    font-size: 12px;
+    color: var(--go-danger);
+    font-weight: 500;
+    animation: authFadeIn var(--go-duration-fast) ease;
+}
+
+/* Row helpers */
+.auth-form-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.auth-form-row-2col {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+}
+
+.auth-checkbox-label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 13px;
+    color: var(--go-muted);
+    cursor: pointer;
+}
+
+.auth-checkbox-label input {
+    accent-color: var(--go-primary);
+    width: 16px;
+    height: 16px;
+}
+
+.auth-forgot-link {
+    font-size: 13px;
+    color: var(--go-primary);
+    text-decoration: none;
+    font-weight: 500;
+    transition: color var(--go-duration-fast);
+}
+
+.auth-forgot-link:hover {
+    color: var(--go-primary-hover);
+}
+
+/* ── Buttons ── */
+.auth-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    padding: 16px;
+    border-radius: 14px;
+    font-weight: 700;
+    font-size: 15px;
+    text-decoration: none;
+    text-align: center;
+    transition: all var(--go-duration) var(--go-ease);
+    border: none;
+    cursor: pointer;
+    font-family: var(--go-font-body);
+}
+
+.auth-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none !important;
+}
+
+.auth-btn-primary {
+    background: var(--go-primary);
+    color: #fff;
+    box-shadow: 0 4px 16px var(--go-primary-glow);
+}
+
+.auth-btn-primary:hover:not(:disabled) {
+    background: var(--go-primary-hover);
+    transform: translateY(-2px);
+    box-shadow: 0 8px 24px var(--go-primary-glow);
+}
+
+.auth-btn-secondary {
+    background: var(--go-surface);
+    color: var(--go-ink);
+    border: 1px solid var(--go-line);
+}
+
+.auth-btn-secondary:hover {
+    background: var(--go-line);
+    transform: translateY(-1px);
+}
+
+/* Google button */
+.auth-btn-google {
+    background: var(--go-card);
+    color: var(--go-ink-light);
+    border: 1.5px solid var(--go-line);
+    box-shadow: var(--go-shadow-sm);
+    width: 100%;
+}
+
+.auth-btn-google:hover:not(:disabled) {
+    background: var(--go-surface-light);
+    border-color: #d1d5db;
+    transform: translateY(-1px);
+    box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08);
+}
+
+/* ── Divider ── */
+.auth-divider {
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    margin: 20px 0;
+    color: var(--go-subtle);
+    font-size: 13px;
+}
+
+.auth-divider::before,
+.auth-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: var(--go-line);
+}
+
+/* ── Spinner ── */
+.auth-spinner {
+    width: 20px;
+    height: 20px;
+    border: 2.5px solid rgba(255, 255, 255, 0.3);
+    border-top-color: #fff;
+    border-radius: 50%;
+    animation: authSpin 0.6s linear infinite;
+}
+
+@keyframes authSpin {
+    to {
+        transform: rotate(360deg);
+    }
+}
+
+/* ── Switch text ── */
+.auth-switch-text {
+    text-align: center;
+    margin-top: 24px;
+    font-size: 13px;
+    color: var(--go-muted);
+}
+
+.auth-switch-link {
+    color: var(--go-primary);
+    font-weight: 600;
+    text-decoration: none;
+    transition: color var(--go-duration-fast);
+}
+
+.auth-switch-link:hover {
+    color: var(--go-primary-hover);
+}
+
+/* ── Continue link ── */
+.auth-continue-link {
+    color: var(--go-muted);
+    font-size: 14px;
+    text-decoration: none;
+    transition: color var(--go-duration-fast);
+}
+
+.auth-continue-link:hover {
+    color: var(--go-primary);
+}
+
+/* ── Terms link ── */
+.auth-terms-link {
+    color: var(--go-primary);
+    text-decoration: none;
+    font-weight: 500;
+}
+
+/* ── Utility ── */
+@keyframes authFadeIn {
+    from {
+        opacity: 0;
+        transform: translateY(-4px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+/* ── Responsive ── */
+@media (max-width: 768px) {
+    .auth-card {
+        padding: 32px 24px;
+    }
+
+    .auth-form-row-2col {
+        grid-template-columns: 1fr;
+    }
+}

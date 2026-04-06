@@ -1,0 +1,84 @@
+/**
+ * GoEverywhere Estafeta PWA — Design Tokens
+ * Aligned with Back-Office brand: #1b8a4a (green), Inter/Poppins
+ */
+:root {
+    /* Brand */
+    --ge-brand: #1b8a4a;
+    --ge-brand-hover: #157a42;
+    --ge-brand-soft: #ecfdf5;
+    --ge-brand-mid: #6ee7b7;
+    --ge-brand-dark: #064e2b;
+
+    /* Surfaces */
+    --ge-page: #f8fafa;
+    --ge-surface: #ffffff;
+    --ge-surface-elevated: #ffffff;
+
+    /* Text */
+    --ge-text: #111827;
+    --ge-text-secondary: #6b7280;
+    --ge-text-muted: #9ca3af;
+    --ge-text-inverse: #ffffff;
+
+    /* Borders / Dividers */
+    --ge-border: #e5e7eb;
+    --ge-border-light: #f3f4f6;
+
+    /* Status Colors */
+    --ge-status-pending: #f59e0b;
+    --ge-status-pending-bg: #fffbeb;
+    --ge-status-active: #3b82f6;
+    --ge-status-active-bg: #eff6ff;
+    --ge-status-transit: #8b5cf6;
+    --ge-status-transit-bg: #f5f3ff;
+    --ge-status-arrived: #f97316;
+    --ge-status-arrived-bg: #fff7ed;
+    --ge-status-done: #10b981;
+    --ge-status-done-bg: #ecfdf5;
+    --ge-status-success: #10b981;
+    --ge-status-error: #ef4444;
+    --ge-status-error-bg: #fef2f2;
+    --ge-status-pause: #6b7280;
+    --ge-status-pause-bg: #f9fafb;
+
+    /* Priority */
+    --ge-priority-1: #9ca3af;
+    --ge-priority-2: #60a5fa;
+    --ge-priority-3: #fbbf24;
+    --ge-priority-4: #f97316;
+    --ge-priority-5: #ef4444;
+    --ge-priority-5-bg: #fef2f2;
+
+    /* Spacing */
+    --ge-sp-xs: 4px;
+    --ge-sp-sm: 8px;
+    --ge-sp-md: 12px;
+    --ge-sp-base: 16px;
+    --ge-sp-lg: 20px;
+    --ge-sp-xl: 24px;
+    --ge-sp-2xl: 32px;
+    --ge-sp-3xl: 48px;
+
+    /* Radius */
+    --ge-radius-sm: 6px;
+    --ge-radius: 10px;
+    --ge-radius-lg: 14px;
+    --ge-radius-xl: 20px;
+    --ge-radius-full: 9999px;
+
+    /* Shadows */
+    --ge-shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.05);
+    --ge-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+    --ge-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
+    --ge-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+
+    /* Typography */
+    --ge-font: 'Inter', system-ui, -apple-system, sans-serif;
+    --ge-font-display: 'Poppins', var(--ge-font);
+
+    /* Layout */
+    --ge-bottom-nav-h: 64px;
+    --ge-header-h: 56px;
+    --ge-safe-bottom: env(safe-area-inset-bottom, 0px);
+}

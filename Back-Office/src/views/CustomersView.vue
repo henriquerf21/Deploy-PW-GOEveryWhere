@@ -589,10 +589,7 @@ function confirmDelete(c) {
   color: var(--bo-text);
 }
 
-.mono {
-  font-family: ui-monospace, monospace;
-  font-size: 13px;
-}
+
 
 .notes-dd {
   white-space: pre-wrap;
