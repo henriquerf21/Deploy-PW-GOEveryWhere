@@ -37,10 +37,11 @@
 </template>
 
 <script setup>
-import SiteHeader from '../components/SiteHeader.vue';
-import SiteFooter from '../components/SiteFooter.vue';
 import { ref } from 'vue';
 import { useRouter } from 'vue-router';
+import { googleTokenLogin } from 'vue3-google-login'; // Import necessário para o popup real
+import SiteHeader from '../components/SiteHeader.vue';
+import SiteFooter from '../components/SiteFooter.vue';
 import { loginWithGoogle } from '../stores/authStore.js';
 import { MEDIA } from '../config/media.js';
 
@@ -49,10 +50,31 @@ const isLoading = ref(false);
 
 async function handleGoogleLogin() {
   isLoading.value = true;
-  await new Promise(r => setTimeout(r, 800));
-  loginWithGoogle();
-  isLoading.value = false;
-  router.push('/dashboard');
+
+  try {
+    // 1. Abre o popup oficial da Google para o utilizador escolher a conta
+    const response = await googleTokenLogin();
+
+    // 2. Envia o access_token recebido para o teu authStore processar
+    // Aqui estamos a passar o token real que a Google nos deu
+    const result = await loginWithGoogle(response.access_token);
+
+    // 3. Se o teu store validar o token com sucesso, redireciona
+    if (result && result.success) {
+      router.push('/dashboard');
+    } else if (result && !result.success) {
+      alert(result.error || "Erro ao validar conta Google.");
+    }
+    
+    // Se não tiveres backend e o loginWithGoogle for apenas para guardar dados:
+    // router.push('/dashboard');
+
+  } catch (error) {
+    // Caso o utilizador feche o popup sem escolher conta
+    console.error("Erro no login Google:", error);
+  } finally {
+    isLoading.value = false;
+  }
 }
 </script>
 
@@ -64,13 +86,28 @@ async function handleGoogleLogin() {
   margin-bottom: 16px;
   animation: logoPulse 2s var(--go-ease) infinite;
 }
+
 @keyframes logoPulse {
   0%, 100% { transform: scale(1); }
   50%      { transform: scale(1.04); }
 }
+
 .welcome-actions {
   display: flex;
   flex-direction: column;
   gap: 12px;
+}
+
+.auth-continue-link {
+  display: block;
+  margin-top: 10px;
+  color: var(--go-neutral-600);
+  text-decoration: none;
+  font-size: 0.95rem;
+  transition: color 0.2s;
+}
+
+.auth-continue-link:hover {
+  color: var(--go-primary-600);
 }
 </style>
