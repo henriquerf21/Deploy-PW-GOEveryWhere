@@ -270,13 +270,17 @@ const infoCards = [
 .shop-gallery {
   background: var(--surface);
   min-height: 360px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0.8rem;
 }
 .shop-img {
   display: block;
   width: 100%;
   height: 100%;
   min-height: 360px;
-  object-fit: cover;
+  object-fit: contain;
   object-position: center;
 }
 .shop-panel {

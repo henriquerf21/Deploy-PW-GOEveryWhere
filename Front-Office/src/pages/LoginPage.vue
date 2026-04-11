@@ -10,7 +10,6 @@
           <p>Entra na tua conta para encomendar</p>
         </div>
 
-        <!-- Global error -->
         <Transition name="shake">
           <div v-if="globalError" class="auth-error-banner">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
@@ -64,10 +63,8 @@
           </button>
         </form>
 
-        <!-- Divider -->
         <div class="auth-divider"><span>ou continuar com</span></div>
 
-        <!-- Google OAuth -->
         <button class="auth-btn auth-btn-google" @click="handleGoogleLogin" :disabled="isLoading">
           <svg width="20" height="20" viewBox="0 0 24 24">
             <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
@@ -87,10 +84,11 @@
 </template>
 
 <script setup>
-import SiteHeader from '../components/SiteHeader.vue';
-import SiteFooter from '../components/SiteFooter.vue';
 import { ref, reactive } from 'vue';
 import { useRouter } from 'vue-router';
+import { googleTokenLogin } from 'vue3-google-login'; // Import do popup real
+import SiteHeader from '../components/SiteHeader.vue';
+import SiteFooter from '../components/SiteFooter.vue';
 import { login, loginWithGoogle } from '../stores/authStore.js';
 
 const router = useRouter();
@@ -130,6 +128,9 @@ function validate() {
   return valid;
 }
 
+/**
+ * Login Tradicional (Email/PW)
+ */
 async function handleLogin() {
   globalError.value = '';
   if (!validate()) return;
@@ -147,16 +148,34 @@ async function handleLogin() {
   }
 }
 
+/**
+ * Login REAL com Google
+ */
 async function handleGoogleLogin() {
+  globalError.value = '';
   isLoading.value = true;
-  await new Promise(r => setTimeout(r, 800));
 
-  loginWithGoogle();
-  isLoading.value = false;
-  router.push('/dashboard');
+  try {
+    // 1. Abre o popup oficial da Google
+    const response = await googleTokenLogin();
+    
+    // 2. Envia o token para a tua Action no Store (que agora é assíncrona)
+    const result = await loginWithGoogle(response.access_token);
+
+    if (result.success) {
+      router.push('/dashboard');
+    } else {
+      globalError.value = result.error || 'Falha ao autenticar com o Google.';
+    }
+  } catch (error) {
+    // Caso o utilizador feche o popup ou cancele
+    console.error("Login cancelado:", error);
+  } finally {
+    isLoading.value = false;
+  }
 }
 </script>
 
 <style scoped>
-/* All shared styles come from auth-shared.css — only page-specific overrides here */
+/* Estilos partilhados do auth-shared.css */
 </style>

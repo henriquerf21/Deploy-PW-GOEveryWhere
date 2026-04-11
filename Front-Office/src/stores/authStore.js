@@ -1,6 +1,6 @@
 import { reactive, computed } from 'vue';
 
-// ── Storage key ──────────────────────────────────────────────────
+// ── Storage keys ──────────────────────────────────────────────────
 const STORAGE_KEY = 'goeverywhere_auth';
 const USERS_KEY = 'goeverywhere_users';
 
@@ -36,16 +36,15 @@ const persisted = loadSession();
 
 const state = reactive({
   user: persisted || null,
-  // user shape: { name, email, phone, avatar, initials, authMethod }
 });
 
 // ── Computed ─────────────────────────────────────────────────────
 export const isAuthenticated = computed(() => !!state.user);
-
 export const currentUser = computed(() => state.user);
 
 // ── Helpers ──────────────────────────────────────────────────────
 function getInitials(name) {
+  if (!name) return '??';
   return name
     .split(' ')
     .map(w => w[0])
@@ -58,13 +57,11 @@ function getInitials(name) {
 // ── Actions ──────────────────────────────────────────────────────
 
 /**
- * Register a new user with email/password.
- * Returns { success, error }
+ * Registo por Email
  */
 export function register({ firstName, lastName, email, phone, password }) {
   const users = loadUsers();
 
-  // Check if email already exists
   if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
     return { success: false, error: 'Este email já está registado.' };
   }
@@ -76,7 +73,7 @@ export function register({ firstName, lastName, email, phone, password }) {
     lastName,
     email: email.toLowerCase(),
     phone,
-    password, // In a real app this would be hashed
+    password, 
     avatar: null,
     initials: getInitials(fullName),
     authMethod: 'email',
@@ -86,7 +83,6 @@ export function register({ firstName, lastName, email, phone, password }) {
   users.push(newUser);
   saveUsers(users);
 
-  // Auto-login after register
   const sessionUser = { ...newUser };
   delete sessionUser.password;
   state.user = sessionUser;
@@ -96,8 +92,7 @@ export function register({ firstName, lastName, email, phone, password }) {
 }
 
 /**
- * Login with email and password.
- * Returns { success, error }
+ * Login por Email
  */
 export function login(email, password) {
   const users = loadUsers();
@@ -118,44 +113,62 @@ export function login(email, password) {
 }
 
 /**
- * Login with Google OAuth 2.0 (simulated).
- * Creates a session with Google-style user data.
+ * LOGIN REAL COM GOOGLE 
+ * Agora recebe o token e procura os dados reais do utilizador.
  */
-export function loginWithGoogle() {
-  const googleUser = {
-    name: 'Maria Silva',
-    firstName: 'Maria',
-    lastName: 'Silva',
-    email: 'maria.silva@gmail.com',
-    phone: '+351 912 345 678',
-    avatar: null,
-    initials: 'MS',
-    authMethod: 'google',
-    createdAt: new Date().toISOString(),
-  };
+export async function loginWithGoogle(token) {
+  try {
+    // 1. Pedir os dados reais à Google usando o token recebido
+    const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
+      headers: { Authorization: `Bearer ${token}` }
+    });
 
-  // Also save to users list if not already there
-  const users = loadUsers();
-  if (!users.find(u => u.email === googleUser.email)) {
-    users.push({ ...googleUser, password: null });
-    saveUsers(users);
+    if (!response.ok) throw new Error('Falha ao obter dados da Google');
+
+    const googleData = await response.json();
+
+    // 2. Montar o utilizador com os dados reais
+    const fullName = `${googleData.given_name} ${googleData.family_name || ''}`;
+    
+    const googleUser = {
+      name: fullName,
+      firstName: googleData.given_name,
+      lastName: googleData.family_name || '',
+      email: googleData.email.toLowerCase(),
+      phone: '', // Google não devolve telemóvel por defeito
+      avatar: googleData.picture, // Foto real do perfil Google
+      initials: getInitials(fullName),
+      authMethod: 'google',
+      createdAt: new Date().toISOString(),
+    };
+
+    // 3. Atualizar a base de dados local (localStorage)
+    const users = loadUsers();
+    if (!users.find(u => u.email === googleUser.email)) {
+      users.push({ ...googleUser, password: null });
+      saveUsers(users);
+    }
+
+    // 4. Iniciar sessão no estado da App
+    state.user = googleUser;
+    saveSession(googleUser);
+
+    return { success: true };
+
+  } catch (error) {
+    console.error("Erro no Auth Store (Google):", error);
+    return { success: false, error: 'Não foi possível obter os dados da tua conta Google.' };
   }
-
-  state.user = googleUser;
-  saveSession(googleUser);
-
-  return { success: true };
 }
 
 /**
- * Logout — clear session.
+ * Logout
  */
 export function logout() {
   state.user = null;
   saveSession(null);
 }
 
-// ── Export store accessor ────────────────────────────────────────
 export function useAuthStore() {
   return state;
 }
