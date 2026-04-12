@@ -189,7 +189,7 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll));
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #6366f1, #4338ca); /* Cor mais vibrante */
+  background: linear-gradient(135deg, #6366f1, #4338ca);
   color: #fff;
   display: flex;
   align-items: center;
