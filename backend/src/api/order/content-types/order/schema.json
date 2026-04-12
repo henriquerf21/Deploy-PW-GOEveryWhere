@@ -1,0 +1,54 @@
+{
+  "kind": "collectionType",
+  "collectionName": "orders",
+  "info": {
+    "singularName": "order",
+    "pluralName": "orders",
+    "displayName": "Order"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "order_status": {
+      "type": "enumeration",
+      "enum": [
+        "S-01 Submetido",
+        "S-02 Em Análise",
+        "S-03 Info Adicional Solicitada",
+        "S-04 Rejeitado",
+        "S-05 Aprovado",
+        "S-06 Aguardando Aceitação",
+        "S-07 Aceite pelo Estafeta",
+        "S-08 Em Recolha",
+        "S-09 Em Trânsito",
+        "S-10 No Destino",
+        "S-11 Entregue",
+        "S-12 Não Foi Possível Entregar",
+        "S-13 Cancelado pelo Cliente",
+        "S-14 Cancelado pelo Admin",
+        "S-15 Concluído e Avaliado",
+        "S-16 Concluído Sem Avaliação"
+      ]
+    },
+    "user": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "plugin::users-permissions.user",
+      "inversedBy": "orders"
+    },
+    "total_price": {
+      "type": "decimal"
+    },
+    "store_name": {
+      "type": "string"
+    },
+    "items": {
+      "type": "json"
+    },
+    "is_urgent": {
+      "type": "boolean"
+    }
+  }
+}

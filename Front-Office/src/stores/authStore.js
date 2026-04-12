@@ -2,40 +2,36 @@ import { reactive, computed } from 'vue';
 
 // ── Storage keys ──────────────────────────────────────────────────
 const STORAGE_KEY = 'goeverywhere_auth';
-const USERS_KEY = 'goeverywhere_users';
+const API_URL = 'http://localhost:1337/api'; // URL base do Strapi v5
 
 // ── Load persisted state ─────────────────────────────────────────
 function loadSession() {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
+    // Agora guardamos um objeto que contém { user, jwt }
     return data ? JSON.parse(data) : null;
   } catch { return null; }
 }
 
-function loadUsers() {
-  try {
-    const data = localStorage.getItem(USERS_KEY);
-    return data ? JSON.parse(data) : [];
-  } catch { return []; }
-}
-
-function saveSession(user) {
-  if (user) {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(user));
+function saveSession(authData) {
+  if (authData) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(authData));
   } else {
     localStorage.removeItem(STORAGE_KEY);
   }
 }
 
-function saveUsers(users) {
-  localStorage.setItem(USERS_KEY, JSON.stringify(users));
+function setUser(userData) {
+  state.user = userData;
+  localStorage.setItem('user', JSON.stringify(userData));
 }
 
 // ── Auth store ───────────────────────────────────────────────────
 const persisted = loadSession();
 
 const state = reactive({
-  user: persisted || null,
+  user: persisted?.user || null,
+  token: persisted?.jwt || null, // O JWT é a chave para o Strapi devolver o histórico
 });
 
 // ── Computed ─────────────────────────────────────────────────────
@@ -57,107 +53,98 @@ function getInitials(name) {
 // ── Actions ──────────────────────────────────────────────────────
 
 /**
- * Registo por Email
+ * Registo Real no Strapi
  */
-export function register({ firstName, lastName, email, phone, password }) {
-  const users = loadUsers();
-
-  if (users.find(u => u.email.toLowerCase() === email.toLowerCase())) {
-    return { success: false, error: 'Este email já está registado.' };
-  }
-
-  const fullName = `${firstName} ${lastName}`;
-  const newUser = {
-    name: fullName,
-    firstName,
-    lastName,
-    email: email.toLowerCase(),
-    phone,
-    password, 
-    avatar: null,
-    initials: getInitials(fullName),
-    authMethod: 'email',
-    createdAt: new Date().toISOString(),
-  };
-
-  users.push(newUser);
-  saveUsers(users);
-
-  const sessionUser = { ...newUser };
-  delete sessionUser.password;
-  state.user = sessionUser;
-  saveSession(sessionUser);
-
-  return { success: true };
-}
-
-/**
- * Login por Email
- */
-export function login(email, password) {
-  const users = loadUsers();
-  const user = users.find(
-    u => u.email.toLowerCase() === email.toLowerCase() && u.password === password
-  );
-
-  if (!user) {
-    return { success: false, error: 'Email ou password incorretos.' };
-  }
-
-  const sessionUser = { ...user };
-  delete sessionUser.password;
-  state.user = sessionUser;
-  saveSession(sessionUser);
-
-  return { success: true };
-}
-
-/**
- * LOGIN REAL COM GOOGLE 
- * Agora recebe o token e procura os dados reais do utilizador.
- */
-export async function loginWithGoogle(token) {
+export async function register({ firstName, lastName, email, phone, password }) {
   try {
-    // 1. Pedir os dados reais à Google usando o token recebido
-    const response = await fetch('https://www.googleapis.com/oauth2/v3/userinfo', {
-      headers: { Authorization: `Bearer ${token}` }
+    const fullName = `${firstName} ${lastName}`;
+    
+    const response = await fetch(`${API_URL}/auth/local/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        username: email.toLowerCase(), // O Strapi usa username para login
+        email: email.toLowerCase(),
+        password: password,
+        // Campos extra (devem estar criados no User do Strapi se quiseres guardar)
+        firstName,
+        lastName,
+        phone,
+        initials: getInitials(fullName)
+      })
     });
 
-    if (!response.ok) throw new Error('Falha ao obter dados da Google');
+    const data = await response.json();
 
-    const googleData = await response.json();
-
-    // 2. Montar o utilizador com os dados reais
-    const fullName = `${googleData.given_name} ${googleData.family_name || ''}`;
-    
-    const googleUser = {
-      name: fullName,
-      firstName: googleData.given_name,
-      lastName: googleData.family_name || '',
-      email: googleData.email.toLowerCase(),
-      phone: '', // Google não devolve telemóvel por defeito
-      avatar: googleData.picture, // Foto real do perfil Google
-      initials: getInitials(fullName),
-      authMethod: 'google',
-      createdAt: new Date().toISOString(),
-    };
-
-    // 3. Atualizar a base de dados local (localStorage)
-    const users = loadUsers();
-    if (!users.find(u => u.email === googleUser.email)) {
-      users.push({ ...googleUser, password: null });
-      saveUsers(users);
+    if (!response.ok) {
+      throw new Error(data.error?.message || 'Erro ao criar conta.');
     }
 
-    // 4. Iniciar sessão no estado da App
-    state.user = googleUser;
-    saveSession(googleUser);
+    // Strapi devolve { jwt, user }
+    state.user = data.user;
+    state.token = data.jwt;
+    saveSession({ user: data.user, jwt: data.jwt });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Erro no Registo:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Login Real no Strapi
+ */
+export async function login(email, password) {
+  try {
+    const response = await fetch(`${API_URL}/auth/local`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        identifier: email.toLowerCase(),
+        password: password
+      })
+    });
+
+    const data = await response.json();
+
+    if (!response.ok) {
+      throw new Error(data.error?.message || 'Email ou password incorretos.');
+    }
+
+    state.user = data.user;
+    state.token = data.jwt;
+    saveSession({ user: data.user, jwt: data.jwt });
+
+    return { success: true };
+  } catch (error) {
+    console.error("Erro no Login:", error);
+    return { success: false, error: error.message };
+  }
+}
+
+/**
+ * Login com Google (Integração Google -> Strapi)
+ */
+export async function loginWithGoogle(googleAccessToken) {
+  try {
+    // 1. Enviamos o token da Google para o Strapi validar
+    const response = await fetch(`${API_URL}/auth/google/callback?access_token=${googleAccessToken}`);
+    
+    if (!response.ok) throw new Error('Falha ao autenticar com o servidor Strapi');
+
+    const data = await response.json();
+
+    // 2. O Strapi cria/encontra o utilizador e devolve o seu próprio JWT
+    state.user = data.user;
+    state.token = data.jwt;
+    saveSession({ user: data.user, jwt: data.jwt });
 
     return { success: true };
 
   } catch (error) {
     console.error("Erro no Auth Store (Google):", error);
-    return { success: false, error: 'Não foi possível obter os dados da tua conta Google.' };
+    return { success: false, error: 'Não foi possível ligar a tua conta Google ao servidor.' };
   }
 }
 
@@ -166,6 +153,7 @@ export async function loginWithGoogle(token) {
  */
 export function logout() {
   state.user = null;
+  state.token = null;
   saveSession(null);
 }
 
@@ -174,3 +162,5 @@ export function useAuthStore() {
 }
 
 export default state;
+
+

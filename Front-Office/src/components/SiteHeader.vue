@@ -5,25 +5,38 @@
         <img :src="MEDIA.brandLogo" alt="GoEverywhere" class="logo-img" />
         <span class="logo-text"><span class="logo-go">GO</span>Everywhere</span>
       </router-link>
+
       <nav class="header-nav">
         <router-link to="/product" class="nav-item">Produtos</router-link>
         <router-link to="/" class="nav-item">Início</router-link>
       </nav>
+
       <div class="header-actions">
         <template v-if="isAuth">
           <router-link to="/dashboard" class="action-btn" title="A tua conta">
-            <div class="user-avatar">{{ user?.initials || 'U' }}</div>
-            <span>{{ user?.firstName || 'Conta' }}</span>
+            <div class="user-avatar">
+              <img 
+                v-if="user?.avatarUrl || user?.picture" 
+                :src="user.avatarUrl || user.picture" 
+                class="avatar-img" 
+                alt="Avatar"
+              />
+              <span v-else>{{ userInitial }}</span>
+            </div>
+            <span>{{ user?.firstName || user?.username || 'Conta' }}</span>
           </router-link>
+          
           <router-link to="/order/select" class="action-btn" title="Carrinho">
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 2L3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4z"/><line x1="3" y1="6" x2="21" y2="6"/><path d="M16 10a4 4 0 0 1-8 0"/></svg>
             <span>Carrinho</span>
           </router-link>
+
           <button class="btn-logout" @click="handleLogout" title="Terminar sessão">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
             <span>Sair</span>
           </button>
         </template>
+
         <template v-else>
           <router-link to="/login-welcome" class="btn-login">
             <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
@@ -32,29 +45,12 @@
         </template>
       </div>
 
-      <!-- Mobile menu toggle -->
       <button class="mobile-toggle" @click="mobileOpen = !mobileOpen" aria-label="Menu">
-        <svg v-if="!mobileOpen" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
-        <svg v-else width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        <svg v-if="!mobileOpen" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
+        <svg v-else width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
       </button>
     </div>
-
-    <!-- Mobile menu -->
-    <Transition name="mobile-menu">
-      <div v-if="mobileOpen" class="mobile-nav">
-        <router-link to="/" class="mobile-link" @click="mobileOpen = false">Início</router-link>
-        <router-link to="/product" class="mobile-link" @click="mobileOpen = false">Produtos</router-link>
-        <template v-if="isAuth">
-          <router-link to="/dashboard" class="mobile-link" @click="mobileOpen = false">A Minha Conta</router-link>
-          <router-link to="/order/select" class="mobile-link" @click="mobileOpen = false">Carrinho</router-link>
-          <button class="mobile-link logout" @click="handleLogout(); mobileOpen = false">Sair</button>
-        </template>
-        <template v-else>
-          <router-link to="/login-welcome" class="mobile-link accent" @click="mobileOpen = false">Entrar</router-link>
-        </template>
-      </div>
-    </Transition>
-  </header>
+    </header>
 </template>
 
 <script setup>
@@ -70,6 +66,14 @@ const isAuth = isAuthenticated;
 const isScrolled = ref(false);
 const mobileOpen = ref(false);
 
+// LÓGICA DA INICIAL DO NOME
+const userInitial = computed(() => {
+  if (!user.value) return 'U';
+  // Tenta o firstName, se não houver tenta o username, senão 'U'
+  const name = user.value.firstName || user.value.username || 'U';
+  return name.charAt(0).toUpperCase();
+});
+
 function handleLogout() {
   logout();
   router.push('/login-welcome');
@@ -82,6 +86,8 @@ function onScroll() {
 onMounted(() => window.addEventListener('scroll', onScroll, { passive: true }));
 onUnmounted(() => window.removeEventListener('scroll', onScroll));
 </script>
+
+
 
 <style scoped>
 .site-header {
@@ -180,16 +186,19 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll));
 }
 .action-btn:hover { color: var(--go-ink); }
 .user-avatar {
-  width: 30px;
-  height: 30px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #334155, #0f172a);
+  background: linear-gradient(135deg, #6366f1, #4338ca); /* Cor mais vibrante */
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
-  font-size: 11px;
+  font-size: 13px;
+  overflow: hidden; /* Garante que a imagem fica redonda */
+  border: 2px solid #fff;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
 .btn-login {
   display: flex;

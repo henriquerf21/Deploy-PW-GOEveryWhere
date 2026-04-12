@@ -7,9 +7,6 @@
       <header class="cf-checkout-head">
         <p class="cf-checkout-kicker">Encomenda GoGummies</p>
         <h1 class="cf-checkout-title">Carrinho</h1>
-        <p class="cf-checkout-sub">
-          Confirma as quantidades. A seguir pedimos a morada e os contactos — o pagamento é no último passo.
-        </p>
       </header>
 
       <div class="order-shell cf-panel">
@@ -135,12 +132,12 @@
 </template>
 
 <script setup>
+import { computed, ref, onMounted } from 'vue'; // Adicionado onMounted
+import { useRouter, useRoute } from 'vue-router'; // Adicionado useRoute
 import SiteHeader from '../components/SiteHeader.vue';
 import SiteFooter from '../components/SiteFooter.vue';
 import CheckoutWizardSteps from '../components/CheckoutWizardSteps.vue';
 import { MEDIA } from '../config/media.js';
-import { computed, ref } from 'vue';
-import { useRouter } from 'vue-router';
 import {
   ArrowRight,
   Award,
@@ -160,8 +157,25 @@ import {
 } from '../stores/orderStore.js';
 
 const router = useRouter();
+const route = useRoute(); // Para capturar os parâmetros da query (?pack=...)
 const store = useOrderStore();
 const products = PRODUCTS;
+
+// --- Lógica para sincronizar com a página inicial ---
+onMounted(() => {
+  const packIdFromUrl = route.query.pack;
+
+  if (packIdFromUrl) {
+    // 1. Limpamos qualquer seleção anterior para não acumular packs
+    Object.keys(store.cart.items).forEach(id => {
+      setCartQty(id, 0);
+    });
+
+    // 2. Definimos a quantidade 1 para o pack que veio no URL
+    setCartQty(packIdFromUrl, 1);
+  }
+});
+// ----------------------------------------------------
 
 const itemCount = cartItemCount;
 const total = computed(() => subtotal.value + urgentFee.value);
@@ -169,9 +183,10 @@ const pointsEarned = pointsToEarn;
 const urgentAvailable = ref(true);
 
 function selectPack(id) {
-  if (store.cart.items[id] === 0) {
-    setCartQty(id, 1);
-  }
+  // Se o utilizador clicar noutro pack nesta página, 
+  // limpamos os outros para manter apenas um pack ativo (opcional, mas recomendado)
+  Object.keys(store.cart.items).forEach(key => setCartQty(key, 0));
+  setCartQty(id, 1);
 }
 
 function changeQty(id, delta) {
@@ -188,6 +203,8 @@ function goToDelivery() {
   }
 }
 </script>
+
+
 
 <style scoped>
 .page-wrapper {
