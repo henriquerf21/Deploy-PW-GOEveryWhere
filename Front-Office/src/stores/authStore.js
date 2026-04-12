@@ -52,42 +52,49 @@ function getInitials(name) {
 
 // ── Actions ──────────────────────────────────────────────────────
 
-/**
- * Registo Real no Strapi
- */
 export async function register({ firstName, lastName, email, phone, password }) {
   try {
-    const fullName = `${firstName} ${lastName}`;
-    
-    const response = await fetch(`${API_URL}/auth/local/register`, {
+    // PASSO 1: Registo básico (O que o Strapi aceita sempre)
+    const regResponse = await fetch(`${API_URL}/auth/local/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        username: email.toLowerCase(), // O Strapi usa username para login
+        username: email.toLowerCase(),
         email: email.toLowerCase(),
-        password: password,
-        // Campos extra (devem estar criados no User do Strapi se quiseres guardar)
-        firstName,
-        lastName,
-        phone,
-        initials: getInitials(fullName)
+        password: password
       })
     });
 
-    const data = await response.json();
+    const regData = await regResponse.json();
+    if (!regResponse.ok) throw new Error(regData.error?.message || 'Erro no registo');
 
-    if (!response.ok) {
-      throw new Error(data.error?.message || 'Erro ao criar conta.');
-    }
+    // PASSO 2: Atualizar os dados extra (firstName, phone, etc.)
+    // Usamos o ID do utilizador acabado de criar e o Token (JWT)
+    const updateResponse = await fetch(`${API_URL}/users/${regData.user.id}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${regData.jwt}` // Autenticação obrigatória [cite: 121]
+      },
+      body: JSON.stringify({
+        firstName,
+        lastName,
+        phone,
+        initials: getInitials(`${firstName} ${lastName}`)
+      })
+    });
 
-    // Strapi devolve { jwt, user }
-    state.user = data.user;
-    state.token = data.jwt;
-    saveSession({ user: data.user, jwt: data.jwt });
+    if (!updateResponse.ok) console.warn("Conta criada, mas erro ao guardar dados extra.");
+
+    // Guardar sessão com os dados atualizados
+    const finalUser = { ...regData.user, firstName, lastName, phone };
+    state.user = finalUser;
+    state.token = regData.jwt;
+    saveSession({ user: finalUser, jwt: regData.jwt });
 
     return { success: true };
   } catch (error) {
-    console.error("Erro no Registo:", error);
+    console.error("🚨 Erro no processo:", error.message);
     return { success: false, error: error.message };
   }
 }
