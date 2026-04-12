@@ -72,10 +72,19 @@
       "target": "api::order.order",
       "mappedBy": "user"
     },
-    "name": {
+    "picture": {
       "type": "string"
     },
-    "picture": {
+    "firstName": {
+      "type": "string"
+    },
+    "lastName": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "initials": {
       "type": "string"
     }
   }
