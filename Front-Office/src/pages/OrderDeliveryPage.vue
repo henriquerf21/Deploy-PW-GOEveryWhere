@@ -273,22 +273,69 @@ function handlePostalInput(e) {
 }
 
 // --- GPS E NAVEGAÇÃO ---
-function detectGPS() {
-  if (!navigator.geolocation) return;
+async function detectGPS() {
+  if (!navigator.geolocation) {
+    alert("O teu navegador não suporta geolocalização.");
+    return;
+  }
+
   gpsLoading.value = true;
+
+  const options = {
+    enableHighAccuracy: true, // Força o uso do GPS real em vez de apenas Wi-Fi/IP
+    timeout: 10000,           // Aumentamos para 10s para dar tempo ao GPS de "fixar"
+    maximumAge: 0             // Não aceita localizações em cache (antigas)
+  };
+
   navigator.geolocation.getCurrentPosition(
-    (pos) => {
-      const { latitude, longitude } = pos.coords;
+    async (pos) => {
+      const { latitude, longitude, accuracy } = pos.coords;
+      
+      console.log(`Precisão obtida: ${accuracy} metros`);
+
+      // 1. Guardar coordenadas para lógica de proximidade
       store.delivery.gpsLat = latitude;
       store.delivery.gpsLng = longitude;
-      store.delivery.address = `Lat ${latitude.toFixed(4)}, Lng ${longitude.toFixed(4)}`;
-      store.delivery.city = 'Braga';
-      store.delivery.postalCode = '4700-000';
-      findNearestStore(latitude, longitude);
-      gpsLoading.value = false;
+
+      try {
+        // 2. REVERSE GEOCODING (Nominatim) - Transforma coordenadas em Morada Real
+        // Requisito RF04/RF05 do teu Caderno de Encargos
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`,
+          { headers: { 'Accept-Language': 'pt-PT' } }
+        );
+        const data = await response.json();
+
+        if (data.address) {
+          const addr = data.address;
+          
+          // Preenchimento automático inteligente
+          store.delivery.address = `${addr.road || ''}${addr.house_number ? ', ' + addr.house_number : ''}`;
+          store.delivery.city = addr.city || addr.town || addr.village || 'Braga';
+          
+          // Limpeza do código postal (Nominatim às vezes envia formatos longos)
+          if (addr.postcode) {
+            const cp = addr.postcode.replace(/\s/g, '').slice(0, 8);
+            store.delivery.postalCode = cp.includes('-') ? cp : `${cp.slice(0, 4)}-${cp.slice(4, 7)}`;
+          }
+
+          // 3. Atualizar a loja mais próxima com base nas novas coordenadas
+          findNearestStore(latitude, longitude);
+        }
+      } catch (err) {
+        console.error("Erro no reverse geocoding:", err);
+        // Fallback: se a API falhar, mantém as coordenadas mas avisa
+        store.delivery.address = `Localização aproximada (Lat: ${latitude.toFixed(4)})`;
+      } finally {
+        gpsLoading.value = false;
+      }
     },
-    () => { gpsLoading.value = false; },
-    { timeout: 5000 }
+    (err) => {
+      gpsLoading.value = false;
+      console.warn(`Erro GPS (${err.code}): ${err.message}`);
+      alert("Não foi possível obter a localização precisa. Verifica as permissões do teu browser.");
+    },
+    options
   );
 }
 

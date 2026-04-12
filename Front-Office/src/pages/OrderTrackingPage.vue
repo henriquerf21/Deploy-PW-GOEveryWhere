@@ -11,18 +11,14 @@ const router = useRouter();
 const store = useOrderStore();
 
 const order = computed(() => store.activeOrder);
-const showCancelModal = ref(false);
-const cancelJustification = ref('');
-const ratingValue = ref(0);
 const toastMessage = ref('');
 let pollingTimer = null;
 
 // ── CICLO DE VIDA ──────────────────────────────────────────────────
 onMounted(async () => {
-  // 1. Carrega dados imediatamente ao entrar
   await fetchUserOrders();
   
-  // 2. POLLING: Verifica o Strapi a cada 5 segundos (Requisito RNF04)
+  // Polling para atualizar o estado automaticamente
   pollingTimer = setInterval(async () => {
     if (order.value && !ORDER_STATES[order.value.status]?.terminal) {
       const oldStatus = order.value.status;
@@ -42,14 +38,7 @@ onUnmounted(() => {
 // ── COMPUTED ────────────────────────────────────────────────────────
 const currentStateData = computed(() => order.value ? ORDER_STATES[order.value.status] : null);
 
-const stateClass = computed(() => {
-  if (!order.value) return '';
-  const s = order.value.status;
-  if (s === 'S-09') return 'in-transit';
-  if (['S-10', 'S-11'].includes(s)) return 'arrived';
-  return '';
-});
-
+// Lógica de progresso da barra (0 a 100%)
 const routeProgress = computed(() => {
   if (!order.value) return 0;
   const flow = ['S-01','S-02','S-05','S-06','S-07','S-08','S-09','S-10','S-11'];
@@ -60,7 +49,6 @@ const routeProgress = computed(() => {
 const trackingMapCoords = computed(() => {
   const o = order.value;
   if (!o) return null;
-  // Fallback para Braga se a loja não tiver coordenadas
   const storeLat = o.store?.lat || 41.5518;
   const storeLng = o.store?.lng || -8.4229;
   const dest = getDestinationLatLng(o.delivery || {}, storeLat, storeLng);
@@ -69,15 +57,18 @@ const trackingMapCoords = computed(() => {
 
 const timelineSteps = computed(() => {
   if (!order.value) return [];
+  
+  // CORREÇÃO: Labels mais precisas para evitar confusão
   const flow = [
-    { state: 'S-01', label: 'Enviada' },
+    { state: 'S-01', label: 'Pedido Recebido' }, // Antes era "Enviada"
     { state: 'S-02', label: 'Em Análise' },
     { state: 'S-05', label: 'Aprovada' },
-    { state: 'S-07', label: 'Estafeta a caminho' },
-    { state: 'S-08', label: 'Em Recolha' },
+    { state: 'S-07', label: 'Preparação' },
     { state: 'S-09', label: 'Em Trânsito' },
     { state: 'S-11', label: 'Entregue' },
   ];
+
+  // Sequência de estados completa para comparação
   const currentFlow = ['S-01','S-02','S-05','S-06','S-07','S-08','S-09','S-10','S-11'];
   const currentIdx = currentFlow.indexOf(order.value.status);
 
@@ -85,7 +76,9 @@ const timelineSteps = computed(() => {
     const stepIdx = currentFlow.indexOf(step.state);
     return {
       ...step,
-      done: stepIdx < currentIdx && stepIdx >= 0,
+      // Só fica "done" (check branco) se o estado atual já ULTRAPASSOU este passo
+      done: stepIdx < currentIdx && stepIdx !== -1,
+      // Fica "active" (cor sólida) se este for o estado atual
       active: step.state === order.value.status
     };
   });
@@ -95,14 +88,9 @@ const timelineSteps = computed(() => {
 function showStateToast(newState) {
   const data = ORDER_STATES[newState];
   if (data) {
-    toastMessage.value = `Nova atualização: ${data.label}`;
+    toastMessage.value = `Atualização: ${data.label}`;
     setTimeout(() => { toastMessage.value = ''; }, 3000);
   }
-}
-
-function submitRating() {
-  // Aqui chamarias a função do store para gravar no Strapi
-  router.push('/order/history');
 }
 </script>
 
@@ -123,7 +111,7 @@ function submitRating() {
 
       <div v-if="order" class="tracking-layout">
         <div class="map-card">
-          <div class="map-leaflet-host" :class="stateClass">
+          <div class="map-leaflet-host">
             <DeliveryRouteMap
               v-if="trackingMapCoords"
               :key="order.id"
@@ -144,7 +132,7 @@ function submitRating() {
 
         <div class="details-card">
           <div class="order-header">
-            <h3>Encomenda #{{ order.id.substring(0, 8) }}</h3>
+            <h3>Encomenda #{{ order.id }}</h3>
             <div class="order-items-list">
               <span v-for="item in order.products" :key="item.name" class="order-items">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="#10b981" style="margin-right:8px"><circle cx="12" cy="12" r="8"/></svg>
@@ -157,7 +145,9 @@ function submitRating() {
             <div v-for="step in timelineSteps" :key="step.state" 
                  class="timeline-step" :class="{ done: step.done, active: step.active }">
               <div class="timeline-dot">
-                <svg v-if="step.done" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
+                <svg v-if="step.done" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3">
+                  <polyline points="20 6 9 17 4 12"/>
+                </svg>
               </div>
               <span class="timeline-label">{{ step.label }}</span>
             </div>
