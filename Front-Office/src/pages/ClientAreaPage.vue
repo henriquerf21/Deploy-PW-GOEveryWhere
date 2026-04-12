@@ -146,7 +146,7 @@ function handleLogout() {
   width: 72px;
   height: 72px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--go-primary, #00c853), #34d399);
+  background: linear-gradient(135deg, #6366f1, #4338ca);
   color: #fff;
   display: flex;
   align-items: center;
@@ -166,7 +166,7 @@ function handleLogout() {
 }
 
 .welcome-avatar.google-avatar {
-  background: linear-gradient(135deg, #4285F4, #34A853);
+  background: linear-gradient(135deg, #6366f1, #4338ca);
 }
 .welcome-card h1 {
   font-family: var(--go-font-display);

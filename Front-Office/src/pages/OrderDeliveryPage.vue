@@ -18,43 +18,36 @@
         <section class="form-block" aria-labelledby="sec-contact">
           <h2 id="sec-contact" class="cf-section-title">Quem recebe</h2>
           <div class="form-row-2col">
-            <div
-              class="cf-field"
-              :class="{ 'has-error': touched.name && !store.delivery.name.trim() }"
-            >
+            <div class="cf-field" :class="{ 'has-error': errors.name }">
               <label class="cf-label" for="delivery-name">Nome completo <span class="req">*</span></label>
               <input
                 id="delivery-name"
                 v-model="store.delivery.name"
                 class="cf-input"
                 type="text"
-                autocomplete="name"
                 placeholder="Nome e apelido"
-                @blur="touched.name = true"
+                @blur="validateField('name')"
               />
-              <span v-if="touched.name && !store.delivery.name.trim()" class="cf-field-error">Obrigatório</span>
+              <span v-if="errors.name" class="cf-field-error">{{ errors.name }}</span>
             </div>
-            <div
-              class="cf-field"
-              :class="{ 'has-error': touched.phone && !store.delivery.phone.trim() }"
-            >
+
+            <div class="cf-field" :class="{ 'has-error': errors.phone }">
               <label class="cf-label" for="delivery-phone">Telemóvel <span class="req">*</span></label>
               <input
                 id="delivery-phone"
                 v-model="store.delivery.phone"
                 class="cf-input"
                 type="tel"
-                autocomplete="tel"
-                inputmode="tel"
-                placeholder="912 345 678"
-                @blur="touched.phone = true"
+                @input="handlePhoneInput"
+                @keydown="handlePhoneKeyDown"
+                @blur="validateField('phone')"
               />
-              <span v-if="touched.phone && !store.delivery.phone.trim()" class="cf-field-error">Obrigatório</span>
+              <span v-if="errors.phone" class="cf-field-error">{{ errors.phone }}</span>
             </div>
           </div>
           <div class="cf-field">
             <label class="cf-label" for="delivery-nif">
-              NIF <span class="cf-optional">(opcional, para fatura)</span>
+              NIF <span class="cf-optional">(opcional)</span>
             </label>
             <input
               id="delivery-nif"
@@ -62,7 +55,7 @@
               class="cf-input"
               type="text"
               inputmode="numeric"
-              autocomplete="off"
+              maxlength="9"
               placeholder="9 dígitos"
             />
           </div>
@@ -72,10 +65,7 @@
 
         <section class="form-block" aria-labelledby="sec-address">
           <h2 id="sec-address" class="cf-section-title">Morada de entrega</h2>
-          <div
-            class="cf-field"
-            :class="{ 'has-error': touched.address && !store.delivery.address.trim() }"
-          >
+          <div class="cf-field" :class="{ 'has-error': errors.address }">
             <label class="cf-label" for="delivery-address">Rua e número <span class="req">*</span></label>
             <div class="input-with-icon">
               <input
@@ -83,60 +73,45 @@
                 v-model="store.delivery.address"
                 class="cf-input"
                 type="text"
-                autocomplete="street-address"
                 placeholder="Ex.: Rua do Comércio, 42"
-                @blur="touched.address = true"
+                @blur="validateField('address')"
               />
               <button
                 type="button"
                 class="icon-btn"
                 :disabled="gpsLoading"
-                :title="gpsLoading ? 'A localizar…' : 'Preencher com a minha localização'"
-                :aria-busy="gpsLoading"
-                aria-label="Usar localização do dispositivo"
                 @click="detectGPS"
               >
-                <Loader2 v-if="gpsLoading" class="spin" :size="18" :stroke-width="2" />
-                <MapPin v-else :size="18" :stroke-width="1.75" />
+                <Loader2 v-if="gpsLoading" class="spin" :size="18" />
+                <MapPin v-else :size="18" />
               </button>
             </div>
-            <span v-if="touched.address && !store.delivery.address.trim()" class="cf-field-error">Obrigatório</span>
-          </div>
-
-          <div v-if="gpsDetected" class="gps-success" role="status">
-            <CheckCircle2 :size="18" :stroke-width="1.75" aria-hidden="true" />
-            <span>Morada sugerida com base na localização. Confirma se está correta.</span>
+            <span v-if="errors.address" class="cf-field-error">{{ errors.address }}</span>
           </div>
 
           <div class="form-row-3col">
-            <div
-              class="cf-field"
-              :class="{ 'has-error': touched.postalCode && !store.delivery.postalCode.trim() }"
-            >
+            <div class="cf-field" :class="{ 'has-error': errors.postalCode }">
               <label class="cf-label" for="delivery-postal">Código postal <span class="req">*</span></label>
               <input
                 id="delivery-postal"
                 v-model="store.delivery.postalCode"
                 class="cf-input"
                 type="text"
-                autocomplete="postal-code"
                 placeholder="0000-000"
-                @blur="touched.postalCode = true"
+                maxlength="8"
+                @input="handlePostalInput"
+                @blur="validateField('postalCode')"
               />
             </div>
-            <div
-              class="cf-field"
-              :class="{ 'has-error': touched.city && !store.delivery.city.trim() }"
-            >
+            <div class="cf-field" :class="{ 'has-error': errors.city }">
               <label class="cf-label" for="delivery-city">Localidade <span class="req">*</span></label>
               <input
                 id="delivery-city"
                 v-model="store.delivery.city"
                 class="cf-input"
                 type="text"
-                autocomplete="address-level2"
                 placeholder="Cidade"
-                @blur="touched.city = true"
+                @blur="validateField('city')"
               />
             </div>
             <div class="cf-field">
@@ -146,7 +121,6 @@
                 v-model="store.delivery.floor"
                 class="cf-input"
                 type="text"
-                autocomplete="off"
                 placeholder="Ex.: 3º Esq."
               />
             </div>
@@ -155,25 +129,18 @@
 
         <div v-if="store.delivery.assignedStore" class="store-info">
           <div class="store-badge">
-            <Store :size="18" :stroke-width="1.75" aria-hidden="true" />
+            <Store :size="18" />
             <span>Ponto de recolha atribuído</span>
           </div>
           <p class="store-name">{{ store.delivery.assignedStore.name }}</p>
           <p class="store-address">{{ store.delivery.assignedStore.address }}</p>
+          
           <div class="store-meta">
-            <span class="meta-item">
-              <Route :size="15" :stroke-width="1.75" aria-hidden="true" />
-              {{ store.delivery.estimatedDistance?.toFixed(1) || '—' }} km
-            </span>
-            <span class="meta-item">
-              <Clock :size="15" :stroke-width="1.75" aria-hidden="true" />
-              ~{{ eta }} min
-            </span>
-            <span class="meta-item">
-              <Truck :size="15" :stroke-width="1.75" aria-hidden="true" />
-              €{{ deliveryFeeFmt }} portes
-            </span>
+            <span class="meta-item"><Route :size="15" /> {{ store.delivery.estimatedDistance?.toFixed(1) || '—' }} km</span>
+            <span class="meta-item"><Clock :size="15" /> ~{{ eta }} min</span>
+            <span class="meta-item"><Truck :size="15" /> €{{ deliveryFeeFmt }} portes</span>
           </div>
+
           <div class="store-map-wrap">
             <DeliveryRouteMap
               v-if="deliveryDestCoords"
@@ -183,40 +150,36 @@
               :dest-lng="deliveryDestCoords.lng"
               :courier-progress="0"
               height="200px"
-              aria-label="Mapa da loja de recolha e da morada de entrega indicativa"
             />
           </div>
         </div>
 
         <div v-else class="store-loading">
-          <MapPin :size="22" :stroke-width="1.5" class="muted-ic" aria-hidden="true" />
-          <p>Indica código postal e cidade para calcularmos a loja Continente mais próxima.</p>
+          <MapPin :size="22" class="muted-ic" />
+          <p>Indica o código postal para localizarmos a loja mais próxima.</p>
         </div>
 
         <hr class="cf-divider" />
 
         <div class="cf-field">
-          <label class="cf-label" for="delivery-instructions">
-            Notas para o estafeta <span class="cf-optional">(opcional)</span>
-          </label>
+          <label class="cf-label" for="delivery-instructions">Notas para o estafeta</label>
           <textarea
             id="delivery-instructions"
             v-model="store.delivery.instructions"
             class="cf-textarea"
             rows="3"
-            autocomplete="off"
-            placeholder="Ex.: Campainha com nome na placa, deixar à portaria…"
+            placeholder="Ex.: Campainha com nome na placa..."
           />
         </div>
 
         <button
           type="button"
           class="cf-btn-primary form-submit"
-          :disabled="!formValid"
+          :disabled="!isFormValid"
           @click="goToPayment"
         >
           Continuar para pagamento
-          <ArrowRight :size="18" :stroke-width="1.75" aria-hidden="true" />
+          <ArrowRight :size="18" />
         </button>
       </div>
     </main>
@@ -226,28 +189,22 @@
 </template>
 
 <script setup>
+import { ref, reactive, computed, watch, onMounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { 
+  ArrowRight, Clock, Loader2, MapPin, Route, Store, Truck 
+} from 'lucide-vue-next';
+
 import SiteHeader from '../components/SiteHeader.vue';
 import SiteFooter from '../components/SiteFooter.vue';
 import CheckoutWizardSteps from '../components/CheckoutWizardSteps.vue';
 import DeliveryRouteMap from '../components/DeliveryRouteMap.vue';
+
 import { getDestinationLatLng } from '../utils/mapCoords.js';
-import { ref, computed, watch, onMounted } from 'vue';
-import { useRouter } from 'vue-router';
-import {
-  ArrowRight,
-  CheckCircle2,
-  Clock,
-  Loader2,
-  MapPin,
-  Route,
-  Store,
-  Truck,
-} from 'lucide-vue-next';
 import {
   useOrderStore,
   findNearestStore,
   assignDefaultStore,
-  isDeliveryValid,
   isCartValid,
   estimatedETA,
   deliveryFee,
@@ -257,54 +214,68 @@ const router = useRouter();
 const store = useOrderStore();
 
 const gpsLoading = ref(false);
-const gpsDetected = ref(false);
-
-const touched = ref({
-  name: false,
-  phone: false,
-  address: false,
-  postalCode: false,
-  city: false,
+const errors = reactive({
+  name: '', phone: '', address: '', postalCode: '', city: ''
 });
 
-const formValid = computed(() => isDeliveryValid());
-const eta = estimatedETA;
-const deliveryFeeFmt = computed(() => deliveryFee.value.toFixed(2));
-
+// --- COMPUTE PARA O MAPA ---
 const deliveryDestCoords = computed(() => {
   const s = store.delivery.assignedStore;
   if (!s?.lat || !s?.lng) return null;
   return getDestinationLatLng(store.delivery, s.lat, s.lng);
 });
 
-onMounted(() => {
-  if (!isCartValid()) {
-    router.replace('/order/select');
-    return;
-  }
-  if (!store.delivery.assignedStore) {
-    assignDefaultStore();
-  }
-});
+// --- VALIDAÇÕES ---
+const isNameValid = computed(() => store.delivery.name?.trim().length >= 3);
+const isPhoneValid = computed(() => store.delivery.phone?.replace(/\D/g, '').length === 12);
+const isAddressValid = computed(() => store.delivery.address?.trim().length >= 5);
+const isPostalValid = computed(() => /^\d{4}-\d{3}$/.test(store.delivery.postalCode));
+const isCityValid = computed(() => store.delivery.city?.trim().length >= 2);
 
-watch(
-  () => store.delivery.city,
-  (city) => {
-    if (city.toLowerCase().includes('guimarães') || city.toLowerCase().includes('guimaraes')) {
-      findNearestStore(41.4425, -8.2918);
-    } else {
-      assignDefaultStore();
-    }
-  }
+const isFormValid = computed(() => 
+  isNameValid.value && isPhoneValid.value && isAddressValid.value && 
+  isPostalValid.value && isCityValid.value
 );
 
-function detectGPS() {
-  if (!navigator.geolocation) {
-    return;
-  }
-  gpsLoading.value = true;
-  gpsDetected.value = false;
+const eta = estimatedETA;
+const deliveryFeeFmt = computed(() => deliveryFee.value.toFixed(2));
 
+// --- MÉTODOS DE INPUT ---
+function validateField(field) {
+  errors[field] = '';
+  if (field === 'name' && !isNameValid.value) errors.name = 'Nome obrigatório.';
+  if (field === 'phone' && !isPhoneValid.value) errors.phone = 'Número inválido.';
+  if (field === 'address' && !isAddressValid.value) errors.address = 'Morada obrigatória.';
+  if (field === 'postalCode' && !isPostalValid.value) errors.postalCode = 'CP inválido.';
+  if (field === 'city' && !isCityValid.value) errors.city = 'Obrigatório.';
+}
+
+function handlePhoneKeyDown(e) {
+  if ((e.key === 'Backspace' || e.key === 'Delete') && e.target.selectionStart <= 5) {
+    e.preventDefault();
+  }
+}
+
+function handlePhoneInput(e) {
+  const prefix = '+351 ';
+  let val = e.target.value;
+  if (!val.startsWith(prefix)) val = prefix;
+  const numbers = val.slice(prefix.length).replace(/\D/g, '').slice(0, 9);
+  store.delivery.phone = prefix + numbers;
+}
+
+function handlePostalInput(e) {
+  let val = e.target.value.replace(/\D/g, '').slice(0, 7);
+  if (val.length > 4) {
+    val = val.slice(0, 4) + '-' + val.slice(4);
+  }
+  store.delivery.postalCode = val;
+}
+
+// --- GPS E NAVEGAÇÃO ---
+function detectGPS() {
+  if (!navigator.geolocation) return;
+  gpsLoading.value = true;
   navigator.geolocation.getCurrentPosition(
     (pos) => {
       const { latitude, longitude } = pos.coords;
@@ -315,27 +286,37 @@ function detectGPS() {
       store.delivery.postalCode = '4700-000';
       findNearestStore(latitude, longitude);
       gpsLoading.value = false;
-      gpsDetected.value = true;
     },
-    () => {
-      store.delivery.gpsLat = 41.5518;
-      store.delivery.gpsLng = -8.4229;
-      store.delivery.address = 'Rua de São José, 15';
-      store.delivery.city = 'Braga';
-      store.delivery.postalCode = '4050-262';
-      findNearestStore(41.5518, -8.4229);
-      gpsLoading.value = false;
-      gpsDetected.value = true;
-    },
+    () => { gpsLoading.value = false; },
     { timeout: 5000 }
   );
 }
 
 function goToPayment() {
-  if (formValid.value) {
+  if (isFormValid.value) {
     router.push('/order/payment');
   }
 }
+
+onMounted(() => {
+  if (!isCartValid()) {
+    router.replace('/order/select');
+    return;
+  }
+  if (!store.delivery.phone) {
+    store.delivery.phone = '+351 ';
+  }
+  if (!store.delivery.assignedStore) assignDefaultStore();
+});
+
+watch(() => store.delivery.city, (city) => {
+  if (!city) return;
+  if (city.toLowerCase().includes('guimarães')) {
+    findNearestStore(41.4425, -8.2918);
+  } else {
+    assignDefaultStore();
+  }
+});
 </script>
 
 <style scoped>
