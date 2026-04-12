@@ -5,12 +5,20 @@
     <main class="dashboard-main">
       <div class="dashboard-inner">
         <div class="welcome-card reveal">
-          <div class="welcome-avatar" :class="{ 'google-avatar': user?.authMethod === 'google' }">
-            {{ user?.initials || 'U' }}
+          <div class="welcome-avatar" :class="{ 'google-avatar': user?.authMethod === 'google' && !user?.picture }">
+            <img 
+              v-if="user?.picture" 
+              :src="user.picture" 
+              class="avatar-img" 
+              alt="Avatar do utilizador" 
+            />
+            <span v-else>{{ userInitial }}</span>
           </div>
+          
           <div>
-            <h1>Olá {{ user?.firstName || 'Utilizador' }}</h1>
-            <p>Bem-vindo de volta</p>
+            <h1>Olá {{ user?.firstName || user?.username || 'Utilizador' }}</h1>
+            <p>Bem-vindo de volta à tua área GoEverywhere</p>
+            
             <span v-if="user?.authMethod === 'google'" class="auth-method-badge">
               <svg width="14" height="14" viewBox="0 0 24 24">
                 <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 0 1-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z" fill="#4285F4"/>
@@ -18,7 +26,7 @@
                 <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
                 <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
               </svg>
-              Google
+              Conectado via Google
             </span>
           </div>
         </div>
@@ -31,38 +39,40 @@
             <h3>Nova Encomenda</h3>
             <p>Encomendar GoGummies</p>
           </router-link>
+
           <router-link to="/order/tracking" class="dash-card reveal" data-delay="2">
             <span class="dash-icon" aria-hidden="true">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16.5 9.4 7.55 4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
             </span>
-            <h3>Encomendas Ativas</h3>
-            <p>Ver tracking em tempo real</p>
+            <h3>Acompanhamento</h3>
+            <p>Ver encomendas em tempo real</p>
           </router-link>
+
           <router-link to="/order/history" class="dash-card reveal" data-delay="3">
             <span class="dash-icon" aria-hidden="true">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
             </span>
             <h3>Histórico</h3>
-            <p>Encomendas anteriores</p>
+            <p>Resumo das compras passadas</p>
           </router-link>
+
           <div class="dash-card reveal" data-delay="4">
             <span class="dash-icon" aria-hidden="true">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1-1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </span>
             <h3>Definições</h3>
-            <p>Dados e preferências</p>
+            <p>Gerir dados e segurança</p>
           </div>
         </div>
 
-        <!-- User info card -->
         <div class="info-card reveal" data-delay="2">
           <h3>Os teus dados</h3>
           <div class="info-row">
-            <span class="info-label">Nome</span>
-            <span class="info-value">{{ user?.name || '-' }}</span>
+            <span class="info-label">Nome de perfil</span>
+            <span class="info-value">{{ user?.firstName || user?.username || '-' }}</span>
           </div>
           <div class="info-row">
-            <span class="info-label">Email</span>
+            <span class="info-label">Endereço de Email</span>
             <span class="info-value">{{ user?.email || '-' }}</span>
           </div>
           <div class="info-row" v-if="user?.phone">
@@ -93,9 +103,16 @@ const auth = useAuthStore();
 
 const user = computed(() => auth.user);
 
-// Redirect if not authenticated
+// Lógica de Inicial Dinâmica baseada no que estiver disponível
+const userInitial = computed(() => {
+  if (!user.value) return 'U';
+  const name = user.value.firstName || user.value.username || user.value.email || 'U';
+  return name.charAt(0).toUpperCase();
+});
+
+// Redirecionar se não estiver autenticado
 if (!isAuthenticated.value) {
-  router.replace('/login');
+  router.replace('/login-welcome');
 }
 
 function handleLogout() {
@@ -108,36 +125,46 @@ function handleLogout() {
 .dashboard-main {
   flex: 1;
   padding: 48px 32px;
+  background-color: #f8fafc; /* Um tom ligeiramente mais cinza para destacar os cards brancos */
+  min-height: 80vh;
 }
 .dashboard-inner {
   max-width: 800px;
   margin: 0 auto;
 }
-
-/* Welcome card */
 .welcome-card {
   display: flex;
   align-items: center;
-  gap: 20px;
-  background: var(--go-card);
-  border-radius: 20px;
+  gap: 24px;
+  background: #fff;
+  border-radius: 24px;
   padding: 32px;
-  box-shadow: var(--go-shadow-lg);
+  box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.05);
   margin-bottom: 32px;
 }
 .welcome-avatar {
-  width: 64px;
-  height: 64px;
+  width: 72px;
+  height: 72px;
   border-radius: 50%;
-  background: linear-gradient(135deg, var(--go-primary), #34d399);
+  background: linear-gradient(135deg, var(--go-primary, #00c853), #34d399);
   color: #fff;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  font-size: 24px;
+  font-size: 26px;
   flex-shrink: 0;
+  overflow: hidden; /* Importante para a foto ficar redonda */
+  border: 3px solid #fff;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
 }
+
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover; /* Mantém a proporção da foto */
+}
+
 .welcome-avatar.google-avatar {
   background: linear-gradient(135deg, #4285F4, #34A853);
 }
@@ -145,103 +172,96 @@ function handleLogout() {
   font-family: var(--go-font-display);
   font-size: 24px;
   font-weight: 700;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
+  letter-spacing: 0.01em;
+  margin-bottom: 4px;
 }
 .welcome-card p {
   font-size: 14px;
-  color: var(--go-muted);
+  color: #64748b;
 }
-
 .auth-method-badge {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
-  background: var(--go-surface);
-  border: 1px solid var(--go-line);
-  border-radius: 6px;
-  padding: 3px 10px;
+  gap: 6px;
+  background: #f1f5f9;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 4px 12px;
   font-size: 11px;
   font-weight: 600;
-  color: var(--go-muted);
-  margin-top: 6px;
+  color: #475569;
+  margin-top: 10px;
 }
-
-/* Dashboard grid */
 .dashboard-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
-  gap: 16px;
+  gap: 20px;
   margin-bottom: 32px;
 }
 .dash-card {
-  background: var(--go-card);
-  border-radius: var(--go-radius-lg);
+  background: #fff;
+  border-radius: 20px;
   padding: 28px;
   text-decoration: none;
-  color: var(--go-ink);
-  box-shadow: var(--go-shadow-sm);
-  transition: all var(--go-duration) var(--go-ease);
-  cursor: pointer;
+  color: #1e293b;
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 2px solid transparent;
 }
 .dash-card:hover {
-  border-color: var(--go-primary);
+  border-color: var(--go-primary, #00c853);
   transform: translateY(-4px);
-  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.1);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
 }
 .dash-icon {
   display: flex;
   align-items: center;
-  margin-bottom: 12px;
-  color: var(--go-primary);
+  margin-bottom: 16px;
+  color: var(--go-primary, #00c853);
 }
-.dash-icon svg { flex-shrink: 0; }
 .dash-card h3 {
   font-size: 16px;
   font-weight: 700;
-  margin-bottom: 4px;
+  margin-bottom: 6px;
 }
 .dash-card p {
   font-size: 13px;
-  color: var(--go-muted);
+  color: #64748b;
 }
-
-/* Info card */
 .info-card {
-  background: var(--go-card);
-  border-radius: 20px;
+  background: #fff;
+  border-radius: 24px;
   padding: 32px;
-  box-shadow: var(--go-shadow);
+  box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
 }
 .info-card h3 {
   font-size: 16px;
   font-weight: 700;
-  margin-bottom: 20px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--go-surface);
+  margin-bottom: 24px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid #f1f5f9;
 }
 .info-row {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--go-surface-light);
+  padding: 14px 0;
+  border-bottom: 1px solid #f8fafc;
 }
 .info-row:last-child { border-bottom: none; }
 .info-label {
   font-size: 13px;
-  color: var(--go-muted);
+  color: #64748b;
   font-weight: 500;
 }
 .info-value {
   font-size: 14px;
   font-weight: 600;
-  color: var(--go-ink);
+  color: #1e293b;
 }
-
 @media (max-width: 768px) {
   .dashboard-grid { grid-template-columns: 1fr; }
+  .dashboard-main { padding: 24px 16px; }
   .info-row {
     flex-direction: column;
     align-items: flex-start;

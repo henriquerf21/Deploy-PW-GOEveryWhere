@@ -1,3 +1,111 @@
+<script setup>
+import SiteHeader from '../components/SiteHeader.vue';
+import SiteFooter from '../components/SiteFooter.vue';
+import DeliveryRouteMap from '../components/DeliveryRouteMap.vue';
+import { getDestinationLatLng } from '../utils/mapCoords.js';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { useOrderStore, ORDER_STATES, fetchUserOrders } from '../stores/orderStore.js';
+
+const router = useRouter();
+const store = useOrderStore();
+
+const order = computed(() => store.activeOrder);
+const showCancelModal = ref(false);
+const cancelJustification = ref('');
+const ratingValue = ref(0);
+const toastMessage = ref('');
+let pollingTimer = null;
+
+// ── CICLO DE VIDA ──────────────────────────────────────────────────
+onMounted(async () => {
+  // 1. Carrega dados imediatamente ao entrar
+  await fetchUserOrders();
+  
+  // 2. POLLING: Verifica o Strapi a cada 5 segundos (Requisito RNF04)
+  pollingTimer = setInterval(async () => {
+    if (order.value && !ORDER_STATES[order.value.status]?.terminal) {
+      const oldStatus = order.value.status;
+      await fetchUserOrders();
+      
+      if (order.value && order.value.status !== oldStatus) {
+        showStateToast(order.value.status);
+      }
+    }
+  }, 5000);
+});
+
+onUnmounted(() => {
+  clearInterval(pollingTimer);
+});
+
+// ── COMPUTED ────────────────────────────────────────────────────────
+const currentStateData = computed(() => order.value ? ORDER_STATES[order.value.status] : null);
+
+const stateClass = computed(() => {
+  if (!order.value) return '';
+  const s = order.value.status;
+  if (s === 'S-09') return 'in-transit';
+  if (['S-10', 'S-11'].includes(s)) return 'arrived';
+  return '';
+});
+
+const routeProgress = computed(() => {
+  if (!order.value) return 0;
+  const flow = ['S-01','S-02','S-05','S-06','S-07','S-08','S-09','S-10','S-11'];
+  const idx = flow.indexOf(order.value.status);
+  return idx < 0 ? 0 : Math.min(100, (idx / (flow.length - 1)) * 100);
+});
+
+const trackingMapCoords = computed(() => {
+  const o = order.value;
+  if (!o) return null;
+  // Fallback para Braga se a loja não tiver coordenadas
+  const storeLat = o.store?.lat || 41.5518;
+  const storeLng = o.store?.lng || -8.4229;
+  const dest = getDestinationLatLng(o.delivery || {}, storeLat, storeLng);
+  return { storeLat, storeLng, destLat: dest.lat, destLng: dest.lng };
+});
+
+const timelineSteps = computed(() => {
+  if (!order.value) return [];
+  const flow = [
+    { state: 'S-01', label: 'Enviada' },
+    { state: 'S-02', label: 'Em Análise' },
+    { state: 'S-05', label: 'Aprovada' },
+    { state: 'S-07', label: 'Estafeta a caminho' },
+    { state: 'S-08', label: 'Em Recolha' },
+    { state: 'S-09', label: 'Em Trânsito' },
+    { state: 'S-11', label: 'Entregue' },
+  ];
+  const currentFlow = ['S-01','S-02','S-05','S-06','S-07','S-08','S-09','S-10','S-11'];
+  const currentIdx = currentFlow.indexOf(order.value.status);
+
+  return flow.map((step) => {
+    const stepIdx = currentFlow.indexOf(step.state);
+    return {
+      ...step,
+      done: stepIdx < currentIdx && stepIdx >= 0,
+      active: step.state === order.value.status
+    };
+  });
+});
+
+// ── MÉTODOS ────────────────────────────────────────────────────────
+function showStateToast(newState) {
+  const data = ORDER_STATES[newState];
+  if (data) {
+    toastMessage.value = `Nova atualização: ${data.label}`;
+    setTimeout(() => { toastMessage.value = ''; }, 3000);
+  }
+}
+
+function submitRating() {
+  // Aqui chamarias a função do store para gravar no Strapi
+  router.push('/order/history');
+}
+</script>
+
 <template>
   <div class="page-wrapper cf-checkout">
     <SiteHeader />
@@ -6,7 +114,6 @@
       <header class="track-head">
         <p class="cf-checkout-kicker">Em tempo real</p>
         <h1 class="cf-checkout-title">Acompanhamento</h1>
-        <p class="cf-checkout-sub">Estado da encomenda, rota indicativa e contacto do estafeta quando disponível.</p>
       </header>
 
       <div class="cf-tabs" role="tablist">
@@ -15,7 +122,6 @@
       </div>
 
       <div v-if="order" class="tracking-layout">
-        <!-- Left: Map -->
         <div class="map-card">
           <div class="map-leaflet-host" :class="stateClass">
             <DeliveryRouteMap
@@ -26,291 +132,55 @@
               :dest-lat="trackingMapCoords.destLat"
               :dest-lng="trackingMapCoords.destLng"
               :courier-progress="routeProgress"
-              :dim-tiles="stateClass === 'in-transit'"
               height="300px"
-              aria-label="Mapa da rota entre a loja Continente e a tua morada"
             />
           </div>
           <div class="eta-bar">
-            <div>
-              <span class="eta-label">Chegada estimada</span>
-              <span class="eta-time">~{{ etaDisplay }} min</span>
-            </div>
             <span class="transit-badge" :style="{ background: currentStateData?.color + '18', color: currentStateData?.color }">
-              {{ currentStateData?.label || 'Processando' }}
+              {{ currentStateData?.label }}
             </span>
           </div>
         </div>
 
-        <!-- Right: Order Details -->
         <div class="details-card">
           <div class="order-header">
-            <div>
-              <h2>#{{ order.id }}</h2>
-              <span class="order-items" v-for="item in order.products" :key="item.name">
-                <svg width="10" height="10" viewBox="0 0 24 24" fill="#00c853" stroke="none"><circle cx="12" cy="12" r="8"/></svg>
-                {{ item.name }}
+            <h3>Encomenda #{{ order.id.substring(0, 8) }}</h3>
+            <div class="order-items-list">
+              <span v-for="item in order.products" :key="item.name" class="order-items">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="#10b981" style="margin-right:8px"><circle cx="12" cy="12" r="8"/></svg>
+                {{ item.qty }}x {{ item.name }}
               </span>
             </div>
-            <span v-if="order.urgent" class="urgent-badge">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
-              Urgente
-            </span>
           </div>
 
-          <!-- Timeline -->
           <div class="timeline">
-            <div
-              v-for="(step, idx) in timelineSteps"
-              :key="step.state"
-              class="timeline-step"
-              :class="{ done: step.done, active: step.active, future: !step.done && !step.active }"
-            >
-              <div class="timeline-dot" :class="{ empty: !step.done && !step.active }">
-                <svg v-if="step.done" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round"><polyline points="20 6 9 17 4 12"/></svg>
+            <div v-for="step in timelineSteps" :key="step.state" 
+                 class="timeline-step" :class="{ done: step.done, active: step.active }">
+              <div class="timeline-dot">
+                <svg v-if="step.done" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><polyline points="20 6 9 17 4 12"/></svg>
               </div>
-              <div class="timeline-content">
-                <span class="timeline-label">{{ step.label }}</span>
-                <span v-if="step.time" class="timeline-time">{{ step.time }}</span>
-              </div>
-              <div v-if="idx < timelineSteps.length - 1" class="timeline-connector" :class="{ 'done-connector': step.done }"></div>
-            </div>
-          </div>
-
-          <!-- Driver -->
-          <div class="driver-card" v-if="order.estafeta && isEstafetaVisible">
-            <div class="driver-avatar">{{ order.estafeta.initials }}</div>
-            <div class="driver-info">
-              <span class="driver-name">{{ order.estafeta.name }}</span>
-              <div class="driver-rating">
-                <span>{{ order.estafeta.rating }}</span>
-                <svg v-for="s in 5" :key="s" width="12" height="12" viewBox="0 0 24 24" :fill="s <= Math.round(order.estafeta.rating) ? '#f59e0b' : '#e5e7eb'" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-              </div>
-              <span class="driver-transport">{{ order.estafeta.transport }}</span>
-            </div>
-            <div class="driver-actions">
-              <button class="driver-btn" title="Ligar" aria-label="Ligar ao estafeta">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 16.92v3a2 2 0 0 1-2.18 2 19.79 19.79 0 0 1-8.63-3.07 19.5 19.5 0 0 1-6-6 19.79 19.79 0 0 1-3.07-8.67A2 2 0 0 1 4.11 2h3a2 2 0 0 1 2 1.72c.127.96.361 1.903.7 2.81a2 2 0 0 1-.45 2.11L8.09 9.91a16 16 0 0 0 6 6l1.27-1.27a2 2 0 0 1 2.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0 1 22 16.92z"/></svg>
-              </button>
-              <button class="driver-btn" title="Mensagem" aria-label="Enviar mensagem ao estafeta">
-                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/></svg>
-              </button>
-            </div>
-          </div>
-
-          <!-- Cancel Button -->
-          <button v-if="canCancel" class="btn-cancel" @click="showCancelModal = true">
-            Cancelar Encomenda
-          </button>
-
-          <!-- Delivered — Rate -->
-          <div v-if="order.status === 'S-11'" class="delivered-section">
-            <div class="delivered-banner">
-              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-              <span>A tua encomenda foi entregue com sucesso!</span>
-            </div>
-            <div class="rate-section">
-              <p>Avalia a tua experiência:</p>
-              <div class="star-rating">
-                <button
-                  v-for="s in 5"
-                  :key="s"
-                  class="star-btn"
-                  :class="{ filled: s <= ratingValue }"
-                  @click="ratingValue = s"
-                  :aria-label="'Avaliar ' + s + ' estrelas'"
-                >
-                  <svg width="28" height="28" viewBox="0 0 24 24" :fill="s <= ratingValue ? '#f59e0b' : 'none'" :stroke="s <= ratingValue ? '#f59e0b' : '#d1d5db'" stroke-width="2" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                </button>
-              </div>
-              <button class="btn-rate-submit" @click="submitRating" :disabled="ratingValue === 0">
-                Enviar Avaliação
-              </button>
+              <span class="timeline-label">{{ step.label }}</span>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- No active order -->
       <div v-else class="empty-state">
-        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5"><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/></svg>
         <h3>Sem encomenda ativa</h3>
-        <p>Quando fizeres uma compra, o estado aparece aqui com a estimativa de chegada.</p>
-        <router-link to="/order/select" class="btn-new-order">Nova encomenda</router-link>
-        <router-link to="/order/history" class="btn-history-link">Ver histórico</router-link>
+        <p>Não tens nenhuma entrega a decorrer neste momento.</p>
+        <router-link to="/order/select" class="btn-new-order">Fazer nova encomenda</router-link>
       </div>
-
-      <!-- Cancel Modal -->
-      <Transition name="modal">
-        <div v-if="showCancelModal" class="modal-overlay" @click.self="showCancelModal = false">
-          <div class="modal-card">
-            <h3>Cancelar Encomenda</h3>
-            <p>Tens a certeza de que queres cancelar a encomenda <strong>#{{ order?.id }}</strong>?</p>
-            <div class="form-group">
-              <label for="cancel-reason">Justificação (obrigatória)</label>
-              <textarea id="cancel-reason" v-model="cancelJustification" placeholder="Motivo do cancelamento..."></textarea>
-            </div>
-            <div class="modal-actions">
-              <button class="btn-modal-cancel" @click="showCancelModal = false">Voltar</button>
-              <button class="btn-modal-confirm" @click="confirmCancel" :disabled="!cancelJustification.trim()">Confirmar Cancelamento</button>
-            </div>
-          </div>
-        </div>
-      </Transition>
-
-      <!-- State Change Toast -->
-      <Transition name="toast">
-        <div v-if="toastMessage" class="toast-notification">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg>
-          <span>{{ toastMessage }}</span>
-        </div>
-      </Transition>
     </main>
-
     <SiteFooter />
+
+    <Transition name="toast">
+      <div v-if="toastMessage" class="toast-notification">
+        {{ toastMessage }}
+      </div>
+    </Transition>
   </div>
 </template>
-
-<script setup>
-import SiteHeader from '../components/SiteHeader.vue';
-import SiteFooter from '../components/SiteFooter.vue';
-import DeliveryRouteMap from '../components/DeliveryRouteMap.vue';
-import { getDestinationLatLng } from '../utils/mapCoords.js';
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
-import {
-  useOrderStore, ORDER_STATES, advanceOrderState, cancelOrder, completeOrder
-} from '../stores/orderStore.js';
-
-const router = useRouter();
-const store = useOrderStore();
-
-const order = computed(() => store.activeOrder);
-const showCancelModal = ref(false);
-const cancelJustification = ref('');
-const ratingValue = ref(0);
-const toastMessage = ref('');
-let advanceTimer = null;
-let toastTimer = null;
-
-const currentStateData = computed(() => {
-  if (!order.value) return null;
-  return ORDER_STATES[order.value.status] || null;
-});
-
-const stateClass = computed(() => {
-  if (!order.value) return '';
-  const s = order.value.status;
-  if (s === 'S-09') return 'in-transit';
-  if (s === 'S-10' || s === 'S-11') return 'arrived';
-  return '';
-});
-
-const routeProgress = computed(() => {
-  if (!order.value) return 0;
-  const flow = ['S-01','S-02','S-05','S-06','S-07','S-08','S-09','S-10','S-11'];
-  const idx = flow.indexOf(order.value.status);
-  if (idx < 0) return 0;
-  return Math.min(100, (idx / (flow.length - 1)) * 100);
-});
-
-const trackingMapCoords = computed(() => {
-  const o = order.value;
-  if (!o?.store?.lat || o.store.lng == null) return null;
-  const dest = getDestinationLatLng(o.delivery, o.store.lat, o.store.lng);
-  return {
-    storeLat: o.store.lat,
-    storeLng: o.store.lng,
-    destLat: dest.lat,
-    destLng: dest.lng,
-  };
-});
-
-const etaDisplay = computed(() => {
-  if (!order.value) return '--';
-  const flow = ['S-01','S-02','S-05','S-06','S-07','S-08','S-09','S-10','S-11'];
-  const idx = flow.indexOf(order.value.status);
-  const remaining = Math.max(0, flow.length - 1 - idx);
-  const base = order.value.urgent ? 15 : (order.value.eta || 30);
-  return Math.max(1, Math.round(base * (remaining / (flow.length - 1))));
-});
-
-const timelineSteps = computed(() => {
-  if (!order.value) return [];
-  const flow = [
-    { state: 'S-01', label: 'Encomenda Submetida' },
-    { state: 'S-02', label: 'Em Análise' },
-    { state: 'S-05', label: 'Aprovada' },
-    { state: 'S-07', label: 'Aceite pelo Estafeta' },
-    { state: 'S-08', label: 'Em Recolha' },
-    { state: 'S-09', label: 'Em Trânsito' },
-    { state: 'S-10', label: 'No Destino' },
-    { state: 'S-11', label: 'Entregue' },
-  ];
-  const currentFlow = ['S-01','S-02','S-05','S-06','S-07','S-08','S-09','S-10','S-11'];
-  const currentIdx = currentFlow.indexOf(order.value.status);
-
-  return flow.map((step) => {
-    const stepIdx = currentFlow.indexOf(step.state);
-    const timelineEntry = order.value.timeline?.find(t => t.state === step.state);
-    return {
-      ...step,
-      done: stepIdx <= currentIdx && stepIdx >= 0 && step.state !== order.value.status,
-      active: step.state === order.value.status,
-      time: timelineEntry ? new Date(timelineEntry.time).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }) : null,
-    };
-  });
-});
-
-const isEstafetaVisible = computed(() => {
-  if (!order.value) return false;
-  return ['S-07','S-08','S-09','S-10','S-11'].includes(order.value.status);
-});
-
-const canCancel = computed(() => {
-  if (!order.value) return false;
-  return ['S-01','S-02','S-03','S-05','S-06'].includes(order.value.status);
-});
-
-function showStateToast(newState) {
-  const data = ORDER_STATES[newState];
-  if (data) {
-    toastMessage.value = data.label;
-    clearTimeout(toastTimer);
-    toastTimer = setTimeout(() => { toastMessage.value = ''; }, 3000);
-  }
-}
-
-function startAutoAdvance() {
-  advanceTimer = setInterval(() => {
-    if (order.value && !ORDER_STATES[order.value.status]?.terminal) {
-      const next = advanceOrderState();
-      if (next) showStateToast(next);
-      if (!next || ORDER_STATES[next]?.terminal) clearInterval(advanceTimer);
-    } else {
-      clearInterval(advanceTimer);
-    }
-  }, 4000);
-}
-
-function confirmCancel() {
-  if (cancelJustification.value.trim()) {
-    cancelOrder(cancelJustification.value);
-    showCancelModal.value = false;
-    showStateToast('S-13');
-  }
-}
-
-function submitRating() {
-  if (ratingValue.value > 0) {
-    completeOrder(ratingValue.value);
-    router.push('/order/history');
-  }
-}
-
-onMounted(() => { if (order.value) startAutoAdvance(); });
-onUnmounted(() => { clearInterval(advanceTimer); clearTimeout(toastTimer); });
-</script>
 
 <style scoped>
 .page-wrapper {
@@ -854,20 +724,21 @@ onUnmounted(() => { clearInterval(advanceTimer); clearTimeout(toastTimer); });
 
 .toast-notification {
   position: fixed;
-  bottom: 1.5rem;
+  bottom: 2rem;
   left: 50%;
   transform: translateX(-50%);
-  background: var(--cf-ink);
-  color: #fff;
-  padding: 0.875rem 1.25rem;
-  border-radius: var(--cf-radius);
-  font-weight: 600;
-  font-size: 0.875rem;
+  z-index: 1000;
+  background: #1e293b;
+  color: white;
+  padding: 1rem 2rem;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
   display: flex;
   align-items: center;
   gap: 10px;
-  z-index: 999;
-  box-shadow: 0 12px 40px rgba(15, 23, 42, 0.2);
+  font-weight: 600;
+  font-size: 0.875rem;
+  pointer-events: none;
 }
 
 .toast-enter-active {

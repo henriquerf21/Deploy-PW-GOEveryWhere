@@ -186,9 +186,9 @@ import {
 const selectedPack = ref('2');
 
 const packs = [
-  { id: '1', title: '1 frasco', price: '€14.99', badge: null, popular: false },
-  { id: '2', title: 'Pack 2', price: '€26.99', badge: '-10%', popular: true },
-  { id: '3', title: 'Pack 3', price: '€38.24', badge: '-15%', popular: false },
+  { id: 'frasco-1', title: '1 frasco', price: '€14.99', badge: null, popular: false },
+  { id: 'pack-2', title: 'Pack 2', price: '€26.99', badge: '-10%', popular: true },
+  { id: 'pack-3', title: 'Pack 3', price: '€38.24', badge: '-15%', popular: false },
 ];
 
 const currentPack = computed(() => packs.find((p) => p.id === selectedPack.value) || packs[0]);
@@ -213,6 +213,9 @@ const infoCards = [
   },
 ];
 </script>
+
+
+
 
 <style scoped>
 .page {
