@@ -1,26 +1,154 @@
+<template>
+  <div class="page-wrapper cf-checkout">
+    <SiteHeader />
+
+    <main class="cf-checkout-main history-main">
+      <header class="hist-head">
+        <p class="cf-checkout-kicker">As tuas compras</p>
+        <h1 class="cf-checkout-title">Histórico</h1>
+        <p class="cf-checkout-sub">Consulta encomendas anteriores, saldo GoPoints e repete artigos com um toque.</p>
+      </header>
+
+      <div class="cf-tabs" role="tablist">
+        <router-link to="/order/tracking" class="cf-tab" role="tab">Encomenda ativa</router-link>
+        <span class="cf-tab is-active" role="tab" aria-selected="true">Histórico</span>
+      </div>
+
+      <div class="gopoints-bar">
+        <div class="gp-left">
+          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f57f17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
+          <div>
+            <span class="gp-balance">{{ store.goPoints.balance }} GoPoints</span>
+            <span v-if="store.goPoints.pending > 0" class="gp-pending">+{{ store.goPoints.pending }} pts pendentes</span>
+          </div>
+        </div>
+        <div class="gp-tiers">
+          <span class="tier" :class="{ available: store.goPoints.balance >= 500 }">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+            500 pts = Entrega grátis
+          </span>
+          <span class="tier" :class="{ available: store.goPoints.balance >= 1000 }">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
+            1000 pts = Produto grátis
+          </span>
+        </div>
+      </div>
+
+      <div v-if="store.loading" class="loading-history">
+        <p>A carregar o teu histórico...</p>
+      </div>
+
+      <div class="orders-list" v-else-if="sortedOrders.length > 0">
+        <div
+          v-for="order in sortedOrders"
+          :key="order.id"
+          class="order-card"
+        >
+        <div class="order-top">
+        <div>
+          <h3>Encomenda #{{ order.id }}</h3> 
+          <span class="order-date">{{ order.date }}</span>
+        </div>
+        <span class="status" :class="statusClass(order.status)">
+          {{ statusLabel(order.status) }}
+        </span>
+      </div>
+          <div class="order-items">
+            <span v-for="p in order.products" :key="p.name" class="order-product">
+              <svg width="10" height="10" viewBox="0 0 24 24" fill="#00c853"><circle cx="12" cy="12" r="8"/></svg>
+              {{ p.name }}
+            </span>
+            <span class="order-total">€{{ order.total?.toFixed(2) }}</span>
+          </div>
+
+          <div class="order-bottom">
+            <div class="delivery-info">
+              <span v-if="order.store" class="info-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
+                {{ order.store }}
+              </span>
+              <span v-if="order.rating" class="info-item">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
+                {{ order.rating.toFixed(1) }}
+              </span>
+            </div>
+            <div class="order-actions">
+              <button
+                v-if="!order.rated && (order.status === 'S-11' || order.status === 'S-16')"
+                class="btn-rate"
+                @click="openRatingModal(order)"
+              >
+                Avaliar
+              </button>
+              <button class="btn-repeat" @click="repeatOrder(order)">
+                Repetir
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div v-else class="empty-state">
+        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+        <h3>Sem histórico</h3>
+        <p>Olá {{ store.user?.username }}, ainda não tens encomendas concluídas.</p>
+        <router-link to="/order/select" class="btn-new">Começar encomenda</router-link>
+      </div>
+    </main>
+    <SiteFooter />
+
+    <div v-if="showRatingModal" class="rating-modal-overlay">
+       <div class="rating-modal">
+          <h3>Avaliar Encomenda</h3>
+          <div class="stars">
+             <button v-for="i in 5" :key="i" @click="ratingValue = i" :class="{ active: i <= ratingValue }">★</button>
+          </div>
+          <p>{{ ratingLabels[ratingValue - 1] || 'Seleciona uma nota' }}</p>
+          <div class="modal-btns">
+             <button @click="showRatingModal = false">Cancelar</button>
+             <button @click="submitRating" :disabled="ratingValue === 0">Confirmar</button>
+          </div>
+       </div>
+    </div>
+  </div>
+</template>
+
 <script setup>
+import { ref, onMounted, computed } from 'vue';
+import { useRouter } from 'vue-router';
 import SiteHeader from '../components/SiteHeader.vue';
 import SiteFooter from '../components/SiteFooter.vue';
-import { ref, onMounted } from 'vue'; // Adicionado onMounted
-import { useRouter } from 'vue-router';
-// Importamos a função fetchUserOrders que criámos no passo anterior
 import { useOrderStore, ORDER_STATES, reOrder, rateOrder, fetchUserOrders } from '../stores/orderStore.js';
 
 const router = useRouter();
 const store = useOrderStore();
 
+// Estados para avaliação
 const showRatingModal = ref(false);
 const ratingOrder = ref(null);
 const ratingValue = ref(0);
 const ratingLabels = ['Mau', 'Medíocre', 'Razoável', 'Bom', 'Excelente'];
 
-// ── CICLO DE VIDA ──────────────────────────────────────────────────
-// Quando o Henrique entra na página, vamos buscar os dados reais ao Strapi
+// ── LÓGICA DE ORDENAÇÃO ──────────────────────────────────────────
+const sortedOrders = computed(() => {
+  if (!store.orderHistory) return [];
+
+  // Incluímos o S-12 para cobrir todas as situações terminais do Caderno de Encargos
+  const terminalStates = ['S-04', 'S-11', 'S-12', 'S-13', 'S-14', 'S-15', 'S-16'];
+
+  return [...store.orderHistory]
+    // 1. FILTRAR: Garante que encomendas em processamento (S-01 a S-10) não aparecem aqui
+    .filter(order => terminalStates.includes(order.status))
+    // 2. ORDENAR: Uso de Number() garante que a ordem é matemática (ex: #10 acima de #2)
+    .sort((a, b) => Number(b.id) - Number(a.id));
+});
+
+// ── CICLO DE VIDA ────────────────────────────────────────────────
 onMounted(async () => {
   await fetchUserOrders();
 });
 
-// ── MÉTODOS ────────────────────────────────────────────────────────
+// ── MÉTODOS ──────────────────────────────────────────────────────
 function statusLabel(status) {
   return ORDER_STATES[status]?.label || status;
 }
@@ -50,104 +178,6 @@ function repeatOrder(order) {
   router.push('/order/select');
 }
 </script>
-
-<template>
-  <div class="page-wrapper cf-checkout">
-    <SiteHeader />
-
-    <main class="cf-checkout-main history-main">
-      <header class="hist-head">
-        <p class="cf-checkout-kicker">As tuas compras</p>
-        <h1 class="cf-checkout-title">Histórico</h1>
-        <p class="cf-checkout-sub">Consulta encomendas anteriores, saldo GoPoints e repete artigos com um toque.</p>
-      </header>
-
-      <div class="cf-tabs" role="tablist">
-        <router-link to="/order/tracking" class="cf-tab" role="tab">Encomenda ativa</router-link>
-        <span class="cf-tab is-active" role="tab" aria-selected="true">Histórico</span>
-      </div>
-
-      <div class="gopoints-bar">
-        <div class="gp-left">
-          <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f57f17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
-          <div>
-            <span class="gp-balance">{{ store.goPoints.balance }} GoPoints</span>
-            <span v-if="store.goPoints.pending > 0" class="gp-pending">+{{ store.goPoints.pending }} pts pendentes</span>
-          </div>
-        </div>
-        <div class="gp-tiers">
-          <span class="tier" :class="{ available: store.goPoints.balance >= 500 }">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-            500 pts = Entrega grátis
-          </span>
-          <span class="tier" :class="{ available: store.goPoints.balance >= 1000 }">
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
-            1000 pts = Produto grátis
-          </span>
-        </div>
-      </div>
-
-      <div v-if="store.loading" class="loading-history">
-        <p>A carregar o teu histórico...</p>
-      </div>
-
-      <div class="orders-list" v-else-if="store.orderHistory.length > 0">
-        <div
-          v-for="order in store.orderHistory"
-          :key="order.id"
-          class="order-card"
-        >
-          <div class="order-top">
-            <div>
-              <h3>#{{ order.id.substring(0, 8) }}</h3> 
-              <span class="order-date">{{ order.date }}</span>
-            </div>
-            <span class="status" :class="statusClass(order.status)">{{ statusLabel(order.status) }}</span>
-          </div>
-          <div class="order-items">
-            <span v-for="p in order.products" :key="p.name" class="order-product">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="#00c853" stroke="none"><circle cx="12" cy="12" r="8"/></svg>
-              {{ p.name }}
-            </span>
-            <span class="order-total">€{{ order.total?.toFixed(2) }}</span>
-          </div>
-          <div class="order-bottom">
-            <div class="delivery-info">
-              <span v-if="order.store" class="info-item">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0 1 18 0z"/><circle cx="12" cy="10" r="3"/></svg>
-                {{ order.store }}
-              </span>
-              <span v-if="order.rating" class="info-item">
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-                {{ order.rating.toFixed(1) }}
-              </span>
-            </div>
-            <div class="order-actions">
-              <button
-                v-if="!order.rated && (order.status === 'S-11' || order.status === 'S-16')"
-                class="btn-rate"
-                @click="openRatingModal(order)"
-              >
-                Avaliar
-              </button>
-              <button class="btn-repeat" @click="repeatOrder(order)">
-                Repetir
-              </button>
-            </div>
-          </div>
-        </div>
-      </div>
-
-      <div v-else class="empty-state">
-        <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/><polyline points="10 9 9 9 8 9"/></svg>
-        <h3>Sem histórico</h3>
-        <p>Olá {{ store.user?.username }}, ainda não tens encomendas concluídas.</p>
-        <router-link to="/order/select" class="btn-new">Começar encomenda</router-link>
-      </div>
-    </main>
-    <SiteFooter />
-  </div>
-</template>
 
 <style scoped>
 .loading-history {

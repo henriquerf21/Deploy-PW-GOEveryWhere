@@ -101,28 +101,52 @@ export function reOrder(oldOrder) {
 export async function fetchUserOrders() {
   if (!authState.user || !authState.token) return;
   store.loading = true;
+  
   try {
     const userUID = authState.user.documentId || authState.user.id;
     const url = `${API_URL}/orders?filters[user][documentId][$eq]=${userUID}&populate=*`;
-    const response = await fetch(url, { headers: { 'Authorization': `Bearer ${authState.token}` } });
+    
+    const response = await fetch(url, { 
+      headers: { 'Authorization': `Bearer ${authState.token}` } 
+    });
     const res = await response.json();
     
     if (!response.ok) throw new Error(res.error?.message || "Erro no GET");
 
-    store.orderHistory = (res.data || []).map(order => {
+    const allOrders = (res.data || []).map(order => {
       const attr = order.attributes || order;
+      
+      // Extrai apenas o código (ex: "S-01") 
+      const statusCode = attr.order_status ? attr.order_status.substring(0, 4) : 'S-01';
+
       return {
-        id: order.documentId || order.id,
+        id: Number(order.id), 
         date: new Date(attr.createdAt).toLocaleDateString('pt-PT'),
+        createdAt: attr.createdAt,
         products: attr.items || [],
         total: attr.total_price,
-        status: attr.order_status,
-        rating: attr.rating
+        status: statusCode, 
+        rating: attr.rating,
+        store: attr.store_name 
       };
     });
-    store.activeOrder = store.orderHistory.find(o => !['S-04', 'S-11', 'S-13', 'S-15'].includes(o.status)) || null;
-  } catch (error) { console.error("Erro histórico:", error); } 
-  finally { store.loading = false; }
+
+    // Ordena por ID decrescente
+    allOrders.sort((a, b) => b.id - a.id);
+
+    store.orderHistory = allOrders;
+
+    // Estados terminais baseados no Caderno de Encargos
+    const terminalStates = ['S-04', 'S-11', 'S-12', 'S-13', 'S-14', 'S-15', 'S-16'];
+    
+    // Procura a encomenda mais recente que NÃO terminou
+    store.activeOrder = allOrders.find(o => !terminalStates.includes(o.status)) || null;
+
+  } catch (error) { 
+    console.error("Erro ao procurar encomendas:", error); 
+  } finally { 
+    store.loading = false; 
+  }
 }
 
 export async function submitOrder() {
@@ -175,3 +199,4 @@ export function completeOrder() {}
 
 export function useOrderStore() { return store; }
 export default store;
+
