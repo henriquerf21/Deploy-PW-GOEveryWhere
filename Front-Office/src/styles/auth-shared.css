@@ -1,6 +1,6 @@
 /**
  * GoEverywhere — Shared Auth Styles
- * Used by LoginPage, RegisterPage, LoginWelcomePage, ClientAreaPage.
+ * Used by LoginView, RegisterView, LoginWelcomeView, ClientAreaView.
  * Requires design-tokens.css to be loaded first (via main.js).
  */
 

@@ -10,9 +10,10 @@ Este repositório está organizado para trabalho em equipa (5 elementos):
 
 ## Estrutura
 
-- `Front-Office/` - aplicação web atual (Vue + Vite)
-- `Back-Office/` - área reservada para backend/admin
-- `PWA/` - área reservada para funcionalidades PWA
+- `Front-Office/` — site público (Vue 3 + Vite). Dentro de `src/`: `views/` (ecrãs por rota), `components/`, `stores/`, `router/`, `utils/`, `config/`, `styles/`.
+- `Back-Office/` — consola de administração (Vue 3 + Vite). Mesma ideia: `views/`, `layouts/`, `components/`, `stores/`, etc.
+- `PWA/` — PWA dos estafetas; projeto ativo em `PWA/estafeta-app/`.
+- `backend/` — API Strapi (não é Vue).
 
 ## Regras rápidas para evitar conflitos
 
@@ -30,3 +31,7 @@ Este repositório está organizado para trabalho em equipa (5 elementos):
 5. Criar Pull Request para `main` e só fazer merge após revisão.
 
 Mais detalhes em `CONTRIBUTING.md`.
+
+Abrir o monorepo no VS Code/Cursor: ficheiro `H101.code-workspace` na raiz (pastas Front-Office, Back-Office, PWA e backend).
+
+O `.gitignore` na raiz ignora `**/.cursor/skills/`, `**/.agent/`, `**/node_modules/`, `**/dist/`, `.vite`, `**/.tmp/`, `**/.strapi/`, `**/.git-frontend-backup/`, `PWA/project-*/` (protótipos duplicados) e `.DS_Store`, para o zip de entrega e o repositório não levarem artefactos locais nem pastas de skills do editor.

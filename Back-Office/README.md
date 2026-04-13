@@ -1,6 +1,6 @@
 # GoEverywhere — Back-Office
 
-Painel de administração em **Vue 3 + Vite**, alinhado com os layouts exportados do Figma em `templatr_figma/` (sidebar escura, navegação principal, breadcrumbs, páginas de relatórios, produtos, estafetas, mapa, clientes e login).
+Painel de administração em **Vue 3 + Vite** (sidebar escura, navegação principal, breadcrumbs, relatórios, produtos, estafetas, mapa, clientes e login).
 
 ## Desenvolvimento
 

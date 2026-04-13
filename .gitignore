@@ -1,0 +1,23 @@
+# OS
+.DS_Store
+
+# Vite (cache pode aparecer na raiz do monorepo)
+.vite/
+
+# Cursor / agent — skills em qualquer pasta; não fazem parte do código-fonte das apps
+**/.cursor/skills/
+**/.agent/
+
+# Dependências e builds (rede de segurança para todo o repositório)
+**/node_modules/
+**/dist/
+
+# Strapi — gerados em runtime / build (além do backend/.gitignore)
+**/.tmp/
+**/.strapi/
+
+# Cópia acidental de repositório Git dentro de uma app
+**/.git-frontend-backup/
+
+# PWA — protótipos gerados (só versionar estafeta-app)
+PWA/project-*/

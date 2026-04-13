@@ -118,14 +118,18 @@ yarn-error.log
 coverage
 
 ############################
-# Strapi
+# Strapi (env, build, cache local)
 ############################
 
 .env
 license.txt
 exports
-.strapi
-dist
-build
+# diretório de cache / estado local do Strapi
+.strapi/
+# build de produção do admin/API
+dist/
+build/
+# dados temporários de desenvolvimento
+.tmp/
 .strapi-updater.json
 .strapi-cloud.json

@@ -33,7 +33,14 @@ const store = reactive({
     name: '', phone: '', address: '', postalCode: '', city: '', 
     assignedStore: null, estimatedDistance: null,
   },
-  payment: { method: 'mbway', mbwayPhone: '', useGoPoints: false, goPointsRedemption: null },
+  payment: {
+    method: 'mbway',
+    mbwayPhone: '',
+    cardName: '',
+    cardNumber: '',
+    useGoPoints: false,
+    goPointsRedemption: null,
+  },
   goPoints: { balance: 1250 },
   activeOrder: null,
   orderHistory: [],
@@ -103,9 +110,9 @@ export async function fetchUserOrders() {
   store.loading = true;
   
   try {
-    const userUID = authState.user.documentId || authState.user.id;
-    const url = `${API_URL}/orders?filters[user][documentId][$eq]=${userUID}&populate=*`;
-    
+    // O backend filtra pelo JWT (evita filters[user] na query — "Invalid key user" no Strapi 5)
+    const url = `${API_URL}/orders?populate=*`;
+
     const response = await fetch(url, { 
       headers: { 'Authorization': `Bearer ${authState.token}` } 
     });
@@ -155,13 +162,12 @@ export async function submitOrder() {
   try {
     const body = {
       data: {
-        total_price: orderTotal.value, 
+        total_price: orderTotal.value,
         // CORREÇÃO: O valor tem de ser IDENTICO ao que está no Strapi
-        order_status: 'S-01 Submetido', 
-        
+        order_status: 'S-01 Submetido',
+
         store_name: store.delivery.assignedStore?.name || 'Continente Braga',
         items: cartProducts.value.map(p => ({ name: p.name, qty: p.qty })),
-        user: authState.user.id, 
         is_urgent: store.cart.urgentDelivery
       }
     };

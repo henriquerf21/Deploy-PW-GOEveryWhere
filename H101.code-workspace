@@ -1,0 +1,9 @@
+{
+  "folders": [
+    { "path": "Front-Office", "name": "Front-Office" },
+    { "path": "Back-Office", "name": "Back-Office" },
+    { "path": "PWA/estafeta-app", "name": "PWA (estafeta)" },
+    { "path": "backend", "name": "backend (Strapi)" }
+  ],
+  "settings": {}
+}
