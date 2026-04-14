@@ -1,31 +1,31 @@
 import { createRouter, createWebHistory } from 'vue-router';
 import { isAuthenticated } from '../stores/authStore.js';
 
-import LoginWelcomePage from '../pages/LoginWelcomePage.vue';
-import LoginPage from '../pages/LoginPage.vue';
-import RegisterPage from '../pages/RegisterPage.vue';
-import ClientAreaPage from '../pages/ClientAreaPage.vue';
-import ProductPage from '../pages/ProductPage.vue';
-import AboutPage from '../pages/AboutPage.vue';
-import OrderProductPage from '../pages/OrderProductPage.vue';
-import OrderDeliveryPage from '../pages/OrderDeliveryPage.vue';
-import OrderPaymentPage from '../pages/OrderPaymentPage.vue';
-import OrderTrackingPage from '../pages/OrderTrackingPage.vue';
-import OrderHistoryPage from '../pages/OrderHistoryPage.vue';
+import LoginWelcomeView from '../views/LoginWelcomeView.vue';
+import LoginView from '../views/LoginView.vue';
+import RegisterView from '../views/RegisterView.vue';
+import ClientAreaView from '../views/ClientAreaView.vue';
+import ProductView from '../views/ProductView.vue';
+import AboutView from '../views/AboutView.vue';
+import OrderProductView from '../views/OrderProductView.vue';
+import OrderDeliveryView from '../views/OrderDeliveryView.vue';
+import OrderPaymentView from '../views/OrderPaymentView.vue';
+import OrderTrackingView from '../views/OrderTrackingView.vue';
+import OrderHistoryView from '../views/OrderHistoryView.vue';
 
 const routes = [
   { path: '/', redirect: '/about' },
-  { path: '/login-welcome', name: 'login-welcome', component: LoginWelcomePage },
-  { path: '/login', name: 'login', component: LoginPage },
-  { path: '/register', name: 'register', component: RegisterPage },
-  { path: '/dashboard', name: 'dashboard', component: ClientAreaPage, meta: { requiresAuth: true } },
-  { path: '/product', name: 'product', component: ProductPage },
-  { path: '/order/select', name: 'order-select', component: OrderProductPage, meta: { requiresAuth: true } },
-  { path: '/order/delivery', name: 'order-delivery', component: OrderDeliveryPage, meta: { requiresAuth: true } },
-  { path: '/order/payment', name: 'order-payment', component: OrderPaymentPage, meta: { requiresAuth: true } },
-  { path: '/order/tracking', name: 'order-tracking', component: OrderTrackingPage, meta: { requiresAuth: true } },
-  { path: '/order/history', name: 'order-history', component: OrderHistoryPage, meta: { requiresAuth: true } },
-  { path: '/about', name: 'about', component: AboutPage },
+  { path: '/login-welcome', name: 'login-welcome', component: LoginWelcomeView },
+  { path: '/login', name: 'login', component: LoginView },
+  { path: '/register', name: 'register', component: RegisterView },
+  { path: '/dashboard', name: 'dashboard', component: ClientAreaView, meta: { requiresAuth: true } },
+  { path: '/product', name: 'product', component: ProductView },
+  { path: '/order/select', name: 'order-select', component: OrderProductView, meta: { requiresAuth: true } },
+  { path: '/order/delivery', name: 'order-delivery', component: OrderDeliveryView, meta: { requiresAuth: true } },
+  { path: '/order/payment', name: 'order-payment', component: OrderPaymentView, meta: { requiresAuth: true } },
+  { path: '/order/tracking', name: 'order-tracking', component: OrderTrackingView, meta: { requiresAuth: true } },
+  { path: '/order/history', name: 'order-history', component: OrderHistoryView, meta: { requiresAuth: true } },
+  { path: '/about', name: 'about', component: AboutView },
 ];
 
 const router = createRouter({
