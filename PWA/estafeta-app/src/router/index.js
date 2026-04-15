@@ -39,6 +39,19 @@ const routes = [
         props: true,
     },
     {
+        path: '/completed/:id',
+        name: 'DeliveryCompleted',
+        component: () => import('../views/DeliveryCompletedView.vue'),
+        meta: { auth: true },
+        props: true,
+    },
+    {
+        path: '/history',
+        name: 'DeliveryHistory',
+        component: () => import('../views/DeliveryHistoryView.vue'),
+        meta: { auth: true },
+    },
+    {
         path: '/metrics',
         name: 'Metrics',
         component: () => import('../views/MetricsView.vue'),
