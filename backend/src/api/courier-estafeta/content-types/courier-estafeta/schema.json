@@ -1,0 +1,128 @@
+{
+  "kind": "collectionType",
+  "collectionName": "courier_estafetas",
+  "info": {
+    "singularName": "courier-estafeta",
+    "pluralName": "courier-estafetas",
+    "displayName": "Courier"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "firstName": {
+      "type": "string"
+    },
+    "lastName": {
+      "type": "string"
+    },
+    "email": {
+      "type": "string"
+    },
+    "phone": {
+      "type": "string"
+    },
+    "nif": {
+      "type": "string"
+    },
+    "cc": {
+      "type": "string"
+    },
+    "iban": {
+      "type": "string"
+    },
+    "birthDate": {
+      "type": "date"
+    },
+    "address": {
+      "type": "string"
+    },
+    "courier_status": {
+      "type": "enumeration",
+      "enum": [
+        "E-01 Pendente Verificação",
+        "E-02 Verificado",
+        "E-03 Rejeitado",
+        "E-04 Suspenso",
+        "E-05 Offline",
+        "E-06 Online"
+      ]
+    },
+    "isOnline": {
+      "type": "boolean"
+    },
+    "maxSimultaneousDeliveries": {
+      "type": "integer"
+    },
+    "zone": {
+      "type": "string"
+    },
+    "vehicleType": {
+      "type": "string"
+    },
+    "vehicleBrand": {
+      "type": "string"
+    },
+    "vehicleModel": {
+      "type": "string"
+    },
+    "vehiclePlate": {
+      "type": "string"
+    },
+    "drivingLicense": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": [
+        "images",
+        "files",
+        "videos",
+        "audios"
+      ]
+    },
+    "insurance": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": [
+        "images",
+        "files",
+        "videos",
+        "audios"
+      ]
+    },
+    "inspection": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": [
+        "images",
+        "files",
+        "videos",
+        "audios"
+      ]
+    },
+    "rating": {
+      "type": "decimal"
+    },
+    "totalDeliveries": {
+      "type": "integer"
+    },
+    "orders": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::order.order",
+      "mappedBy": "courier"
+    },
+    "deliveries": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::delivery.delivery",
+      "mappedBy": "courier"
+    },
+    "reviews": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::review.review",
+      "mappedBy": "courier"
+    }
+  }
+}

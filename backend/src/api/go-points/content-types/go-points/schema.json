@@ -1,0 +1,27 @@
+{
+  "kind": "collectionType",
+  "collectionName": "go_pointss",
+  "info": {
+    "singularName": "go-points",
+    "pluralName": "go-pointss",
+    "displayName": "GoPoints"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "points": {
+      "type": "integer"
+    },
+    "history": {
+      "type": "json"
+    },
+    "user": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "plugin::users-permissions.user",
+      "inversedBy": "go_point"
+    }
+  }
+}

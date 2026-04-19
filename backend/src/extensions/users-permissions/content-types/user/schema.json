@@ -86,6 +86,24 @@
     },
     "initials": {
       "type": "string"
+    },
+    "notifications": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::notification.notification",
+      "mappedBy": "user"
+    },
+    "go_point": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::go-points.go-points",
+      "mappedBy": "user"
+    },
+    "reviews": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::review.review",
+      "mappedBy": "user"
     }
   }
 }
