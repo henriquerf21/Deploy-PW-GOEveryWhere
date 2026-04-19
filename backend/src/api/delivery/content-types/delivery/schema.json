@@ -1,0 +1,74 @@
+{
+  "kind": "collectionType",
+  "collectionName": "deliveries",
+  "info": {
+    "singularName": "delivery",
+    "pluralName": "deliveries",
+    "displayName": "Delivery"
+  },
+  "options": {
+    "draftAndPublish": true
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "startTime": {
+      "type": "datetime"
+    },
+    "endTime": {
+      "type": "datetime"
+    },
+    "courierLatitude": {
+      "type": "decimal"
+    },
+    "courierLongitude": {
+      "type": "decimal"
+    },
+    "confirmationPhoto": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": [
+        "images",
+        "files",
+        "videos",
+        "audios"
+      ]
+    },
+    "confirmationSignature": {
+      "type": "string"
+    },
+    "confirmationQrCode": {
+      "type": "string"
+    },
+    "confirmationGps": {
+      "type": "json"
+    },
+    "notes": {
+      "type": "string"
+    },
+    "delivery_status": {
+      "type": "enumeration",
+      "enum": [
+        "E-07 Em Pausa",
+        "E-08 Pedido Recebido",
+        "E-09 A Caminho da Loja",
+        "E-10 Na Loja / Em Recolha",
+        "E-11 Em Trânsito para Cliente",
+        "E-12 No Destino",
+        "E-13 Entrega Confirmada",
+        "E-14 Entrega Impossível"
+      ]
+    },
+    "order": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::order.order",
+      "inversedBy": "delivery"
+    },
+    "courier": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::courier-estafeta.courier-estafeta",
+      "inversedBy": "deliveries"
+    }
+  }
+}

@@ -107,6 +107,43 @@ export interface AdminApiTokenPermission extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface AdminAuditLog extends Struct.CollectionTypeSchema {
+  collectionName: 'strapi_audit_logs';
+  info: {
+    displayName: 'Audit Log';
+    pluralName: 'audit-logs';
+    singularName: 'audit-log';
+  };
+  options: {
+    draftAndPublish: false;
+    timestamps: false;
+  };
+  pluginOptions: {
+    'content-manager': {
+      visible: false;
+    };
+    'content-type-builder': {
+      visible: false;
+    };
+  };
+  attributes: {
+    action: Schema.Attribute.String & Schema.Attribute.Required;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    date: Schema.Attribute.DateTime & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<'oneToMany', 'admin::audit-log'> &
+      Schema.Attribute.Private;
+    payload: Schema.Attribute.JSON;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<'oneToOne', 'admin::user'>;
+  };
+}
+
 export interface AdminPermission extends Struct.CollectionTypeSchema {
   collectionName: 'admin_permissions';
   info: {
@@ -430,6 +467,199 @@ export interface AdminUser extends Struct.CollectionTypeSchema {
   };
 }
 
+export interface ApiCourierEstafetaCourierEstafeta
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'courier_estafetas';
+  info: {
+    displayName: 'Courier';
+    pluralName: 'courier-estafetas';
+    singularName: 'courier-estafeta';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    address: Schema.Attribute.String;
+    birthDate: Schema.Attribute.Date;
+    cc: Schema.Attribute.String;
+    courier_status: Schema.Attribute.Enumeration<
+      [
+        'E-01 Pendente Verifica\u00E7\u00E3o',
+        'E-02 Verificado',
+        'E-03 Rejeitado',
+        'E-04 Suspenso',
+        'E-05 Offline',
+        'E-06 Online',
+      ]
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    deliveries: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::delivery.delivery'
+    >;
+    drivingLicense: Schema.Attribute.Media<
+      'images' | 'files' | 'videos' | 'audios'
+    >;
+    email: Schema.Attribute.String;
+    firstName: Schema.Attribute.String;
+    iban: Schema.Attribute.String;
+    inspection: Schema.Attribute.Media<
+      'images' | 'files' | 'videos' | 'audios'
+    >;
+    insurance: Schema.Attribute.Media<'images' | 'files' | 'videos' | 'audios'>;
+    isOnline: Schema.Attribute.Boolean;
+    lastName: Schema.Attribute.String;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::courier-estafeta.courier-estafeta'
+    > &
+      Schema.Attribute.Private;
+    maxSimultaneousDeliveries: Schema.Attribute.Integer;
+    nif: Schema.Attribute.String;
+    orders: Schema.Attribute.Relation<'oneToMany', 'api::order.order'>;
+    phone: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    rating: Schema.Attribute.Decimal;
+    reviews: Schema.Attribute.Relation<'oneToMany', 'api::review.review'>;
+    totalDeliveries: Schema.Attribute.Integer;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    vehicleBrand: Schema.Attribute.String;
+    vehicleModel: Schema.Attribute.String;
+    vehiclePlate: Schema.Attribute.String;
+    vehicleType: Schema.Attribute.String;
+    zone: Schema.Attribute.String;
+  };
+}
+
+export interface ApiDeliveryDelivery extends Struct.CollectionTypeSchema {
+  collectionName: 'deliveries';
+  info: {
+    displayName: 'Delivery';
+    pluralName: 'deliveries';
+    singularName: 'delivery';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    confirmationGps: Schema.Attribute.JSON;
+    confirmationPhoto: Schema.Attribute.Media<
+      'images' | 'files' | 'videos' | 'audios'
+    >;
+    confirmationQrCode: Schema.Attribute.String;
+    confirmationSignature: Schema.Attribute.String;
+    courier: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::courier-estafeta.courier-estafeta'
+    >;
+    courierLatitude: Schema.Attribute.Decimal;
+    courierLongitude: Schema.Attribute.Decimal;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    delivery_status: Schema.Attribute.Enumeration<
+      [
+        'E-07 Em Pausa',
+        'E-08 Pedido Recebido',
+        'E-09 A Caminho da Loja',
+        'E-10 Na Loja / Em Recolha',
+        'E-11 Em Tr\u00E2nsito para Cliente',
+        'E-12 No Destino',
+        'E-13 Entrega Confirmada',
+        'E-14 Entrega Imposs\u00EDvel',
+      ]
+    >;
+    endTime: Schema.Attribute.DateTime;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::delivery.delivery'
+    > &
+      Schema.Attribute.Private;
+    notes: Schema.Attribute.String;
+    order: Schema.Attribute.Relation<'oneToOne', 'api::order.order'>;
+    publishedAt: Schema.Attribute.DateTime;
+    startTime: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiGoPointsGoPoints extends Struct.CollectionTypeSchema {
+  collectionName: 'go_pointss';
+  info: {
+    displayName: 'GoPoints';
+    pluralName: 'go-pointss';
+    singularName: 'go-points';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    history: Schema.Attribute.JSON;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::go-points.go-points'
+    > &
+      Schema.Attribute.Private;
+    points: Schema.Attribute.Integer;
+    publishedAt: Schema.Attribute.DateTime;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'oneToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
+export interface ApiNotificationNotification
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'notifications';
+  info: {
+    displayName: 'Notification';
+    pluralName: 'notifications';
+    singularName: 'notification';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    isRead: Schema.Attribute.Boolean;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::notification.notification'
+    > &
+      Schema.Attribute.Private;
+    message: Schema.Attribute.String;
+    publishedAt: Schema.Attribute.DateTime;
+    sentAt: Schema.Attribute.DateTime;
+    type: Schema.Attribute.String;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
 export interface ApiOrderOrder extends Struct.CollectionTypeSchema {
   collectionName: 'orders';
   info: {
@@ -441,9 +671,19 @@ export interface ApiOrderOrder extends Struct.CollectionTypeSchema {
     draftAndPublish: true;
   };
   attributes: {
+    cancelReason: Schema.Attribute.String;
+    courier: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::courier-estafeta.courier-estafeta'
+    >;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    delivery: Schema.Attribute.Relation<'oneToOne', 'api::delivery.delivery'>;
+    deliveryAddress: Schema.Attribute.String;
+    deliveryLatitude: Schema.Attribute.Decimal;
+    deliveryLongitude: Schema.Attribute.Decimal;
+    estimatedTime: Schema.Attribute.Integer;
     is_urgent: Schema.Attribute.Boolean;
     items: Schema.Attribute.JSON;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
@@ -469,9 +709,60 @@ export interface ApiOrderOrder extends Struct.CollectionTypeSchema {
         'S-16 Conclu\u00EDdo Sem Avalia\u00E7\u00E3o',
       ]
     >;
+    priority: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 5;
+          min: 1;
+        },
+        number
+      >;
     publishedAt: Schema.Attribute.DateTime;
+    rejectionReason: Schema.Attribute.String;
+    review: Schema.Attribute.Relation<'oneToOne', 'api::review.review'>;
     store_name: Schema.Attribute.String;
+    storeLatitude: Schema.Attribute.Decimal;
+    storeLongitude: Schema.Attribute.Decimal;
     total_price: Schema.Attribute.Decimal;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    user: Schema.Attribute.Relation<
+      'manyToOne',
+      'plugin::users-permissions.user'
+    >;
+  };
+}
+
+export interface ApiReviewReview extends Struct.CollectionTypeSchema {
+  collectionName: 'reviews';
+  info: {
+    displayName: 'Review';
+    pluralName: 'reviews';
+    singularName: 'review';
+  };
+  options: {
+    draftAndPublish: true;
+  };
+  attributes: {
+    comment: Schema.Attribute.String;
+    courier: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::courier-estafeta.courier-estafeta'
+    >;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::review.review'
+    > &
+      Schema.Attribute.Private;
+    order: Schema.Attribute.Relation<'oneToOne', 'api::order.order'>;
+    publishedAt: Schema.Attribute.DateTime;
+    rating: Schema.Attribute.Integer;
+    review_createdAt: Schema.Attribute.DateTime;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
@@ -952,6 +1243,7 @@ export interface PluginUsersPermissionsUser
         minLength: 6;
       }>;
     firstName: Schema.Attribute.String;
+    go_point: Schema.Attribute.Relation<'oneToOne', 'api::go-points.go-points'>;
     initials: Schema.Attribute.String;
     lastName: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
@@ -960,6 +1252,10 @@ export interface PluginUsersPermissionsUser
       'plugin::users-permissions.user'
     > &
       Schema.Attribute.Private;
+    notifications: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::notification.notification'
+    >;
     orders: Schema.Attribute.Relation<'oneToMany', 'api::order.order'>;
     password: Schema.Attribute.Password &
       Schema.Attribute.Private &
@@ -971,6 +1267,7 @@ export interface PluginUsersPermissionsUser
     provider: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     resetPasswordToken: Schema.Attribute.String & Schema.Attribute.Private;
+    reviews: Schema.Attribute.Relation<'oneToMany', 'api::review.review'>;
     role: Schema.Attribute.Relation<
       'manyToOne',
       'plugin::users-permissions.role'
@@ -992,13 +1289,19 @@ declare module '@strapi/strapi' {
     export interface ContentTypeSchemas {
       'admin::api-token': AdminApiToken;
       'admin::api-token-permission': AdminApiTokenPermission;
+      'admin::audit-log': AdminAuditLog;
       'admin::permission': AdminPermission;
       'admin::role': AdminRole;
       'admin::session': AdminSession;
       'admin::transfer-token': AdminTransferToken;
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
+      'api::courier-estafeta.courier-estafeta': ApiCourierEstafetaCourierEstafeta;
+      'api::delivery.delivery': ApiDeliveryDelivery;
+      'api::go-points.go-points': ApiGoPointsGoPoints;
+      'api::notification.notification': ApiNotificationNotification;
       'api::order.order': ApiOrderOrder;
+      'api::review.review': ApiReviewReview;
       'plugin::content-releases.release': PluginContentReleasesRelease;
       'plugin::content-releases.release-action': PluginContentReleasesReleaseAction;
       'plugin::i18n.locale': PluginI18NLocale;

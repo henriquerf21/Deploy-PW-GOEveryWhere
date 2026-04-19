@@ -49,6 +49,53 @@
     },
     "is_urgent": {
       "type": "boolean"
+    },
+    "courier": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::courier-estafeta.courier-estafeta",
+      "inversedBy": "orders"
+    },
+    "delivery": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::delivery.delivery",
+      "mappedBy": "order"
+    },
+    "review": {
+      "type": "relation",
+      "relation": "oneToOne",
+      "target": "api::review.review",
+      "mappedBy": "order"
+    },
+    "priority": {
+      "type": "integer",
+      "min": 1,
+      "max": 5
+    },
+    "estimatedTime": {
+      "type": "integer"
+    },
+    "deliveryAddress": {
+      "type": "string"
+    },
+    "deliveryLatitude": {
+      "type": "decimal"
+    },
+    "deliveryLongitude": {
+      "type": "decimal"
+    },
+    "storeLatitude": {
+      "type": "decimal"
+    },
+    "storeLongitude": {
+      "type": "decimal"
+    },
+    "rejectionReason": {
+      "type": "string"
+    },
+    "cancelReason": {
+      "type": "string"
     }
   }
 }
