@@ -104,10 +104,10 @@ export const NEXT_STATE = {
 /** CTA labels per state */
 export const STATE_CTA = {
     'E-08': 'Aceitar Entrega',
-    'E-09': 'Cheguei à Loja',
-    'E-10': 'Recolha Concluída',
-    'E-11': 'Cheguei ao Destino',
-    'E-12': 'Confirmar Entrega',
+    'E-09': 'Iniciar recolha',
+    'E-10': 'Recolha feita — Iniciar trânsito',
+    'E-11': 'Cheguei ao destino',
+    'E-12': 'Confirmar entrega',
 };
 
 /** Priority labels */

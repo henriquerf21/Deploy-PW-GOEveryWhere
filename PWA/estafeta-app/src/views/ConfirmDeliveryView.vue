@@ -1,80 +1,146 @@
 <template>
   <div class="page" v-if="delivery">
+    <!-- Header -->
     <div class="page-header">
+      <img src="/media/brand/logo-goeverywhere.png" alt="" class="logo-mini" />
+      <span class="header-title">GoEverywhere</span>
+    </div>
+
+    <!-- Sub-header -->
+    <div class="sub-header">
       <button class="back-btn" @click="$router.back()">
-        <svg width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M15 18l-6-6 6-6"/></svg>
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
-      <h1>Confirmar Entrega</h1>
+      <h2>Confirmar entrega</h2>
     </div>
 
     <div class="page-body">
-      <p class="confirm-info">{{ delivery.orderId }} — {{ delivery.destination.name }}</p>
-
-      <!-- Confirmation Method Tabs -->
-      <div class="method-tabs">
-        <button
-          v-for="m in methods" :key="m.id"
-          class="tab-btn" :class="{ active: method === m.id }"
-          @click="method = m.id"
-        ><span class="tab-icon" v-html="m.icon"></span> {{ m.label }}</button>
+      <!-- "Estás no destino!" banner -->
+      <div class="destination-banner">
+        <div class="db-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#1b8a4a" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+        </div>
+        <div class="db-text">
+          <span class="db-title">Estás no destino!</span>
+          <span class="db-desc">Confirma a entrega com foto ou assinatura</span>
+        </div>
       </div>
 
-      <!-- Photo -->
-      <div v-if="method === 'photo'" class="method-section">
-        <p class="method-desc">Tira uma fotografia como prova de entrega.</p>
-        <label class="photo-capture">
-          <input type="file" accept="image/*" capture="environment" @change="handlePhoto" style="display:none">
-          <div class="capture-area" :class="{ 'has-photo': photoPreview }">
+      <!-- Delivery proof section -->
+      <div class="section-card">
+        <span class="section-label">COMPROVATIVO DE ENTREGA *</span>
+        <div class="proof-buttons">
+          <button class="proof-btn" :class="{ active: method === 'photo' }" @click="method = 'photo'">
+            <div class="proof-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+            </div>
+            <span>Tirar foto</span>
+          </button>
+          <button class="proof-btn" :class="{ active: method === 'signature' }" @click="method = 'signature'">
+            <div class="proof-icon">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
+            </div>
+            <span>Assinatura</span>
+          </button>
+        </div>
+
+        <!-- Photo capture -->
+        <div v-if="method === 'photo'" class="capture-area-wrap">
+          <label class="capture-area" :class="{ 'has-photo': photoPreview }">
+            <input type="file" accept="image/*" capture="environment" @change="handlePhoto" class="sr-only">
             <img v-if="photoPreview" :src="photoPreview" alt="Prova">
-            <span v-else class="capture-placeholder"><span v-html="SVG.camera"></span> Tirar Fotografia</span>
-          </div>
-        </label>
-      </div>
+            <span v-else class="capture-placeholder">
+              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
+              Tirar Fotografia
+            </span>
+          </label>
+        </div>
 
-      <!-- Signature -->
-      <div v-if="method === 'signature'" class="method-section">
-        <p class="method-desc">Peça ao cliente para assinar.</p>
-        <div class="signature-area">
+        <!-- Signature -->
+        <div v-if="method === 'signature'" class="signature-wrap">
           <canvas ref="sigCanvas" width="360" height="200" @touchstart.prevent @mousedown.prevent></canvas>
           <button class="clear-sig" @click="clearSignature">Limpar</button>
         </div>
       </div>
 
-      <!-- QR Code -->
-      <div v-if="method === 'qr'" class="method-section">
-        <p class="method-desc">Introduz o código QR de confirmação do cliente.</p>
-        <div class="input-group">
-          <label>Código QR</label>
-          <input v-model="qrCode" class="input-field" placeholder="Ex: GE-CONFIRM-2850">
+      <!-- Location section -->
+      <div class="section-card">
+        <span class="section-label">LOCALIZAÇÃO *</span>
+        <button class="location-btn" @click="captureGPS" :class="{ captured: gpsCoords }">
+          <div class="loc-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" :stroke="gpsCoords ? '#1b8a4a' : '#9ca3af'" stroke-width="1.5"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
+          </div>
+          <div class="loc-text">
+            <span class="loc-title">{{ gpsCoords ? 'Localização registada ✓' : 'Registar localização' }}</span>
+            <span class="loc-desc">{{ gpsCoords ? `${gpsCoords.lat.toFixed(5)}, ${gpsCoords.lng.toFixed(5)}` : 'Toca para capturar a tua posição GPS' }}</span>
+          </div>
+        </button>
+      </div>
+
+      <!-- Observations section -->
+      <div class="section-card">
+        <span class="section-label">OBSERVAÇÕES</span>
+        <textarea v-model="notes" class="notes-textarea" placeholder="Notas sobre a entrega (ex: entregue ao vizinho, deixado na portaria...)"></textarea>
+      </div>
+
+      <!-- Additional docs section -->
+      <div class="section-card">
+        <span class="section-label">DOCUMENTAÇÃO ADICIONAL</span>
+        <textarea v-model="extraDesc" class="notes-textarea" placeholder="Texto descritivo adicional (incidentes, observações, estado da embalagem...)"></textarea>
+        <div class="extra-photos">
+          <span class="extra-label">Fotografias adicionais</span>
+          <label class="add-photo-btn">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+            Adicionar
+            <input type="file" accept="image/*" multiple @change="handleExtraPhotos" class="sr-only">
+          </label>
+        </div>
+        <p v-if="extraPhotos.length" class="extra-count">{{ extraPhotos.length }} foto(s) adicionada(s)</p>
+      </div>
+
+      <!-- Checklist -->
+      <div class="section-card">
+        <span class="section-label">CHECKLIST</span>
+        <div class="checklist">
+          <div class="check-item" :class="{ done: hasPhoto || hasSig }">
+            <span class="check-box"><span v-if="hasPhoto || hasSig" class="check-mark"></span></span>
+            <span>Foto ou assinatura</span>
+          </div>
+          <div class="check-item" :class="{ done: !!gpsCoords }">
+            <span class="check-box"><span v-if="gpsCoords" class="check-mark"></span></span>
+            <span>Localização GPS</span>
+          </div>
+          <div class="check-item optional" :class="{ done: notes.trim().length > 0 }">
+            <span class="check-box"><span v-if="notes.trim().length > 0" class="check-mark"></span></span>
+            <span>Observações (opcional)</span>
+          </div>
+          <div class="check-item optional" :class="{ done: extraPhotos.length > 0 || extraDesc.trim().length > 0 }">
+            <span class="check-box"><span v-if="extraPhotos.length > 0 || extraDesc.trim().length > 0" class="check-mark"></span></span>
+            <span>Documentação extra (opcional)</span>
+          </div>
         </div>
       </div>
 
-      <!-- Notes -->
-      <div class="notes-section">
-        <div class="input-group">
-          <label>Notas descritivas (opcional)</label>
-          <textarea v-model="notes" class="input-field" rows="2" placeholder="Observações sobre a entrega..."></textarea>
-        </div>
-        <div class="input-group">
-          <label>Imagens adicionais</label>
-          <input type="file" accept="image/*" multiple @change="handleExtraPhotos" class="input-field">
-        </div>
-      </div>
-
-      <!-- GPS info -->
-      <div class="gps-info" :class="{ fetching: gpsFetching }">
-        <span v-if="gpsCoords"><span class="gps-icon" v-html="SVG.mapPin"></span> {{ gpsCoords.lat.toFixed(5) }}, {{ gpsCoords.lng.toFixed(5) }}</span>
-        <span v-else-if="gpsFetching"><span class="gps-icon" v-html="SVG.mapPin"></span> A obter localização...</span>
-        <span v-else><span class="gps-icon" v-html="SVG.mapPin"></span> Localização não disponível</span>
-      </div>
-
-      <p v-if="error" class="error-msg" style="margin-top:12px">{{ error }}</p>
-
-      <button class="btn btn-primary btn-block btn-lg" style="margin-top:16px" @click="handleConfirm" :disabled="!canConfirm">
-        <svg width="18" height="18" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M20 6L9 17l-5-5"/></svg>
-        Confirmar Entrega
-      </button>
+      <p v-if="error" class="error-msg">{{ error }}</p>
     </div>
+
+    <!-- Submit button -->
+    <div class="submit-section">
+      <button class="submit-btn" @click="handleConfirm" :disabled="!canConfirm">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
+        Submeter entrega
+      </button>
+      <p class="submit-note">Foto/assinatura e localização são obrigatórios</p>
+    </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="footer-brand">
+        <span class="footer-g">G</span>
+        <span class="footer-name">GoEverywhere</span>
+      </div>
+      <p class="footer-copy">© 2026 GoEverywhere, Lda. Todos os direitos reservados.</p>
+    </footer>
   </div>
 </template>
 
@@ -82,7 +148,6 @@
 import { ref, computed, onMounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { getDeliveryById, confirmDelivery, addDeliveryNotes } from '../stores/courierStore.js';
-import { SVG } from '../constants.js';
 
 const props = defineProps({ id: String });
 const router = useRouter();
@@ -90,16 +155,14 @@ const router = useRouter();
 const delivery = computed(() => getDeliveryById(props.id));
 const method = ref('photo');
 const error = ref('');
-
-const methods = [
-  { id: 'photo', icon: SVG.camera, label: 'Foto' },
-  { id: 'signature', icon: SVG.edit3, label: 'Assinatura' },
-  { id: 'qr', icon: SVG.qrCode, label: 'QR Code' },
-];
+const notes = ref('');
+const extraDesc = ref('');
+const extraPhotos = ref([]);
 
 // Photo
 const photoPreview = ref(null);
 const photoFile = ref(null);
+const hasPhoto = computed(() => !!photoPreview.value);
 
 function handlePhoto(e) {
   const file = e.target.files[0];
@@ -113,6 +176,7 @@ function handlePhoto(e) {
 // Signature
 const sigCanvas = ref(null);
 let signaturePad = null;
+const hasSig = computed(() => signaturePad && !signaturePad?.isEmpty());
 
 watch(method, async (m) => {
   if (m === 'signature') {
@@ -125,155 +189,351 @@ async function initSignature() {
   if (!sigCanvas.value) return;
   try {
     const { default: SignaturePad } = await import('signature_pad');
-    signaturePad = new SignaturePad(sigCanvas.value, {
-      backgroundColor: '#fff',
-      penColor: '#111827',
-    });
-  } catch (err) {
-    console.warn('SignaturePad not loaded:', err);
-  }
+    signaturePad = new SignaturePad(sigCanvas.value, { backgroundColor: '#fff', penColor: '#111827' });
+  } catch (err) { console.warn('SignaturePad:', err); }
 }
 
-function clearSignature() {
-  if (signaturePad) signaturePad.clear();
+function clearSignature() { signaturePad?.clear(); }
+
+// GPS
+const gpsCoords = ref(null);
+const gpsFetching = ref(false);
+
+onMounted(() => { captureGPS(); });
+
+function captureGPS() {
+  if (!('geolocation' in navigator)) return;
+  gpsFetching.value = true;
+  navigator.geolocation.getCurrentPosition(
+    (pos) => { gpsCoords.value = { lat: pos.coords.latitude, lng: pos.coords.longitude }; gpsFetching.value = false; },
+    () => { gpsFetching.value = false; },
+    { enableHighAccuracy: true, timeout: 10000 }
+  );
 }
 
-// QR
-const qrCode = ref('');
-
-// Notes
-const notes = ref('');
-const extraPhotos = ref([]);
-
+// Extra photos
 function handleExtraPhotos(e) {
   extraPhotos.value = Array.from(e.target.files).map(f => f.name);
 }
 
-// GPS
-const gpsCoords = ref(null);
-const gpsFetching = ref(true);
-
-onMounted(() => {
-  if ('geolocation' in navigator) {
-    navigator.geolocation.getCurrentPosition(
-      (pos) => {
-        gpsCoords.value = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        gpsFetching.value = false;
-      },
-      () => { gpsFetching.value = false; },
-      { enableHighAccuracy: true, timeout: 10000 }
-    );
-  } else {
-    gpsFetching.value = false;
-  }
-});
-
 // Validation
 const canConfirm = computed(() => {
-  if (method.value === 'photo') return !!photoPreview.value;
-  if (method.value === 'signature') return signaturePad && !signaturePad.isEmpty();
-  if (method.value === 'qr') return qrCode.value.trim().length > 3;
-  return false;
+  const hasProof = method.value === 'photo' ? hasPhoto.value : (signaturePad && !signaturePad.isEmpty());
+  return hasProof && !!gpsCoords.value;
 });
 
 function handleConfirm() {
   error.value = '';
   if (!canConfirm.value) {
-    error.value = 'Completa a confirmação antes de submeter.';
+    error.value = 'Completa a foto/assinatura e localização.';
     return;
   }
-
-  const confirmationData = {
+  const data = {
     method: method.value,
     gps: gpsCoords.value,
     timestamp: new Date().toISOString(),
+    photo: method.value === 'photo' ? photoPreview.value : null,
+    signature: method.value === 'signature' && signaturePad ? signaturePad.toDataURL() : null,
+    location: gpsCoords.value,
   };
-
-  if (method.value === 'photo') confirmationData.photo = photoPreview.value;
-  if (method.value === 'signature' && signaturePad) confirmationData.signature = signaturePad.toDataURL();
-  if (method.value === 'qr') confirmationData.qrCode = qrCode.value;
-
-  if (notes.value.trim()) {
-    addDeliveryNotes(props.id, notes.value, extraPhotos.value);
-  }
-
-  confirmDelivery(props.id, confirmationData);
-  router.push('/deliveries');
+  if (notes.value.trim()) addDeliveryNotes(props.id, notes.value, extraPhotos.value);
+  confirmDelivery(props.id, data);
+  router.push(`/completed/${props.id}`);
 }
 </script>
 
 <style scoped>
+.logo-mini {
+  width: 36px; height: 34px;
+  border-radius: 14px; object-fit: cover;
+}
+.header-title {
+  font-family: var(--ge-font-display);
+  font-size: 14px; font-weight: 700;
+  color: #111827;
+}
+.sub-header {
+  display: flex; align-items: center; gap: 12px;
+  padding: 8px 16px;
+  background: #fff; border-top: 0.72px solid #e5e7eb;
+}
 .back-btn {
-  width: 36px; height: 36px;
-  display: flex; align-items: center; justify-content: center;
-  border-radius: var(--ge-radius); background: var(--ge-page); color: var(--ge-text);
+  background: none; border: none; cursor: pointer; color: #111827;
 }
-.confirm-info {
-  font-size: 14px; font-weight: 600;
-  color: var(--ge-text-secondary); margin: 0 0 16px;
+.sub-header h2 {
+  font-family: var(--ge-font-display);
+  font-size: 14px; font-weight: 700;
+  margin: 0; color: #111827;
 }
-.method-tabs {
-  display: flex; gap: 8px; margin-bottom: 20px;
-}
-.tab-btn {
-  flex: 1; padding: 10px 8px; text-align: center;
-  border-radius: var(--ge-radius); font-size: 13px; font-weight: 600;
-  background: var(--ge-page); color: var(--ge-text-secondary);
-  border: 1.5px solid var(--ge-border); transition: all .15s;
-  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
-}
-.tab-icon { display: inline-flex; }
-.tab-icon :deep(svg) { width: 16px; height: 16px; }
-.tab-btn.active {
-  background: var(--ge-brand-soft); color: var(--ge-brand);
-  border-color: var(--ge-brand);
-}
-.method-section { margin-bottom: 20px; }
-.method-desc { font-size: 13px; color: var(--ge-text-secondary); margin: 0 0 12px; }
 
-.photo-capture { cursor: pointer; display: block; }
-.capture-area {
-  width: 100%; height: 200px;
+/* Destination banner */
+.destination-banner {
+  display: flex; align-items: center; gap: 12px;
+  padding: 16px;
+  background: #f0fdf4;
+  border: 0.72px solid #dcfce7;
+  border-radius: 16px;
+  margin-bottom: 16px;
+}
+.db-icon {
+  width: 40px; height: 40px;
+  background: #dcfce7;
+  border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
-  background: var(--ge-page); border: 2px dashed var(--ge-border);
-  border-radius: var(--ge-radius-lg); font-size: 15px;
-  color: var(--ge-text-secondary); cursor: pointer;
+  flex-shrink: 0;
+}
+.db-text {
+  display: flex; flex-direction: column;
+}
+.db-title {
+  font-family: var(--ge-font-display);
+  font-size: 14px; font-weight: 700;
+  color: #111827;
+}
+.db-desc {
+  font-size: 12px; color: #6b7280;
+}
+
+/* Section cards */
+.section-card {
+  background: #fff;
+  border: 0.72px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 12px;
+}
+.section-label {
+  font-family: var(--ge-font-display);
+  font-size: 10px; font-weight: 600;
+  color: #9ca3af;
+  letter-spacing: 0.04em;
+  display: block;
+  margin-bottom: 10px;
+}
+
+/* Proof buttons */
+.proof-buttons {
+  display: flex; gap: 8px;
+  margin-bottom: 12px;
+}
+.proof-btn {
+  flex: 1;
+  display: flex; flex-direction: column;
+  align-items: center; gap: 6px;
+  padding: 16px;
+  background: #f9fafb;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 16px;
+  cursor: pointer;
+  transition: all 0.15s;
+  font-size: 12px; font-weight: 500;
+  color: #6b7280;
+}
+.proof-btn.active {
+  border-color: var(--ge-brand);
+  background: #f0fdf4;
+  color: var(--ge-brand);
+}
+.proof-icon { display: flex; }
+
+/* Photo capture */
+.capture-area-wrap { margin-top: 8px; }
+.capture-area {
+  width: 100%; height: 180px;
+  display: flex; align-items: center; justify-content: center;
+  background: #f9fafb;
+  border: 2px dashed #e5e7eb;
+  border-radius: 16px;
+  cursor: pointer;
   overflow: hidden;
 }
-.capture-placeholder {
-  display: inline-flex; align-items: center; gap: 8px;
-}
-.capture-placeholder :deep(svg) { width: 20px; height: 20px; }
 .capture-area.has-photo { border-style: solid; border-color: var(--ge-brand); }
 .capture-area img { width: 100%; height: 100%; object-fit: cover; }
-
-.signature-area {
-  position: relative; background: #fff; border-radius: var(--ge-radius-lg);
-  border: 2px solid var(--ge-border); overflow: hidden;
+.capture-placeholder {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 8px;
+  font-size: 13px; color: #9ca3af;
 }
-.signature-area canvas {
+
+/* Signature */
+.signature-wrap {
+  position: relative;
+  border: 1.5px solid #e5e7eb;
+  border-radius: 16px;
+  overflow: hidden;
+  margin-top: 8px;
+}
+.signature-wrap canvas {
   width: 100%; height: 200px; display: block;
   touch-action: none;
 }
 .clear-sig {
   position: absolute; top: 8px; right: 8px;
   padding: 4px 10px; font-size: 11px; font-weight: 600;
-  background: var(--ge-page); border-radius: var(--ge-radius-full);
-  color: var(--ge-text-secondary); border: 1px solid var(--ge-border);
+  background: #fff; border-radius: var(--ge-radius-full);
+  color: #6b7280; border: 1px solid #e5e7eb;
+  cursor: pointer;
 }
 
-.notes-section { margin-top: 20px; display: flex; flex-direction: column; gap: 12px; }
+/* Location */
+.location-btn {
+  display: flex; align-items: center; gap: 12px;
+  padding: 14px;
+  background: #f9fafb;
+  border: 0.72px solid #e5e7eb;
+  border-radius: 16px;
+  width: 100%;
+  cursor: pointer;
+  text-align: left;
+  transition: all 0.15s;
+}
+.location-btn.captured {
+  background: #f0fdf4;
+  border-color: #dcfce7;
+}
+.loc-icon {
+  width: 36px; height: 36px;
+  background: #e5e7eb;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.location-btn.captured .loc-icon { background: #dcfce7; }
+.loc-text { display: flex; flex-direction: column; }
+.loc-title {
+  font-size: 14px; font-weight: 600; color: #111827;
+}
+.loc-desc { font-size: 12px; color: #6b7280; }
 
-.gps-info {
-  margin-top: 12px; padding: 10px 14px;
-  background: var(--ge-brand-soft); border-radius: var(--ge-radius);
-  font-size: 12px; color: var(--ge-brand-dark);
+/* Notes */
+.notes-textarea {
+  width: 100%;
+  padding: 12px 16px;
+  background: #f9fafb;
+  border: 0.72px solid #e5e7eb;
+  border-radius: 16px;
+  font-family: var(--ge-font);
+  font-size: 13px;
+  color: #111827;
+  resize: vertical;
+  min-height: 60px;
+  outline: none;
+}
+.notes-textarea::placeholder { color: #d1d5db; }
+.notes-textarea:focus {
+  border-color: var(--ge-brand);
+  box-shadow: 0 0 0 3px rgba(27,138,74,0.1);
+}
+
+/* Extra photos */
+.extra-photos {
   display: flex; align-items: center;
+  justify-content: space-between;
+  margin-top: 12px;
 }
-.gps-icon { display: inline-flex; margin-right: 6px; }
-.gps-icon :deep(svg) { width: 14px; height: 14px; }
-.gps-info.fetching { animation: pulse 1.5s infinite; }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+.extra-label {
+  font-size: 12px; font-weight: 500; color: #111827;
+}
+.add-photo-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  padding: 6px 12px;
+  background: #f9fafb;
+  border: 0.72px solid #e5e7eb;
+  border-radius: var(--ge-radius-full);
+  font-size: 12px; font-weight: 500;
+  color: #6b7280;
+  cursor: pointer;
+}
+.extra-count {
+  font-size: 11px; color: var(--ge-brand);
+  margin: 4px 0 0;
+}
 
-.error-msg { color: var(--ge-status-error); font-size: 13px; }
+/* Checklist */
+.checklist {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.check-item {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: #6b7280;
+}
+.check-item.done { color: #111827; }
+.check-box {
+  width: 18px; height: 18px;
+  border: 1.5px solid #d1d5db;
+  border-radius: 6px;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+  background: #fff;
+}
+.check-item.done .check-box {
+  background: var(--ge-brand);
+  border-color: var(--ge-brand);
+}
+.check-mark {
+  width: 8px; height: 5px;
+  border-left: 2px solid #fff;
+  border-bottom: 2px solid #fff;
+  transform: rotate(-45deg);
+  margin-top: -2px;
+}
+.check-item.optional { color: #9ca3af; }
+.check-item.optional.done { color: #6b7280; }
+
+/* Submit */
+.submit-section {
+  padding: 16px;
+  background: #fff;
+  border-top: 0.72px solid #e5e7eb;
+  position: sticky; bottom: 0;
+}
+.submit-btn {
+  width: 100%;
+  padding: 16px;
+  background: #1b8a4a;
+  color: #fff;
+  border: none;
+  border-radius: 16px;
+  font-family: var(--ge-font-display);
+  font-size: 14px; font-weight: 600;
+  display: flex; align-items: center;
+  justify-content: center; gap: 8px;
+  box-shadow: 0 8px 24px rgba(27,138,74,0.25);
+  cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.submit-btn:active { transform: scale(0.97); }
+.submit-btn:disabled {
+  opacity: 0.5; cursor: not-allowed;
+}
+.submit-note {
+  text-align: center;
+  font-size: 11px; color: #9ca3af;
+  margin: 8px 0 0;
+}
+.error-msg { color: var(--ge-status-error); font-size: 13px; margin: 4px 16px; }
+
+/* Footer */
+.app-footer {
+  text-align: center; padding: 32px 28px;
+}
+.footer-brand {
+  display: flex; align-items: center;
+  justify-content: center; gap: 8px;
+  margin-bottom: 8px;
+}
+.footer-g {
+  width: 28px; height: 28px;
+  background: #1b8a4a; color: #fff;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--ge-font-display);
+  font-size: 14px; font-weight: 700;
+}
+.footer-name {
+  font-family: var(--ge-font-display);
+  font-size: 14px; font-weight: 700;
+  color: #111827;
+}
+.footer-copy { font-size: 11px; color: #9ca3af; margin: 0; }
 </style>

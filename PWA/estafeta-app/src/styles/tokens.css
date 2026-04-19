@@ -63,7 +63,7 @@
     /* Radius */
     --ge-radius-sm: 6px;
     --ge-radius: 10px;
-    --ge-radius-lg: 14px;
+    --ge-radius-lg: 16px;
     --ge-radius-xl: 20px;
     --ge-radius-full: 9999px;
 
@@ -72,13 +72,27 @@
     --ge-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
     --ge-shadow-md: 0 4px 16px rgba(0, 0, 0, 0.1);
     --ge-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.12);
+    --ge-shadow-brand: 0 8px 24px rgba(27, 138, 74, 0.25);
 
     /* Typography */
     --ge-font: 'Inter', system-ui, -apple-system, sans-serif;
     --ge-font-display: 'Poppins', var(--ge-font);
+    --ge-font-mono: 'Menlo', 'Monaco', monospace;
 
     /* Layout */
     --ge-bottom-nav-h: 64px;
     --ge-header-h: 56px;
     --ge-safe-bottom: env(safe-area-inset-bottom, 0px);
+
+    /* Animations */
+    --ge-ease: cubic-bezier(0.22, 1, 0.36, 1);
+    --ge-duration: 0.3s;
+    --ge-duration-fast: 0.15s;
+
+    /* Figma-specific */
+    --ge-success-green: #22c55e;
+    --ge-history-green: #40915e;
+    --ge-badge-green-bg: #dcfce7;
+    --ge-badge-green-text: #166534;
+    --ge-input-bg: #f9fafb;
 }

@@ -209,6 +209,21 @@ export const store = reactive({
         distanceKm: 0,
         ratingsReceived: [],
     },
+    // Computed-like getters for UI
+    get shiftStats() {
+        const completed = this.completedDeliveries.filter(d => d.state === 'E-13');
+        return {
+            earnings: this.shiftMetrics.revenue || completed.reduce((s, d) => s + (d.costEuro || 0), 0),
+            completed: completed.length || this.shiftMetrics.completed,
+        };
+    },
+    get courier() {
+        return {
+            name: this.profile.name,
+            rating: this.profile.rating,
+            onTimeRate: this.profile.onTimePct,
+        };
+    },
 });
 
 // Init

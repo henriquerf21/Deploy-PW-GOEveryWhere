@@ -1,6 +1,13 @@
 <template>
   <div class="page">
+    <!-- Header -->
     <div class="page-header">
+      <img src="/media/brand/logo-goeverywhere.png" alt="" class="logo-mini" />
+      <span class="header-title">GoEverywhere</span>
+    </div>
+
+    <!-- Title bar -->
+    <div class="title-bar">
       <h1>Perfil</h1>
       <button v-if="!isEditing" class="edit-btn" @click="startEdit">Editar</button>
       <button v-else class="edit-btn" @click="cancelEdit">Cancelar</button>
@@ -9,7 +16,7 @@
 
     <div class="page-body">
       <!-- Profile card -->
-      <div class="profile-card card">
+      <div class="profile-card">
         <div class="avatar">{{ initials }}</div>
         <div class="profile-info">
           <h2 v-if="!isEditing">{{ profile.name }}</h2>
@@ -22,64 +29,76 @@
 
       <!-- Stats -->
       <div class="stats-row">
-        <div class="stat">
+        <div class="stat-card">
           <span class="stat-val">{{ profile.totalDeliveries }}</span>
           <span class="stat-lbl">Entregas</span>
         </div>
-        <div class="stat">
-          <span class="stat-val">{{ profile.rating }}</span>
+        <div class="stat-card">
+          <span class="stat-val">{{ profile.rating }} <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b"><polygon points="12,2 15,9 22,9.5 17,14.5 18.5,22 12,18 5.5,22 7,14.5 2,9.5 9,9"/></svg></span>
           <span class="stat-lbl">Rating</span>
         </div>
-        <div class="stat">
+        <div class="stat-card">
           <span class="stat-val">{{ profile.onTimePct }}%</span>
           <span class="stat-lbl">No prazo</span>
         </div>
       </div>
 
       <!-- Info sections -->
-      <div class="info-section card">
-        <div class="info-title">Informações Pessoais</div>
-        <div class="info-row"><span class="info-label">Email</span><span v-if="!isEditing">{{ profile.email }}</span><input v-else v-model="form.email" class="row-input" /></div>
-        <div class="info-row"><span class="info-label">Morada</span><span v-if="!isEditing">{{ profile.address }}</span><input v-else v-model="form.address" class="row-input" /></div>
-        <div class="info-row"><span class="info-label">Data nasc.</span><span v-if="!isEditing">{{ profile.birthDate }}</span><input v-else v-model="form.birthDate" type="date" class="row-input" /></div>
-        <div class="info-row"><span class="info-label">IBAN</span><span v-if="!isEditing" class="iban">{{ profile.iban }}</span><input v-else v-model="form.iban" class="row-input iban" /></div>
-        <div class="info-row"><span class="info-label">Zona</span><span v-if="!isEditing">{{ profile.zone }}</span><input v-else v-model="form.zone" class="row-input" /></div>
+      <div class="info-section">
+        <span class="section-label">INFORMAÇÕES PESSOAIS</span>
+        <div class="info-row"><span class="info-key">Email</span><span v-if="!isEditing">{{ profile.email }}</span><input v-else v-model="form.email" class="row-input" /></div>
+        <div class="info-row"><span class="info-key">Morada</span><span v-if="!isEditing">{{ profile.address }}</span><input v-else v-model="form.address" class="row-input" /></div>
+        <div class="info-row"><span class="info-key">Data nasc.</span><span v-if="!isEditing">{{ profile.birthDate }}</span><input v-else v-model="form.birthDate" type="date" class="row-input" /></div>
+        <div class="info-row"><span class="info-key">IBAN</span><span v-if="!isEditing" class="iban">{{ profile.iban }}</span><input v-else v-model="form.iban" class="row-input iban" /></div>
+        <div class="info-row"><span class="info-key">Zona</span><span v-if="!isEditing">{{ profile.zone }}</span><input v-else v-model="form.zone" class="row-input" /></div>
       </div>
 
-      <div class="info-section card">
-        <div class="info-title">Veículo</div>
-        <div class="info-row"><span class="info-label">Tipo</span><span v-if="!isEditing">{{ profile.vehicle.type }}</span><input v-else v-model="form.vehicle.type" class="row-input" /></div>
+      <div class="info-section">
+        <span class="section-label">VEÍCULO</span>
+        <div class="info-row"><span class="info-key">Tipo</span><span v-if="!isEditing">{{ profile.vehicle.type }}</span><input v-else v-model="form.vehicle.type" class="row-input" /></div>
         <div class="info-row">
-          <span class="info-label">Marca/Modelo</span>
+          <span class="info-key">Marca/Modelo</span>
           <span v-if="!isEditing">{{ profile.vehicle.brand }} {{ profile.vehicle.model }}</span>
           <div v-else class="row-inputs">
             <input v-model="form.vehicle.brand" class="row-input" placeholder="Marca" />
             <input v-model="form.vehicle.model" class="row-input" placeholder="Modelo" />
           </div>
         </div>
-        <div class="info-row"><span class="info-label">Cor</span><span v-if="!isEditing">{{ profile.vehicle.color }}</span><input v-else v-model="form.vehicle.color" class="row-input" /></div>
-        <div class="info-row"><span class="info-label">Matrícula</span><span v-if="!isEditing">{{ profile.vehicle.plate }}</span><input v-else v-model="form.vehicle.plate" class="row-input" /></div>
+        <div class="info-row"><span class="info-key">Cor</span><span v-if="!isEditing">{{ profile.vehicle.color }}</span><input v-else v-model="form.vehicle.color" class="row-input" /></div>
+        <div class="info-row"><span class="info-key">Matrícula</span><span v-if="!isEditing">{{ profile.vehicle.plate }}</span><input v-else v-model="form.vehicle.plate" class="row-input" /></div>
       </div>
 
-      <div class="info-section card">
-        <div class="info-title">Documentos</div>
-        <div class="doc-row">
-          <span :class="profile.docs.cc ? 'doc-ok' : 'doc-missing'">
-            <span class="doc-icon" v-html="profile.docs.cc ? SVG.checkCircle : SVG.xCircle"></span> Cartão Cidadão
-          </span>
-          <span :class="profile.docs.license ? 'doc-ok' : 'doc-missing'">
-            <span class="doc-icon" v-html="profile.docs.license ? SVG.checkCircle : SVG.xCircle"></span> Carta Condução
-          </span>
-          <span :class="profile.docs.insurance ? 'doc-ok' : 'doc-missing'">
-            <span class="doc-icon" v-html="profile.docs.insurance ? SVG.checkCircle : SVG.xCircle"></span> Seguro
-          </span>
+      <div class="info-section">
+        <span class="section-label">DOCUMENTOS</span>
+        <div class="doc-list">
+          <div class="doc-item" :class="profile.docs.cc ? 'doc-ok' : 'doc-missing'">
+            <span class="doc-circle"><svg v-if="profile.docs.cc" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>
+            <span>Cartão Cidadão</span>
+          </div>
+          <div class="doc-item" :class="profile.docs.license ? 'doc-ok' : 'doc-missing'">
+            <span class="doc-circle"><svg v-if="profile.docs.license" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>
+            <span>Carta de Condução</span>
+          </div>
+          <div class="doc-item" :class="profile.docs.insurance ? 'doc-ok' : 'doc-missing'">
+            <span class="doc-circle"><svg v-if="profile.docs.insurance" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>
+            <span>Seguro do Veículo</span>
+          </div>
         </div>
       </div>
 
       <div v-if="isEditing" class="save-wrap">
-        <button class="btn btn-primary btn-block btn-lg" @click="saveEdit">Guardar alterações</button>
+        <button class="save-btn" @click="saveEdit">Guardar alterações</button>
       </div>
     </div>
+
+    <!-- Footer -->
+    <footer class="app-footer">
+      <div class="footer-brand">
+        <span class="footer-g">G</span>
+        <span class="footer-name">GoEverywhere</span>
+      </div>
+      <p class="footer-copy">© 2026 GoEverywhere, Lda. Todos os direitos reservados.</p>
+    </footer>
   </div>
 </template>
 
@@ -87,19 +106,13 @@
 import { computed, reactive, ref } from 'vue';
 import { useRouter } from 'vue-router';
 import { store, logout, updateProfile } from '../stores/courierStore.js';
-import { courierStateLabels, SVG } from '../constants.js';
+import { courierStateLabels } from '../constants.js';
 
 const router = useRouter();
 const profile = computed(() => store.profile);
 const isEditing = ref(false);
 const form = reactive({
-  name: '',
-  phone: '',
-  email: '',
-  address: '',
-  birthDate: '',
-  iban: '',
-  zone: '',
+  name: '', phone: '', email: '', address: '', birthDate: '', iban: '', zone: '',
   vehicle: { type: '', brand: '', model: '', color: '', plate: '' },
 });
 const initials = computed(() => {
@@ -122,154 +135,224 @@ function hydrateForm() {
   form.vehicle.plate = profile.value.vehicle?.plate || '';
 }
 
-function startEdit() {
-  hydrateForm();
-  isEditing.value = true;
-}
-
-function cancelEdit() {
-  isEditing.value = false;
-}
-
+function startEdit() { hydrateForm(); isEditing.value = true; }
+function cancelEdit() { isEditing.value = false; }
 function saveEdit() {
   updateProfile({
-    name: form.name,
-    phone: form.phone,
-    email: form.email,
-    address: form.address,
-    birthDate: form.birthDate,
-    iban: form.iban,
-    zone: form.zone,
-    vehicle: {
-      type: form.vehicle.type,
-      brand: form.vehicle.brand,
-      model: form.vehicle.model,
-      color: form.vehicle.color,
-      plate: form.vehicle.plate,
-    },
+    name: form.name, phone: form.phone, email: form.email,
+    address: form.address, birthDate: form.birthDate,
+    iban: form.iban, zone: form.zone,
+    vehicle: { type: form.vehicle.type, brand: form.vehicle.brand, model: form.vehicle.model, color: form.vehicle.color, plate: form.vehicle.plate },
   });
   isEditing.value = false;
 }
-
-function handleLogout() {
-  logout();
-  router.push('/login');
-}
+function handleLogout() { logout(); router.push('/login'); }
 </script>
 
 <style scoped>
-.logout-btn {
-  margin-left: 8px;
-  font-size: 13px; font-weight: 600;
-  color: var(--ge-status-error);
-  padding: 8px 14px;
-  background: var(--ge-status-error-bg);
-  border-radius: var(--ge-radius-full);
+.logo-mini {
+  width: 36px; height: 34px;
+  border-radius: 14px; object-fit: cover;
+}
+.header-title {
+  font-family: var(--ge-font-display);
+  font-size: 14px; font-weight: 700;
+  color: #111827;
+}
+.title-bar {
+  display: flex; align-items: center; gap: 8px;
+  padding: 8px 16px;
+  background: #fff; border-top: 0.72px solid #e5e7eb;
+}
+.title-bar h1 {
+  font-family: var(--ge-font-display);
+  font-size: 16px; font-weight: 700;
+  margin: 0; color: #111827;
+  flex: 1;
 }
 .edit-btn {
-  margin-left: auto;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ge-brand);
-  padding: 8px 14px;
-  background: var(--ge-brand-soft);
+  padding: 6px 14px;
+  background: #f0fdf4;
+  border: 0.72px solid #dcfce7;
   border-radius: var(--ge-radius-full);
+  font-size: 12px; font-weight: 600;
+  color: #1b8a4a;
+  cursor: pointer;
 }
+.logout-btn {
+  padding: 6px 14px;
+  background: #fef2f2;
+  border: 0.72px solid #fecaca;
+  border-radius: var(--ge-radius-full);
+  font-size: 12px; font-weight: 600;
+  color: #ef4444;
+  cursor: pointer;
+}
+
+/* Profile card */
 .profile-card {
   display: flex; align-items: center; gap: 16px;
   padding: 20px;
-  margin-bottom: 16px;
+  background: #fff;
+  border: 0.72px solid #e5e7eb;
+  border-radius: 16px;
+  margin-bottom: 12px;
 }
 .avatar {
   width: 56px; height: 56px;
   display: flex; align-items: center; justify-content: center;
-  background: var(--ge-brand);
+  background: #1b8a4a;
   color: #fff;
   font-family: var(--ge-font-display);
   font-size: 20px; font-weight: 700;
   border-radius: 50%;
+  flex-shrink: 0;
 }
-.profile-info h2 { margin: 0; font-size: 18px; font-family: var(--ge-font-display); }
-.inline-input {
-  border: 1px solid var(--ge-border);
-  border-radius: var(--ge-radius-sm);
-  padding: 8px 10px;
-  font-size: 16px;
-  font-weight: 600;
+.profile-info h2 {
+  margin: 0; font-size: 18px;
   font-family: var(--ge-font-display);
-  width: 100%;
-  max-width: 240px;
+  font-weight: 700; color: #111827;
+}
+.inline-input {
+  border: 0.72px solid #e5e7eb;
+  border-radius: 12px; padding: 8px 12px;
+  font-size: 16px; font-weight: 600;
+  font-family: var(--ge-font-display);
+  width: 100%; max-width: 240px;
+  outline: none;
 }
 .inline-input--small {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 13px; font-weight: 500;
   font-family: var(--ge-font);
   margin-top: 4px;
 }
-.profile-phone { font-size: 13px; color: var(--ge-text-secondary); margin: 2px 0 6px; }
+.profile-phone {
+  font-size: 13px; color: #6b7280;
+  margin: 2px 0 6px;
+}
 .state-badge {
   display: inline-block;
   padding: 3px 10px;
-  background: var(--ge-brand-soft);
-  color: var(--ge-brand);
+  background: #dcfce7;
+  color: #166534;
   border-radius: var(--ge-radius-full);
   font-size: 11px; font-weight: 600;
 }
 
+/* Stats */
 .stats-row {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
-}
-.stat {
-  flex: 1;
-  display: flex; flex-direction: column; align-items: center;
-  padding: 14px;
-  background: var(--ge-surface);
-  border-radius: var(--ge-radius-lg);
-  border: 1px solid var(--ge-border-light);
-}
-.stat-val { font-family: var(--ge-font-display); font-size: 20px; font-weight: 700; }
-.stat-lbl { font-size: 10px; color: var(--ge-text-muted); text-transform: uppercase; letter-spacing: 0.04em; }
-
-.info-section { padding: 16px; margin-bottom: 12px; }
-.info-title {
-  font-size: 12px; font-weight: 700;
-  text-transform: uppercase; letter-spacing: 0.04em;
-  color: var(--ge-text-secondary);
+  display: flex; gap: 8px;
   margin-bottom: 12px;
 }
-.info-row {
-  display: flex; justify-content: space-between;
-  padding: 6px 0; font-size: 13px;
-  border-bottom: 1px solid var(--ge-border-light);
-}
-.info-row:last-child { border-bottom: none; }
-.info-label { color: var(--ge-text-muted); }
-.iban { font-family: monospace; font-size: 11px; }
-.row-input {
-  border: 1px solid var(--ge-border);
-  border-radius: var(--ge-radius-sm);
-  padding: 6px 10px;
-  font-size: 13px;
-  min-width: 140px;
-}
-.row-inputs {
-  display: flex;
-  gap: 6px;
-  width: 62%;
-}
-.row-inputs .row-input {
+.stat-card {
   flex: 1;
-  min-width: 0;
+  display: flex; flex-direction: column;
+  align-items: center;
+  padding: 14px;
+  background: #fff;
+  border: 0.72px solid #e5e7eb;
+  border-radius: 16px;
+}
+.stat-val {
+  font-family: var(--ge-font-display);
+  font-size: 18px; font-weight: 700;
+  color: #111827;
+  display: flex; align-items: center; gap: 4px;
+}
+.stat-lbl {
+  font-size: 10px; font-weight: 500;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
 }
 
-.doc-row { display: flex; flex-direction: column; gap: 8px; font-size: 13px; }
-.doc-icon { display: inline-flex; vertical-align: middle; margin-right: 6px; }
-.doc-icon :deep(svg) { width: 16px; height: 16px; }
-.doc-ok { color: var(--ge-brand); display: flex; align-items: center; }
-.doc-missing { color: var(--ge-status-error); display: flex; align-items: center; }
-.save-wrap {
-  margin: 12px 0 8px;
+/* Info sections */
+.info-section {
+  background: #fff;
+  border: 0.72px solid #e5e7eb;
+  border-radius: 16px;
+  padding: 16px;
+  margin-bottom: 12px;
 }
+.section-label {
+  font-family: var(--ge-font-display);
+  font-size: 10px; font-weight: 600;
+  color: #9ca3af;
+  letter-spacing: 0.04em;
+  display: block;
+  margin-bottom: 10px;
+}
+.info-row {
+  display: flex; align-items: center;
+  justify-content: space-between;
+  padding: 8px 0; font-size: 13px;
+  border-bottom: 0.72px solid #f1f5f2;
+}
+.info-row:last-child { border-bottom: none; }
+.info-key { color: #6b7280; font-weight: 500; }
+.iban { font-family: var(--ge-font-mono); font-size: 11px; }
+.row-input {
+  border: 0.72px solid #e5e7eb;
+  border-radius: 12px; padding: 6px 10px;
+  font-size: 13px; outline: none;
+  min-width: 140px;
+}
+.row-inputs { display: flex; gap: 6px; width: 62%; }
+.row-inputs .row-input { flex: 1; min-width: 0; }
+
+/* Documents */
+.doc-list {
+  display: flex; flex-direction: column; gap: 10px;
+}
+.doc-item {
+  display: flex; align-items: center; gap: 10px;
+  font-size: 13px; color: #111827;
+}
+.doc-circle {
+  width: 24px; height: 24px;
+  border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
+  flex-shrink: 0;
+}
+.doc-ok .doc-circle { background: #22c55e; }
+.doc-missing .doc-circle { background: #ef4444; }
+
+/* Save button */
+.save-wrap { margin-top: 12px; }
+.save-btn {
+  width: 100%;
+  padding: 16px;
+  background: #1b8a4a;
+  color: #fff;
+  border: none;
+  border-radius: 16px;
+  font-family: var(--ge-font-display);
+  font-size: 14px; font-weight: 600;
+  box-shadow: 0 8px 24px rgba(27,138,74,0.25);
+  cursor: pointer;
+}
+
+/* Footer */
+.app-footer {
+  text-align: center; padding: 32px 28px;
+}
+.footer-brand {
+  display: flex; align-items: center;
+  justify-content: center; gap: 8px;
+  margin-bottom: 8px;
+}
+.footer-g {
+  width: 28px; height: 28px;
+  background: #1b8a4a; color: #fff;
+  border-radius: 8px;
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--ge-font-display);
+  font-size: 14px; font-weight: 700;
+}
+.footer-name {
+  font-family: var(--ge-font-display);
+  font-size: 14px; font-weight: 700;
+  color: #111827;
+}
+.footer-copy { font-size: 11px; color: #9ca3af; margin: 0; }
 </style>
