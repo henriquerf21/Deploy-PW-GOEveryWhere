@@ -136,16 +136,32 @@ async function handleLogin() {
   if (!validate()) return;
 
   isLoading.value = true;
-  await new Promise(r => setTimeout(r, 600));
 
-  const result = login(form.email, form.password);
-  isLoading.value = false;
+  try {
+    // 1. ADICIONA O AWAIT (Obrigatório para funções async)
+    const result = await login(form.email, form.password);
 
-  if (result.success) {
-    router.push('/dashboard');
-  } else {
-    globalError.value = result.error;
+    // 2. VERIFICA O RESULTADO
+    if (result.success) {
+      router.push('/dashboard');
+    } else {
+      // 3. ATRIBUI O ERRO REAL QUE VEM DO STRAPI
+      // O Strapi devolve "Invalid identifier or password" por defeito
+      globalError.value = translateError(result.error);
+    }
+  } catch (err) {
+    globalError.value = 'Erro de ligação ao servidor.';
+  } finally {
+    isLoading.value = false;
   }
+}
+
+// Helper para traduzir as mensagens do Strapi (opcional, mas recomendado)
+function translateError(msg) {
+  if (msg === 'Invalid identifier or password') {
+    return 'Email ou password incorretos.';
+  }
+  return msg;
 }
 
 /**

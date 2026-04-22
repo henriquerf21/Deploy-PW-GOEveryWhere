@@ -18,16 +18,15 @@
         <div class="gp-left">
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f57f17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
           <div>
-            <span class="gp-balance">{{ store.goPoints.balance }} GoPoints</span>
-            <span v-if="store.goPoints.pending > 0" class="gp-pending">+{{ store.goPoints.pending }} pts pendentes</span>
-          </div>
+            <span class="gp-balance">{{ userPointsBalance }} GoPoints</span>
+            </div>
         </div>
         <div class="gp-tiers">
-          <span class="tier" :class="{ available: store.goPoints.balance >= 500 }">
+          <span class="tier" :class="{ available: userPointsBalance >= 500 }">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
             500 pts = Entrega grátis
           </span>
-          <span class="tier" :class="{ available: store.goPoints.balance >= 1000 }">
+          <span class="tier" :class="{ available: userPointsBalance >= 1000 }">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
             1000 pts = Produto grátis
           </span>
@@ -74,7 +73,7 @@
             </div>
             <div class="order-actions">
               <button
-                v-if="!order.rated && (order.status === 'S-11' || order.status === 'S-16')"
+                v-if="!order.rating && (order.status === 'S-11' || order.status === 'S-16')"
                 class="btn-rate"
                 @click="openRatingModal(order)"
               >
@@ -91,7 +90,7 @@
       <div v-else class="empty-state">
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
         <h3>Sem histórico</h3>
-        <p>Olá {{ store.user?.username }}, ainda não tens encomendas concluídas.</p>
+        <p>Ainda não tens encomendas concluídas.</p>
         <router-link to="/order/select" class="btn-new">Começar encomenda</router-link>
       </div>
     </main>
@@ -118,7 +117,15 @@ import { ref, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import SiteHeader from '../components/SiteHeader.vue';
 import SiteFooter from '../components/SiteFooter.vue';
-import { useOrderStore, ORDER_STATES, reOrder, rateOrder, fetchUserOrders } from '../stores/orderStore.js';
+import { 
+  useOrderStore, 
+  ORDER_STATES, 
+  reOrder, 
+  rateOrder, 
+  fetchUserOrders,
+  refreshUserProfile,
+  userPointsBalance 
+} from '../stores/orderStore.js';
 
 const router = useRouter();
 const store = useOrderStore();
@@ -129,23 +136,24 @@ const ratingOrder = ref(null);
 const ratingValue = ref(0);
 const ratingLabels = ['Mau', 'Medíocre', 'Razoável', 'Bom', 'Excelente'];
 
-// ── LÓGICA DE ORDENAÇÃO ──────────────────────────────────────────
+// ── LÓGICA DE ORDENAÇÃO E FILTRO ─────────────────────────────────
 const sortedOrders = computed(() => {
   if (!store.orderHistory) return [];
 
-  // Incluímos o S-12 para cobrir todas as situações terminais do Caderno de Encargos
   const terminalStates = ['S-04', 'S-11', 'S-12', 'S-13', 'S-14', 'S-15', 'S-16'];
 
   return [...store.orderHistory]
-    // 1. FILTRAR: Garante que encomendas em processamento (S-01 a S-10) não aparecem aqui
     .filter(order => terminalStates.includes(order.status))
-    // 2. ORDENAR: Uso de Number() garante que a ordem é matemática (ex: #10 acima de #2)
     .sort((a, b) => Number(b.id) - Number(a.id));
 });
 
 // ── CICLO DE VIDA ────────────────────────────────────────────────
 onMounted(async () => {
-  await fetchUserOrders();
+  // Carrega encomendas e atualiza perfil (pontos) em simultâneo
+  await Promise.all([
+    fetchUserOrders(),
+    refreshUserProfile()
+  ]);
 });
 
 // ── MÉTODOS ──────────────────────────────────────────────────────
@@ -156,7 +164,6 @@ function statusLabel(status) {
 function statusClass(status) {
   if (['S-11', 'S-15', 'S-16'].includes(status)) return 'delivered';
   if (['S-04', 'S-12', 'S-13', 'S-14'].includes(status)) return 'cancelled';
-  if (['S-07', 'S-08', 'S-09'].includes(status)) return 'active';
   return 'pending';
 }
 
@@ -178,6 +185,8 @@ function repeatOrder(order) {
   router.push('/order/select');
 }
 </script>
+
+
 
 <style scoped>
 .loading-history {
