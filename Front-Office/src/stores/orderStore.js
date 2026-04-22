@@ -1,5 +1,5 @@
 import { reactive, computed } from 'vue';
-import authState from './authStore'; 
+import authState from './authStore';
 
 const API_URL = 'http://localhost:1337/api';
 
@@ -30,7 +30,7 @@ export const PRODUCTS = [
 const store = reactive({
   cart: { items: { 'frasco-1': 1, 'pack-2': 0, 'pack-3': 0 }, urgentDelivery: false },
   delivery: {
-    name: '', phone: '', address: '', postalCode: '', city: '', 
+    name: '', phone: '', address: '', postalCode: '', city: '',
     assignedStore: null, estimatedDistance: null,
   },
   payment: {
@@ -41,7 +41,6 @@ const store = reactive({
     useGoPoints: false,
     goPointsRedemption: null,
   },
-  goPoints: { balance: 1250 },
   activeOrder: null,
   orderHistory: [],
   loading: false
@@ -55,16 +54,24 @@ export const deliveryFee = computed(() => (subtotal.value >= 25 ? 0 : 2.99));
 export const urgentFee = computed(() => store.cart.urgentDelivery ? 1.50 : 0);
 export const orderTotal = computed(() => subtotal.value + deliveryFee.value + urgentFee.value);
 export const estimatedETA = computed(() => 30);
-export const pointsToEarn = computed(() => Math.floor(orderTotal.value * 10));
-export const productDiscount = computed(() => 0); // Para evitar erros de importação
 
-// ── ACTIONS (Todas restauradas para evitar SyntaxErrors no Vite) ──
+// Regra do Caderno de Encargos: 10 pontos por euro (baseado no subtotal)
+export const pointsToEarn = computed(() => Math.floor(subtotal.value * 10));
+
+// Getters Dinâmicos para os pontos do utilizador (via authStore/Strapi relation)
+export const userPointsBalance = computed(() => {
+  return authState.user?.go_point?.points || 0;
+});
+
+export const productDiscount = computed(() => 0);
+
+// ── ACTIONS ──────────────────────────────────────────────────────
 export function setCartQty(productId, qty) { store.cart.items[productId] = Math.max(0, qty); }
 export function toggleUrgent() { store.cart.urgentDelivery = !store.cart.urgentDelivery; }
 export function setDeliveryField(field, value) { store.delivery[field] = value; }
 export function setPaymentMethod(method) { store.payment.method = method; }
 export function setPaymentField(field, value) { store.payment[field] = value; }
-export function toggleGoPoints() {}
+export function toggleGoPoints() { store.payment.useGoPoints = !store.payment.useGoPoints; }
 export function assignDefaultStore() { findNearestStore(41.5518, -8.4229); }
 
 export function findNearestStore(lat, lng) {
@@ -81,22 +88,18 @@ export function findNearestStore(lat, lng) {
 export function isCartValid() { return cartItemCount.value > 0; }
 export function isDeliveryValid() { return !!(store.delivery.name && store.delivery.address); }
 
-// FUNÇÕES PARA O HISTÓRICO (O que faltava!)
 export function rateOrder(orderId, rating) {
   const order = store.orderHistory.find(o => o.id === orderId);
   if (order) {
     order.rating = rating;
-    order.status = 'S-15'; // Marca como avaliado
-    // Aqui podias fazer um fetch PUT para gravar a nota no Strapi
+    order.status = 'S-15';
   }
 }
 
 export function reOrder(oldOrder) {
-  // Limpa o carrinho e adiciona o que estava na ordem antiga
   Object.keys(store.cart.items).forEach(id => store.cart.items[id] = 0);
   if (oldOrder.products) {
     oldOrder.products.forEach(p => {
-      // Tenta encontrar o ID do produto pelo nome
       const prod = PRODUCTS.find(item => item.name === p.name);
       if (prod) store.cart.items[prod.id] = p.qty;
     });
@@ -105,78 +108,83 @@ export function reOrder(oldOrder) {
 
 // ── STRAPI INTEGRATION (v5) ──────────────────────────────────────
 
+export async function refreshUserProfile() {
+  if (!authState.token) return;
+  try {
+    const response = await fetch(`${API_URL}/users/me?populate=go_point`, {
+      headers: { 'Authorization': `Bearer ${authState.token}` }
+    });
+    const userData = await response.json();
+    if (response.ok) {
+      authState.user = { ...authState.user, ...userData };
+    }
+  } catch (error) {
+    console.error("Erro ao atualizar pontos do utilizador:", error);
+  }
+}
+
 export async function fetchUserOrders() {
   if (!authState.user || !authState.token) return;
   store.loading = true;
-  
-  try {
-    // O backend filtra pelo JWT (evita filters[user] na query — "Invalid key user" no Strapi 5)
-    const url = `${API_URL}/orders?populate=*`;
 
-    const response = await fetch(url, { 
-      headers: { 'Authorization': `Bearer ${authState.token}` } 
+  try {
+    const url = `${API_URL}/orders?populate=*`;
+    const response = await fetch(url, {
+      headers: { 'Authorization': `Bearer ${authState.token}` }
     });
     const res = await response.json();
-    
+
     if (!response.ok) throw new Error(res.error?.message || "Erro no GET");
 
     const allOrders = (res.data || []).map(order => {
       const attr = order.attributes || order;
-      
-      // Extrai apenas o código (ex: "S-01") 
       const statusCode = attr.order_status ? attr.order_status.substring(0, 4) : 'S-01';
 
       return {
-        id: Number(order.id), 
+        id: Number(order.id),
         date: new Date(attr.createdAt).toLocaleDateString('pt-PT'),
         createdAt: attr.createdAt,
         products: attr.items || [],
         total: attr.total_price,
-        status: statusCode, 
+        status: statusCode,
         rating: attr.rating,
-        store: attr.store_name 
+        store: attr.store_name
       };
     });
 
-    // Ordena por ID decrescente
     allOrders.sort((a, b) => b.id - a.id);
-
     store.orderHistory = allOrders;
 
-    // Estados terminais baseados no Caderno de Encargos
     const terminalStates = ['S-04', 'S-11', 'S-12', 'S-13', 'S-14', 'S-15', 'S-16'];
-    
-    // Procura a encomenda mais recente que NÃO terminou
     store.activeOrder = allOrders.find(o => !terminalStates.includes(o.status)) || null;
 
-  } catch (error) { 
-    console.error("Erro ao procurar encomendas:", error); 
-  } finally { 
-    store.loading = false; 
+  } catch (error) {
+    console.error("Erro ao procurar encomendas:", error);
+  } finally {
+    store.loading = false;
   }
 }
 
 export async function submitOrder() {
-  if (!authState.user) return { success: false, error: 'Não autenticado' };
-  
+  if (!authState.user || !authState.token) return { success: false, error: 'Não autenticado' };
+
   try {
     const body = {
       data: {
         total_price: orderTotal.value,
-        // CORREÇÃO: O valor tem de ser IDENTICO ao que está no Strapi
         order_status: 'S-01 Submetido',
-
         store_name: store.delivery.assignedStore?.name || 'Continente Braga',
         items: cartProducts.value.map(p => ({ name: p.name, qty: p.qty })),
-        is_urgent: store.cart.urgentDelivery
+        is_urgent: store.cart.urgentDelivery,
+       
       }
     };
 
     const response = await fetch(`${API_URL}/orders`, {
       method: 'POST',
-      headers: { 
-        'Content-Type': 'application/json', 
-        'Authorization': `Bearer ${authState.token}` 
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authState.token}`
       },
       body: JSON.stringify(body)
     });
@@ -184,13 +192,21 @@ export async function submitOrder() {
     const result = await response.json();
 
     if (response.ok) {
+      // 1. Limpar o carrinho local após o sucesso
+      Object.keys(store.cart.items).forEach(id => store.cart.items[id] = 0);
+      store.cart.urgentDelivery = false;
+
+      // 2. Atualizar histórico e perfil (pontos)
       await fetchUserOrders();
+      await refreshUserProfile();
+
       return { success: true };
     } else {
-      // O erro que recebeste veio daqui
-      return { 
-        success: false, 
-        error: result.error?.message || "Erro de validação" 
+      // Log detalhado para te ajudar a depurar no browser
+      console.error("Erro detalhado do Strapi:", result.error);
+      return {
+        success: false,
+        error: result.error?.message || "Erro na criação da encomenda"
       };
     }
   } catch (e) {
@@ -198,11 +214,5 @@ export async function submitOrder() {
   }
 }
 
-// Suporte Tracking
-export function advanceOrderState() {}
-export function cancelOrder() {}
-export function completeOrder() {}
-
 export function useOrderStore() { return store; }
 export default store;
-

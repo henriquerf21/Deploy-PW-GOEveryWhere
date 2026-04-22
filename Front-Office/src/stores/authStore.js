@@ -8,7 +8,6 @@ const API_URL = 'http://localhost:1337/api'; // URL base do Strapi v5
 function loadSession() {
   try {
     const data = localStorage.getItem(STORAGE_KEY);
-    // Agora guardamos um objeto que contém { user, jwt }
     return data ? JSON.parse(data) : null;
   } catch { return null; }
 }
@@ -21,17 +20,12 @@ function saveSession(authData) {
   }
 }
 
-function setUser(userData) {
-  state.user = userData;
-  localStorage.setItem('user', JSON.stringify(userData));
-}
-
 // ── Auth store ───────────────────────────────────────────────────
 const persisted = loadSession();
 
 const state = reactive({
   user: persisted?.user || null,
-  token: persisted?.jwt || null, // O JWT é a chave para o Strapi devolver o histórico
+  token: persisted?.jwt || null,
 });
 
 // ── Computed ─────────────────────────────────────────────────────
@@ -54,7 +48,6 @@ function getInitials(name) {
 
 export async function register({ firstName, lastName, email, phone, password }) {
   try {
-    // PASSO 1: Registo básico (O que o Strapi aceita sempre)
     const regResponse = await fetch(`${API_URL}/auth/local/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -68,13 +61,11 @@ export async function register({ firstName, lastName, email, phone, password }) 
     const regData = await regResponse.json();
     if (!regResponse.ok) throw new Error(regData.error?.message || 'Erro no registo');
 
-    // PASSO 2: Atualizar os dados extra (firstName, phone, etc.)
-    // Usamos o ID do utilizador acabado de criar e o Token (JWT)
     const updateResponse = await fetch(`${API_URL}/users/${regData.user.id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${regData.jwt}` // Autenticação obrigatória [cite: 121]
+        'Authorization': `Bearer ${regData.jwt}`
       },
       body: JSON.stringify({
         firstName,
@@ -84,9 +75,6 @@ export async function register({ firstName, lastName, email, phone, password }) 
       })
     });
 
-    if (!updateResponse.ok) console.warn("Conta criada, mas erro ao guardar dados extra.");
-
-    // Guardar sessão com os dados atualizados
     const finalUser = { ...regData.user, firstName, lastName, phone };
     state.user = finalUser;
     state.token = regData.jwt;
@@ -96,6 +84,22 @@ export async function register({ firstName, lastName, email, phone, password }) 
   } catch (error) {
     console.error("🚨 Erro no processo:", error.message);
     return { success: false, error: error.message };
+  }
+}
+
+// FUNÇÃO CORRIGIDA (FECHADA CORRETAMENTE)
+export async function fetchMe() {
+  if (!state.token) return;
+  try {
+    const res = await fetch(`${API_URL}/users/me?populate=go_point`, {
+      headers: { Authorization: `Bearer ${state.token}` }
+    });
+    const data = await res.json();
+    if (res.ok) {
+      state.user = data;
+    }
+  } catch (err) {
+    console.error("Erro no fetchMe:", err);
   }
 }
 
@@ -122,6 +126,8 @@ export async function login(email, password) {
     state.user = data.user;
     state.token = data.jwt;
     saveSession({ user: data.user, jwt: data.jwt });
+    
+    await fetchMe(); // Carregar pontos logo após login
 
     return { success: true };
   } catch (error) {
@@ -131,27 +137,25 @@ export async function login(email, password) {
 }
 
 /**
- * Login com Google (Integração Google -> Strapi)
+ * Login com Google
  */
 export async function loginWithGoogle(googleAccessToken) {
   try {
-    // 1. Enviamos o token da Google para o Strapi validar
     const response = await fetch(`${API_URL}/auth/google/callback?access_token=${googleAccessToken}`);
-    
     if (!response.ok) throw new Error('Falha ao autenticar com o servidor Strapi');
 
     const data = await response.json();
 
-    // 2. O Strapi cria/encontra o utilizador e devolve o seu próprio JWT
     state.user = data.user;
     state.token = data.jwt;
     saveSession({ user: data.user, jwt: data.jwt });
+    
+    await fetchMe(); // Carregar pontos logo após login Google
 
     return { success: true };
-
   } catch (error) {
     console.error("Erro no Auth Store (Google):", error);
-    return { success: false, error: 'Não foi possível ligar a tua conta Google ao servidor.' };
+    return { success: false, error: 'Não foi possível ligar a conta Google.' };
   }
 }
 
@@ -169,5 +173,3 @@ export function useAuthStore() {
 }
 
 export default state;
-
-

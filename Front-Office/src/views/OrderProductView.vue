@@ -100,7 +100,7 @@
               <Award :size="22" :stroke-width="1.5" class="points-ic" aria-hidden="true" />
               <div class="points-info">
                 <span class="points-earn">+{{ pointsEarned }} GoPoints nesta compra</span>
-                <span class="points-balance">Saldo: {{ store.goPoints.balance }} pts</span>
+                <span class="points-balance">Saldo: {{ userPointsBalance }} pts</span>
               </div>
             </div>
 
@@ -138,6 +138,7 @@ import SiteHeader from '../components/SiteHeader.vue';
 import SiteFooter from '../components/SiteFooter.vue';
 import CheckoutWizardSteps from '../components/CheckoutWizardSteps.vue';
 import { MEDIA } from '../config/media.js';
+import { refreshUserProfile } from '../stores/orderStore.js';
 import {
   ArrowRight,
   Award,
@@ -154,6 +155,7 @@ import {
   urgentFee,
   cartItemCount,
   pointsToEarn,
+  userPointsBalance,
 } from '../stores/orderStore.js';
 
 const router = useRouter();
@@ -162,8 +164,9 @@ const store = useOrderStore();
 const products = PRODUCTS;
 
 // --- Lógica para sincronizar com a página inicial ---
-onMounted(() => {
+onMounted(async() => {
   const packIdFromUrl = route.query.pack;
+  await refreshUserProfile();
 
   if (packIdFromUrl) {
     // 1. Limpamos qualquer seleção anterior para não acumular packs
@@ -183,7 +186,7 @@ const pointsEarned = pointsToEarn;
 const urgentAvailable = ref(true);
 
 function selectPack(id) {
-  // Se o utilizador clicar noutro pack nesta página, 
+  // Se o utilizador clicar noutro pack nesta página,
   // limpamos os outros para manter apenas um pack ativo (opcional, mas recomendado)
   Object.keys(store.cart.items).forEach(key => setCartQty(key, 0));
   setCartQty(id, 1);
@@ -203,6 +206,8 @@ function goToDelivery() {
   }
 }
 </script>
+
+
 
 
 
