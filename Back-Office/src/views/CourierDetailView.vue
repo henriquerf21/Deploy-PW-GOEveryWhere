@@ -241,8 +241,8 @@ function toggleZ(z) {
   else edit.zones.push(z);
 }
 
-function saveEdit() {
-  const r = updateCourierVerified(c.value.id, {
+async function saveEdit() {
+  const r = await updateCourierVerified(c.value.id, {
     ...edit,
     vehicle: { ...edit.vehicle },
     zones: [...edit.zones],
@@ -255,9 +255,9 @@ function saveAdminNotes() {
   toast(r.ok ? 'Notas guardadas.' : r.error || 'Erro', r.ok ? 'success' : 'error');
 }
 
-function onToggleOnline(e) {
+async function onToggleOnline(e) {
   const want = e.target.checked;
-  const r = setCourierOnline(c.value.id, want);
+  const r = await setCourierOnline(c.value.id, want);
   if (!r.ok) {
     e.target.checked = !want;
     toast(r.error, 'error');
@@ -266,18 +266,18 @@ function onToggleOnline(e) {
   }
 }
 
-function onMax(v) {
-  setCourierMaxConcurrent(c.value.id, Number(v));
-  toast('Limite atualizado.', 'success');
+async function onMax(v) {
+  const r = await setCourierMaxConcurrent(c.value.id, Number(v));
+  toast(r.ok ? 'Limite atualizado.' : 'Falha ao atualizar limite.', r.ok ? 'success' : 'error');
 }
 
-function doVerify() {
-  const r = verifyCourier(c.value.id);
+async function doVerify() {
+  const r = await verifyCourier(c.value.id);
   toast(r.ok ? 'Estafeta verificado (E-02).' : 'Não aplicável', r.ok ? 'success' : 'error');
 }
 
-function confirmRej() {
-  const r = rejectCourier(c.value.id, rejReason.value);
+async function confirmRej() {
+  const r = await rejectCourier(c.value.id, rejReason.value);
   toast(r.ok ? 'Rejeitado. Email enviado.' : r.error, r.ok ? 'success' : 'error');
   if (r.ok) {
     showRej.value = false;
@@ -285,8 +285,8 @@ function confirmRej() {
   }
 }
 
-function confirmInfo() {
-  const r = requestCourierInfo(c.value.id, infoMsg.value);
+async function confirmInfo() {
+  const r = await requestCourierInfo(c.value.id, infoMsg.value);
   toast(r.ok ? 'Pedido de informação enviado.' : r.error, r.ok ? 'success' : 'error');
   if (r.ok) {
     showInfo.value = false;
@@ -294,14 +294,14 @@ function confirmInfo() {
   }
 }
 
-function doSuspend() {
-  suspendCourier(c.value.id);
-  toast('Estafeta suspenso (E-04).', 'success');
+async function doSuspend() {
+  const r = await suspendCourier(c.value.id);
+  toast(r.ok ? 'Estafeta suspenso (E-04).' : 'Falha ao suspender.', r.ok ? 'success' : 'error');
 }
 
-function doReactivate() {
-  reactivateCourier(c.value.id);
-  toast('Estafeta reativado.', 'success');
+async function doReactivate() {
+  const r = await reactivateCourier(c.value.id);
+  toast(r.ok ? 'Estafeta reativado.' : 'Falha ao reativar.', r.ok ? 'success' : 'error');
 }
 </script>
 

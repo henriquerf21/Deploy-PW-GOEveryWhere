@@ -84,6 +84,23 @@
         <h3>Atribuir estafeta</h3>
         <p class="hint">Apenas estafetas online na zona do pedido, dentro do limite de entregas simultâneas.</p>
         <fieldset class="fieldset" :disabled="!canAssignSection">
+        <div v-if="suggested.length" class="suggest">
+          <h4 class="suggest__title">Sugestão assistida (score)</h4>
+          <p class="hint">Ordenado por zona, disponibilidade, carga e distância à loja. A decisão final é sempre tua.</p>
+          <ul class="suggest-list">
+            <li v-for="s in suggested" :key="s.id" class="suggest-li">
+              <div class="suggest-top">
+                <strong>{{ s.name }}</strong>
+                <span class="suggest-score">score {{ s.score }}</span>
+              </div>
+              <div class="muted small">
+                {{ (s.reasons || []).join(' · ') }}
+                <template v-if="s.distanceKm != null"> · ~{{ s.distanceKm }} km à loja</template>
+              </div>
+              <button type="button" class="btn btn--sec btn--xs" @click="pickCourier = s.id">Pré-selecionar</button>
+            </li>
+          </ul>
+        </div>
         <ul v-if="!available.length" class="muted">Sem estafetas elegíveis para esta zona.</ul>
         <div v-else class="assign-list">
           <label v-for="c in available" :key="c.id" class="radio-line">
@@ -124,10 +141,9 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import {
-  logistics,
   getOrderById,
   approveOrder,
   rejectOrder,
@@ -137,6 +153,7 @@ import {
   availableCouriersForOrder,
   startTransit,
   completeDelivery,
+  refreshOrderFromServer,
   ORDER_STATUS,
   orderStatusLabels,
 } from '../stores/logisticsStore.js';
@@ -154,6 +171,11 @@ const rejectText = ref('');
 const infoText = ref('');
 const pickCourier = ref('');
 
+const suggested = computed(() => {
+  const list = order.value?.suggestedCouriers;
+  return Array.isArray(list) ? list : [];
+});
+
 watch(
   order,
   (o) => {
@@ -164,6 +186,24 @@ watch(
   },
   { immediate: true }
 );
+
+async function syncOrderDetail() {
+  const id = orderId.value;
+  if (!id) return;
+  try {
+    await refreshOrderFromServer(id);
+  } catch (e) {
+    toast(e?.message || 'Não foi possível carregar o pedido.', 'error');
+  }
+}
+
+onMounted(() => {
+  void syncOrderDetail();
+});
+
+watch(orderId, () => {
+  void syncOrderDetail();
+});
 
 const canApprove = computed(() => {
   const o = order.value;
@@ -196,41 +236,48 @@ const orderMails = computed(() =>
   logistics.emailLog.filter((e) => e.orderId === orderId.value)
 );
 
-function doApprove() {
-  const r = approveOrder(order.value.id, { ...ap });
+async function doApprove() {
+  const r = await approveOrder(order.value.id, { ...ap });
   toast(r.ok ? 'Pedido aprovado.' : r.error, r.ok ? 'success' : 'error');
+  if (r.ok) void syncOrderDetail();
 }
 
-function doReject() {
-  const r = rejectOrder(order.value.id, rejectText.value);
+async function doReject() {
+  const r = await rejectOrder(order.value.id, rejectText.value);
   toast(r.ok ? 'Pedido rejeitado. Email enviado ao cliente (sim.).' : r.error, r.ok ? 'success' : 'error');
   if (r.ok) rejectText.value = '';
+  if (r.ok) void syncOrderDetail();
 }
 
-function doInfo() {
-  const r = requestOrderInfo(order.value.id, infoText.value);
+async function doInfo() {
+  const r = await requestOrderInfo(order.value.id, infoText.value);
   toast(r.ok ? 'Pedido de informação enviado.' : r.error, r.ok ? 'success' : 'error');
   if (r.ok) infoText.value = '';
+  if (r.ok) void syncOrderDetail();
 }
 
-function doAssign() {
-  const r = assignCourierToOrder(order.value.id, pickCourier.value);
+async function doAssign() {
+  const r = await assignCourierToOrder(order.value.id, pickCourier.value);
   toast(r.ok ? 'Estafeta atribuído.' : r.error, r.ok ? 'success' : 'error');
+  if (r.ok) void syncOrderDetail();
 }
 
-function doPriority() {
-  const r = setOrderPriority(order.value.id, pri.value);
+async function doPriority() {
+  const r = await setOrderPriority(order.value.id, pri.value);
   toast(r.ok ? 'Prioridade atualizada.' : r.error, r.ok ? 'success' : 'error');
+  if (r.ok) void syncOrderDetail();
 }
 
-function doStartTransit() {
-  const r = startTransit(order.value.id);
+async function doStartTransit() {
+  const r = await startTransit(order.value.id);
   toast(r.ok ? 'Pedido em trânsito.' : 'Não aplicável', r.ok ? 'success' : 'error');
+  if (r.ok) void syncOrderDetail();
 }
 
-function doComplete() {
-  const r = completeDelivery(order.value.id);
+async function doComplete() {
+  const r = await completeDelivery(order.value.id);
   toast(r.ok ? 'Pedido marcado como entregue.' : r.error, r.ok ? 'success' : 'error');
+  if (r.ok) void syncOrderDetail();
 }
 </script>
 
@@ -401,6 +448,62 @@ label {
 
 .btn--mt {
   margin-left: 8px;
+}
+
+.btn--xs {
+  margin-top: 8px;
+  padding: 6px 10px;
+  font-size: 12px;
+}
+
+.suggest {
+  margin: 12px 0 14px;
+  padding: 12px 14px;
+  border-radius: var(--bo-radius-sm);
+  background: var(--bo-page);
+  border: 1px dashed var(--bo-border);
+}
+
+.suggest__title {
+  margin: 0 0 6px;
+  font-size: 13px;
+}
+
+.suggest-list {
+  list-style: none;
+  margin: 10px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.suggest-li {
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--bo-border);
+}
+
+.suggest-li:last-child {
+  border-bottom: none;
+  padding-bottom: 0;
+}
+
+.suggest-top {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.suggest-score {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--bo-brand-hover);
+}
+
+.small {
+  font-size: 12px;
+  line-height: 1.35;
 }
 
 .assign-list {

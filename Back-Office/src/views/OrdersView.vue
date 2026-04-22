@@ -37,6 +37,23 @@
       <input v-model="f.q" type="search" class="sel grow" placeholder="Pesquisar ID, cliente, email…" />
     </div>
 
+    <div class="presets card">
+      <div class="presets__row">
+        <label class="preset-name">
+          <span>Nome do filtro guardado</span>
+          <input v-model="presetName" type="text" class="inp" placeholder="Ex.: Urgentes Gaia" />
+        </label>
+        <button type="button" class="btn" @click="savePreset">Guardar filtro atual</button>
+      </div>
+      <div v-if="savedPresets.length" class="chips">
+        <button v-for="p in savedPresets" :key="p.id" type="button" class="chip" @click="applyPreset(p)">
+          {{ p.name }}
+        </button>
+      </div>
+      <p v-else class="muted">Ainda não há filtros guardados neste browser.</p>
+      <p v-if="activePresetLabel" class="preset-active">Ativo: {{ activePresetLabel }}</p>
+    </div>
+
     <div class="table-wrap card">
       <table class="data-table">
         <thead>
@@ -78,10 +95,11 @@
 </template>
 
 <script setup>
-import { computed, reactive, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { logistics, filterOrders, orderStatusLabels } from '../stores/logisticsStore.js';
 import { orderTypeLabels, priorityLabels, ZONES } from '../constants/logistics.js';
+import { toast } from '../utils/notify.js';
 
 const route = useRoute();
 
@@ -93,6 +111,29 @@ const f = reactive({
   dateFrom: '',
   dateTo: '',
   q: '',
+});
+
+const LS_KEY = 'bo.orders.savedFilters.v1';
+const savedPresets = ref([]);
+const presetName = ref('');
+const activePresetLabel = ref('');
+
+function loadPresets() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    const parsed = raw ? JSON.parse(raw) : [];
+    savedPresets.value = Array.isArray(parsed) ? parsed : [];
+  } catch {
+    savedPresets.value = [];
+  }
+}
+
+function persistPresets() {
+  localStorage.setItem(LS_KEY, JSON.stringify(savedPresets.value));
+}
+
+onMounted(() => {
+  loadPresets();
 });
 
 watch(
@@ -114,6 +155,46 @@ const rows = computed(() =>
     q: f.q || undefined,
   })
 );
+
+function snapshotFilters() {
+  return {
+    status: f.status,
+    priority: f.priority,
+    type: f.type,
+    zone: f.zone,
+    dateFrom: f.dateFrom,
+    dateTo: f.dateTo,
+    q: f.q,
+  };
+}
+
+function applyPreset(p) {
+  const d = p.filters || {};
+  f.status = d.status ?? '';
+  f.priority = d.priority ?? '';
+  f.type = d.type ?? '';
+  f.zone = d.zone ?? '';
+  f.dateFrom = d.dateFrom ?? '';
+  f.dateTo = d.dateTo ?? '';
+  f.q = d.q ?? '';
+  activePresetLabel.value = p.name;
+  toast(`Filtro «${p.name}» aplicado.`, 'info');
+}
+
+function savePreset() {
+  const name = presetName.value.trim();
+  if (!name) {
+    toast('Indica um nome para guardar o filtro.', 'error');
+    return;
+  }
+  const id = `pf-${Date.now()}`;
+  const next = [{ id, name, filters: snapshotFilters() }, ...savedPresets.value.filter((p) => p.name !== name)].slice(0, 12);
+  savedPresets.value = next;
+  persistPresets();
+  activePresetLabel.value = name;
+  presetName.value = '';
+  toast('Filtro guardado neste browser.', 'success');
+}
 
 void logistics;
 </script>
@@ -148,6 +229,79 @@ void logistics;
   gap: 10px;
   padding: 14px;
   align-items: flex-end;
+}
+
+.presets {
+  padding: 14px 16px;
+}
+
+.presets__row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  align-items: flex-end;
+}
+
+.preset-name {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--bo-text-secondary);
+  flex: 1;
+  min-width: 220px;
+}
+
+.inp {
+  padding: 10px 12px;
+  border-radius: var(--bo-radius-sm);
+  border: 1px solid var(--bo-border);
+  font-size: 14px;
+}
+
+.btn {
+  padding: 10px 14px;
+  border-radius: var(--bo-radius-sm);
+  border: 1px solid var(--bo-border);
+  background: var(--bo-page);
+  font-weight: 700;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.chip {
+  padding: 8px 12px;
+  border-radius: 999px;
+  border: 1px solid var(--bo-border);
+  background: #fff;
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+.chip:hover {
+  border-color: var(--bo-brand);
+}
+
+.preset-active {
+  margin: 10px 0 0;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--bo-brand-hover);
+}
+
+.presets .muted {
+  margin: 10px 0 0;
+  color: var(--bo-text-secondary);
+  font-size: 13px;
 }
 
 .sel {
@@ -205,6 +359,7 @@ void logistics;
 
 .muted {
   color: var(--bo-text-secondary);
+  font-size: 14px;
 }
 
 .prio {

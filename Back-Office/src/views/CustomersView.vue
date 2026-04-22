@@ -175,6 +175,7 @@ import {
 } from '../stores/logisticsStore.js';
 import { ZONES } from '../constants/logistics.js';
 import { toast } from '../utils/notify.js';
+import { validateEmail, validatePtNif, validatePtPhone } from '../utils/boPtValidation.js';
 
 const q = ref('');
 const viewCustomer = ref(null);
@@ -270,26 +271,41 @@ function closeForm() {
   formError.value = '';
 }
 
-function submitForm() {
+async function submitForm() {
   formError.value = '';
   const name = (form.name || '').trim();
-  const email = (form.email || '').trim().toLowerCase();
   if (!name) {
-    formError.value = 'O nome é obrigatório.';
+    formError.value = 'Nome obrigatório.';
     toast(formError.value, 'error');
     return;
   }
-  if (!email || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
-    formError.value = 'Indica um email válido.';
+  const email = validateEmail(form.email);
+  if (!email.ok) {
+    formError.value = email.error;
     toast(formError.value, 'error');
     return;
+  }
+  const phone = validatePtPhone(form.phone);
+  if (!phone.ok) {
+    formError.value = phone.error;
+    toast(formError.value, 'error');
+    return;
+  }
+  const nifRaw = (form.nif || '').trim();
+  if (nifRaw) {
+    const nif = validatePtNif(nifRaw);
+    if (!nif.ok) {
+      formError.value = nif.error;
+      toast(formError.value, 'error');
+      return;
+    }
   }
   const ar = Number(form.avgRating);
   const avgRating = Number.isFinite(ar) ? Math.min(5, Math.max(0, ar)) : 0;
   if (editingId.value) {
-    const r = updateCustomer(editingId.value, {
+    const r = await updateCustomer(editingId.value, {
       name,
-      email,
+      email: email.value,
       phone: form.phone,
       nif: form.nif,
       city: form.city,
@@ -302,9 +318,9 @@ function submitForm() {
     if (r.ok) closeForm();
     else if (r.error) formError.value = r.error;
   } else {
-    const r = addCustomer({
+    const r = await addCustomer({
       name,
-      email,
+      email: email.value,
       phone: form.phone,
       nif: form.nif,
       city: form.city,
@@ -319,9 +335,9 @@ function submitForm() {
   }
 }
 
-function confirmDelete(c) {
+async function confirmDelete(c) {
   if (!window.confirm(`Eliminar o cliente «${c.name}»? Só é permitido se não houver pedidos associados.`)) return;
-  const r = deleteCustomer(c.id);
+  const r = await deleteCustomer(c.id);
   toast(r.ok ? 'Cliente eliminado.' : r.error, r.ok ? 'success' : 'error');
   if (viewCustomer.value?.id === c.id) viewCustomer.value = null;
 }

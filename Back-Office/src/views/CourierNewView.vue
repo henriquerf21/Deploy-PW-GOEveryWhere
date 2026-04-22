@@ -71,6 +71,7 @@ import { useRouter } from 'vue-router';
 import { registerCourier } from '../stores/logisticsStore.js';
 import { ZONES } from '../constants/logistics.js';
 import { toast } from '../utils/notify.js';
+import { validateEmail, validatePtIban, validatePtNif, validatePtPhone, validatePtPlate } from '../utils/boPtValidation.js';
 
 const router = useRouter();
 
@@ -105,12 +106,55 @@ function toggleZ(z) {
   else f.zones.push(z);
 }
 
-function onSubmit() {
+async function onSubmit() {
   if (!f.zones.length) {
     toast('Seleciona pelo menos uma zona.', 'error');
     return;
   }
-  registerCourier({ ...f });
+  const name = (f.name || '').trim();
+  if (!name) {
+    toast('Nome obrigatório.', 'error');
+    return;
+  }
+  const email = validateEmail(f.email);
+  if (!email.ok) {
+    toast(email.error, 'error');
+    return;
+  }
+  const nif = validatePtNif(f.nif);
+  if (!nif.ok) {
+    toast(nif.error, 'error');
+    return;
+  }
+  const iban = validatePtIban(f.iban);
+  if (!iban.ok) {
+    toast(iban.error, 'error');
+    return;
+  }
+  const phone = validatePtPhone(f.phone);
+  if (!phone.ok) {
+    toast(phone.error, 'error');
+    return;
+  }
+  const plate = validatePtPlate(f.plate);
+  if (!plate.ok) {
+    toast(plate.error, 'error');
+    return;
+  }
+  try {
+    await registerCourier({
+      ...f,
+      name,
+      email: email.value,
+      nif: nif.value,
+      iban: iban.value,
+      phone: phone.value,
+      plate: plate.value,
+    });
+  } catch (e) {
+    toast(e?.message || 'Falha a criar estafeta no Strapi.', 'error');
+    return;
+  }
   toast('Registo criado — E-01 Pendente Verificação.', 'success');
   router.push({ name: 'couriers' });
 }

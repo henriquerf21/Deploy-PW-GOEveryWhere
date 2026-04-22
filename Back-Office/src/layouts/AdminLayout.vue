@@ -36,6 +36,15 @@
     </aside>
 
     <div class="bo-main">
+      <div v-if="shellBusy" class="bo-busy" role="status" aria-live="polite" aria-busy="true">
+        <div class="bo-busy__card">
+          <div class="bo-busy__spinner" aria-hidden="true" />
+          <div>
+            <p class="bo-busy__title">A processar…</p>
+            <p class="bo-busy__sub">A sincronizar com o Strapi. Aguarda um momento.</p>
+          </div>
+        </div>
+      </div>
       <div v-if="urgentAlerts.length" class="bo-urgent-bar" role="alert">
         <div v-for="a in urgentAlerts" :key="a.id" class="bo-urgent-item">
           <span>{{ a.message }}</span>
@@ -148,10 +157,10 @@
 </template>
 
 <script setup>
-import { computed, ref, watch } from 'vue';
+import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { clearBoSession, getSessionUser } from '../auth/session.js';
-import { logistics, dismissAdminAlert, getOrderById, getCourierById } from '../stores/logisticsStore.js';
+import { logistics, dismissAdminAlert, getOrderById, getCourierById, initLogistics } from '../stores/logisticsStore.js';
 import {
   LayoutDashboard,
   Package,
@@ -233,6 +242,8 @@ const userInitials = computed(() => {
 
 const urgentAlerts = computed(() => logistics.adminAlerts);
 
+const shellBusy = computed(() => !!logistics.loading || (logistics.busyCount || 0) > 0);
+
 const frontOfficeUrl = import.meta.env.VITE_FRONT_OFFICE_URL || 'http://localhost:5173';
 
 const nav = [
@@ -280,6 +291,10 @@ function isActive(item) {
   }
   return route.name === item.name;
 }
+
+onMounted(() => {
+  void initLogistics();
+});
 </script>
 
 <style scoped>
@@ -466,6 +481,59 @@ function isActive(item) {
   min-width: 0;
   display: flex;
   flex-direction: column;
+  position: relative;
+}
+
+.bo-busy {
+  position: absolute;
+  inset: 0;
+  z-index: 50;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 120px 24px 24px;
+  background: rgba(255, 255, 255, 0.72);
+  backdrop-filter: blur(2px);
+}
+
+.bo-busy__card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  border-radius: 14px;
+  border: 1px solid var(--bo-border);
+  background: var(--bo-surface);
+  box-shadow: var(--bo-shadow);
+  max-width: 420px;
+}
+
+.bo-busy__title {
+  margin: 0;
+  font-weight: 800;
+  font-size: 15px;
+}
+
+.bo-busy__sub {
+  margin: 4px 0 0;
+  font-size: 13px;
+  color: var(--bo-text-secondary);
+  line-height: 1.4;
+}
+
+.bo-busy__spinner {
+  width: 22px;
+  height: 22px;
+  border-radius: 999px;
+  border: 3px solid #e5e7eb;
+  border-top-color: var(--bo-brand);
+  animation: bo-spin 0.85s linear infinite;
+}
+
+@keyframes bo-spin {
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 .bo-urgent-bar {

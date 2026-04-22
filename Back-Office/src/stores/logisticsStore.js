@@ -4,6 +4,17 @@ import {
   COURIER_STATE,
   orderStatusLabels,
 } from '../constants/logistics.js';
+import {
+  boBootstrap,
+  boGetOrder,
+  boOrderAction,
+  boCreateCourier,
+  boUpdateCourier,
+  boCourierAction,
+  boCreateCustomer,
+  boUpdateCustomer,
+  boDeleteCustomer,
+} from '../api/backofficeApi.js';
 
 let _seq = 24090;
 
@@ -16,6 +27,9 @@ function ts(iso) {
 }
 
 export const logistics = reactive({
+  initialized: false,
+  loading: false,
+  busyCount: 0,
   continentStores: [
     { id: 'CT-GAIA', name: 'Continente Gaia', lat: 41.1235, lng: -8.612 },
     { id: 'CT-MAT', name: 'Continente Matosinhos', lat: 41.185, lng: -8.69 },
@@ -35,7 +49,76 @@ export const logistics = reactive({
   recentReviews: [],
   /** Catálogo back-office (demo) */
   products: [],
+  slaMetrics: null,
 });
+
+function adjustBusy(delta) {
+  logistics.busyCount = Math.max(0, (logistics.busyCount || 0) + delta);
+}
+
+async function withBusy(fn) {
+  adjustBusy(1);
+  try {
+    return await fn();
+  } finally {
+    adjustBusy(-1);
+  }
+}
+
+function applyBootstrap(data) {
+  logistics.continentStores = data.continentStores || logistics.continentStores;
+  logistics.orders = data.orders || [];
+  logistics.couriers = data.couriers || [];
+  logistics.customers = data.customers || [];
+  logistics.emailLog = data.emailLog || [];
+  logistics.activityLog = data.activityLog || [];
+  logistics.adminAlerts = data.adminAlerts || [];
+  logistics.packSales = data.packSales || [];
+  logistics.deliveriesByZone = data.deliveriesByZone || [];
+  logistics.hourlyVolume = data.hourlyVolume || [];
+  logistics.recentReviews = data.recentReviews || [];
+  logistics.products = data.products || logistics.products;
+  logistics.slaMetrics = data.slaMetrics ?? logistics.slaMetrics;
+  logistics.initialized = true;
+}
+
+export async function initLogistics({ force = false } = {}) {
+  if (logistics.loading) return { ok: true };
+  if (logistics.initialized && !force) return { ok: true };
+  logistics.loading = true;
+  adjustBusy(1);
+  try {
+    const data = await boBootstrap();
+    applyBootstrap(data);
+    return { ok: true };
+  } catch (err) {
+    logistics.continentStores = [];
+    logistics.orders = [];
+    logistics.couriers = [];
+    logistics.customers = [];
+    logistics.emailLog = [];
+    logistics.activityLog = [];
+    logistics.adminAlerts = [];
+    logistics.packSales = [];
+    logistics.deliveriesByZone = [];
+    logistics.hourlyVolume = [];
+    logistics.recentReviews = [];
+    logistics.products = [];
+    logistics.slaMetrics = null;
+    return { ok: false, error: err?.message || 'Falha ao carregar dados do Strapi.' };
+  } finally {
+    logistics.loading = false;
+    adjustBusy(-1);
+  }
+}
+
+export async function refreshOrderFromServer(orderId) {
+  return withBusy(async () => {
+    const order = await boGetOrder(orderId);
+    upsertOrder(order);
+    return order;
+  });
+}
 
 function logAct(text) {
   logistics.activityLog.unshift({ id: uid('act'), at: new Date().toISOString(), text });
@@ -67,362 +150,6 @@ function pushUrgentAlert(msg) {
     level: 'urgent',
     message: msg,
   });
-}
-
-function seed() {
-  logistics.customers = [
-    {
-      id: 'CU-1',
-      name: 'Maria Silva',
-      email: 'maria.s@mail.pt',
-      phone: '+351 912 000 001',
-      nif: '245789123',
-      city: 'Porto',
-      zone: 'Porto Centro',
-      ordersCount: 12,
-      totalSpent: 428.5,
-      lastOrderAt: '2026-03-30T12:00:00Z',
-      avgRating: 4.8,
-      marketingOptIn: true,
-      notes: 'Prefere entregas antes das 18h.',
-    },
-    {
-      id: 'CU-2',
-      name: 'João Costa',
-      email: 'jcosta@mail.pt',
-      phone: '+351 934 000 002',
-      nif: '201998877',
-      city: 'Matosinhos',
-      zone: 'Matosinhos',
-      ordersCount: 4,
-      totalSpent: 119.2,
-      lastOrderAt: '2026-03-28T09:00:00Z',
-      avgRating: 4.2,
-      marketingOptIn: false,
-      notes: '',
-    },
-    {
-      id: 'CU-3',
-      name: 'Ana Ribeiro',
-      email: 'ana.r@mail.pt',
-      phone: '+351 965 000 003',
-      nif: '288112233',
-      city: 'Gaia',
-      zone: 'Vila Nova de Gaia',
-      ordersCount: 21,
-      totalSpent: 902.0,
-      lastOrderAt: '2026-03-29T16:00:00Z',
-      avgRating: 4.9,
-      marketingOptIn: true,
-      notes: 'Cliente B2B ocasional — contactar para volumes.',
-    },
-  ];
-
-  logistics.couriers = [
-    {
-      id: 'ST-1',
-      name: 'Miguel Santos',
-      email: 'm.santos@mail.pt',
-      phone: '+351 910 100 201',
-      nif: '298765432',
-      cc: '14895632 4 ZY',
-      birthDate: '1992-05-14',
-      address: 'Rua da Alegria 12, Porto',
-      iban: 'PT50 0002 0123 12345678901 45',
-      adminNotes: 'Experiente; apto para pedidos urgentes.',
-      state: COURIER_STATE.E06,
-      online: true,
-      maxConcurrent: 3,
-      zones: ['Porto Centro', 'Vila Nova de Gaia'],
-      vehicle: {
-        type: 'Mota',
-        brand: 'Honda',
-        model: 'PCX 125',
-        color: 'Cinzento',
-        plate: 'AB-12-CD',
-        licenseNumber: 'T-998877',
-        insuranceRef: 'SEG-2026-8844',
-        inspectionValidUntil: '2027-01-15',
-      },
-      docs: { idDoc: true, license: true, insurance: true, inspection: true },
-      lat: 41.149,
-      lng: -8.615,
-      stats: { deliveries: 420, rating: 4.7, onTimePct: 94 },
-      currentOrderId: 'GE-24100',
-      etaMinutes: 12,
-    },
-    {
-      id: 'ST-2',
-      name: 'Sofia Ferreira',
-      email: 'sofi.f@mail.pt',
-      phone: '+351 922 200 302',
-      nif: '201112233',
-      cc: '12004455 6 ZZ',
-      birthDate: '1995-11-02',
-      address: 'Av. Brasil 44, Matosinhos',
-      iban: 'PT50 0033 0444 55667788990 12',
-      adminNotes: '',
-      state: COURIER_STATE.E06,
-      online: true,
-      maxConcurrent: 2,
-      zones: ['Matosinhos'],
-      vehicle: {
-        type: 'Carro',
-        brand: 'Renault',
-        model: 'Clio',
-        color: 'Branco',
-        plate: 'EF-34-GH',
-        licenseNumber: 'T-112233',
-        insuranceRef: 'SEG-2026-2211',
-        inspectionValidUntil: '2026-09-01',
-      },
-      docs: { idDoc: true, license: true, insurance: true, inspection: true },
-      lat: 41.178,
-      lng: -8.682,
-      stats: { deliveries: 198, rating: 4.9, onTimePct: 97 },
-      currentOrderId: null,
-      etaMinutes: null,
-    },
-    {
-      id: 'ST-3',
-      name: 'Ricardo Pinto',
-      email: 'rpinto@mail.pt',
-      phone: '+351 933 300 403',
-      nif: '276543210',
-      cc: '13998877 1 XX',
-      birthDate: '1988-03-20',
-      address: 'Rua Heroísmo 90, Gaia',
-      iban: 'PT50 0011 0222 33445566778 90',
-      adminNotes: 'Aguardar documentação de seguro e carta.',
-      state: COURIER_STATE.E01,
-      online: false,
-      maxConcurrent: 2,
-      zones: ['Vila Nova de Gaia'],
-      vehicle: {
-        type: 'Mota',
-        brand: 'Yamaha',
-        model: 'NMAX',
-        color: 'Azul',
-        plate: 'IJ-56-KL',
-        licenseNumber: '',
-        insuranceRef: '',
-        inspectionValidUntil: '',
-      },
-      docs: { idDoc: true, license: false, insurance: false, inspection: false },
-      lat: 41.13,
-      lng: -8.62,
-      stats: { deliveries: 0, rating: 0, onTimePct: 0 },
-      currentOrderId: null,
-      etaMinutes: null,
-    },
-  ];
-
-  logistics.orders = [
-    {
-      id: 'GE-24098',
-      clientId: 'CU-1',
-      clientName: 'Maria Silva',
-      clientEmail: 'maria.s@mail.pt',
-      city: 'Porto',
-      zone: 'Porto Centro',
-      type: 'STANDARD',
-      priority: 2,
-      status: ORDER_STATUS.PENDING,
-      createdAt: '2026-03-30T08:30:00Z',
-      pickupLat: 41.1235,
-      pickupLng: -8.612,
-      destLat: 41.155,
-      destLng: -8.62,
-      storeId: null,
-      costEuro: null,
-      etaMinutes: null,
-      resources: null,
-      courierId: null,
-      rejectionReason: null,
-      infoRequestMessage: null,
-    },
-    {
-      id: 'GE-24099',
-      clientId: 'CU-2',
-      clientName: 'João Costa',
-      clientEmail: 'jcosta@mail.pt',
-      city: 'Matosinhos',
-      zone: 'Matosinhos',
-      type: 'EXPRESS',
-      priority: 5,
-      status: ORDER_STATUS.PENDING,
-      createdAt: '2026-03-30T09:15:00Z',
-      pickupLat: 41.185,
-      pickupLng: -8.69,
-      destLat: 41.19,
-      destLng: -8.705,
-      storeId: null,
-      costEuro: null,
-      etaMinutes: null,
-      resources: null,
-      courierId: null,
-      rejectionReason: null,
-      infoRequestMessage: null,
-    },
-    {
-      id: 'GE-24100',
-      clientId: 'CU-3',
-      clientName: 'Ana Ribeiro',
-      clientEmail: 'ana.r@mail.pt',
-      city: 'Gaia',
-      zone: 'Vila Nova de Gaia',
-      type: 'STANDARD',
-      priority: 3,
-      status: ORDER_STATUS.IN_TRANSIT,
-      createdAt: '2026-03-30T07:00:00Z',
-      pickupLat: 41.1235,
-      pickupLng: -8.612,
-      destLat: 41.128,
-      destLng: -8.605,
-      storeId: 'CT-GAIA',
-      costEuro: 6.5,
-      etaMinutes: 35,
-      resources: 'Mota térmica, caixa isotérmica S',
-      courierId: 'ST-1',
-      rejectionReason: null,
-      infoRequestMessage: null,
-    },
-    {
-      id: 'GE-24097',
-      clientId: 'CU-1',
-      clientName: 'Maria Silva',
-      clientEmail: 'maria.s@mail.pt',
-      city: 'Porto',
-      zone: 'Porto Centro',
-      type: 'SCHEDULED',
-      priority: 1,
-      status: ORDER_STATUS.INFO_REQUESTED,
-      createdAt: '2026-03-29T18:00:00Z',
-      pickupLat: 41.162,
-      pickupLng: -8.645,
-      destLat: 41.15,
-      destLng: -8.63,
-      storeId: null,
-      costEuro: null,
-      etaMinutes: null,
-      resources: null,
-      courierId: null,
-      rejectionReason: null,
-      infoRequestMessage: 'Indique janela horária exata para entrega.',
-    },
-    {
-      id: 'GE-24096',
-      clientId: 'CU-2',
-      clientName: 'João Costa',
-      clientEmail: 'jcosta@mail.pt',
-      city: 'Maia',
-      zone: 'Maia',
-      type: 'B2B',
-      priority: 4,
-      status: ORDER_STATUS.REJECTED,
-      createdAt: '2026-03-28T10:00:00Z',
-      pickupLat: 41.162,
-      pickupLng: -8.645,
-      destLat: 41.25,
-      destLng: -8.62,
-      storeId: null,
-      costEuro: null,
-      etaMinutes: null,
-      resources: null,
-      courierId: null,
-      rejectionReason: 'Zona fora da cobertura atual.',
-      infoRequestMessage: null,
-    },
-    {
-      id: 'GE-24101',
-      clientId: 'CU-3',
-      clientName: 'Ana Ribeiro',
-      clientEmail: 'ana.r@mail.pt',
-      city: 'Gaia',
-      zone: 'Vila Nova de Gaia',
-      type: 'STANDARD',
-      priority: 3,
-      status: ORDER_STATUS.ASSIGNED,
-      createdAt: '2026-03-30T11:00:00Z',
-      pickupLat: 41.1235,
-      pickupLng: -8.612,
-      destLat: 41.135,
-      destLng: -8.608,
-      storeId: 'CT-GAIA',
-      costEuro: 5.9,
-      etaMinutes: 40,
-      resources: 'Mota',
-      courierId: 'ST-2',
-      rejectionReason: null,
-      infoRequestMessage: null,
-    },
-  ];
-
-  logistics.orders.forEach((o) => {
-    if (o.priority === 5 && o.status === ORDER_STATUS.PENDING) {
-      pushUrgentAlert(`Pedido ${o.id} com prioridade 5 (Urgente) — requer ação imediata.`);
-    }
-  });
-
-  logistics.packSales = [
-    { name: 'GoGummies Original 30u', sku: 'GG-ORG-30', units: 842 },
-    { name: 'GoGummies Boost 30u', sku: 'GG-BST-30', units: 510 },
-    { name: 'GoGummies Night 30u', sku: 'GG-NGT-30', units: 388 },
-  ];
-
-  logistics.deliveriesByZone = [];
-  logistics.hourlyVolume = Array(24).fill(0);
-  syncOperationalAggregatesFromOrders();
-
-  logistics.recentReviews = [
-    { client: 'Maria Silva', rating: 5, text: 'Entrega rápida e embalagem impecável.', at: '2026-03-30T10:00:00Z' },
-    { client: 'João Costa', rating: 4, text: 'Bom serviço; estafeta educado.', at: '2026-03-29T18:20:00Z' },
-    { client: 'Ana Ribeiro', rating: 5, text: 'GoGummies chegou fresquinho.', at: '2026-03-29T14:00:00Z' },
-  ];
-
-  logistics.products = [
-    {
-      name: 'GoGummies Original',
-      sku: 'GG-ORG-30',
-      brand: 'GoGummies',
-      description: '30 gomas proteicas sabor frutos vermelhos; fórmula diária equilibrada.',
-      ean: '5601234567891',
-      stock: 1240,
-      lowStockThreshold: 150,
-      price: 14.99,
-      active: true,
-      category: 'Gomas',
-      imageUrl: 'media/gogummies/product-detail.png',
-    },
-    {
-      name: 'GoGummies Boost',
-      sku: 'GG-BST-30',
-      brand: 'GoGummies',
-      description: 'Energia e foco — cafeína natural e vitaminas B.',
-      ean: '5601234567892',
-      stock: 560,
-      lowStockThreshold: 120,
-      price: 16.99,
-      active: true,
-      category: 'Gomas',
-      imageUrl: 'media/gogummies/hero-gym.png',
-    },
-    {
-      name: 'GoGummies Night',
-      sku: 'GG-NGT-30',
-      brand: 'GoGummies',
-      description: 'Melatonina + magnésio para rotina de descanso.',
-      ean: '5601234567893',
-      stock: 0,
-      lowStockThreshold: 80,
-      price: 15.49,
-      active: false,
-      category: 'Gomas',
-      imageUrl: 'media/gogummies/hero-jar.png',
-    },
-  ];
-
-  logAct('Dados de demonstração carregados.');
 }
 
 /** Atualiza agregados demo (zonas, histograma horário) a partir dos pedidos — alinha dashboard/relatórios com a lista real. */
@@ -459,6 +186,18 @@ export function getCustomerById(id) {
   return logistics.customers.find((c) => c.id === id) || null;
 }
 
+function upsertOrder(order) {
+  const idx = logistics.orders.findIndex((o) => o.id === order.id);
+  if (idx >= 0) logistics.orders[idx] = { ...logistics.orders[idx], ...order };
+  else logistics.orders.unshift(order);
+}
+
+function upsertCourier(courier) {
+  const idx = logistics.couriers.findIndex((c) => c.id === courier.id);
+  if (idx >= 0) logistics.couriers[idx] = { ...logistics.couriers[idx], ...courier };
+  else logistics.couriers.unshift(courier);
+}
+
 function refreshAggregatesForCustomerId(clientId) {
   const c = logistics.customers.find((x) => x.id === clientId);
   if (!c) return;
@@ -485,208 +224,159 @@ export function refreshCustomerAggregatesFromOrders(options = {}) {
   return { ok: true };
 }
 
-export function addCustomer(payload) {
+export async function addCustomer(payload) {
   const name = (payload.name || '').trim();
   const email = (payload.email || '').trim().toLowerCase();
-  if (!name || !email) return { ok: false, error: 'Nome e email obrigatórios' };
-  if (logistics.customers.some((c) => c.email.toLowerCase() === email)) {
-    return { ok: false, error: 'Email já registado' };
+  if (!name || !email) return { ok: false, error: 'Nome e email obrigatórios.' };
+  try {
+    const created = await withBusy(() => boCreateCustomer(payload));
+    if (!created) return { ok: false, error: 'Falha ao criar cliente.' };
+    logistics.customers.unshift(created);
+    logAct(`Cliente ${created.name || name} criado no painel.`);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao criar cliente.' };
   }
-  const id = uid('CU');
-  logistics.customers.push({
-    id,
-    name,
-    email,
-    phone: (payload.phone || '').trim(),
-    nif: (payload.nif || '').trim(),
-    city: (payload.city || '').trim() || '—',
-    zone: (payload.zone || '').trim() || 'Outro',
-    ordersCount: 0,
-    totalSpent: 0,
-    lastOrderAt: new Date().toISOString(),
-    avgRating: Math.min(5, Math.max(0, Number(payload.avgRating) || 0)),
-    marketingOptIn: !!payload.marketingOptIn,
-    notes: (payload.notes || '').trim(),
-  });
-  logAct(`Cliente ${name} criado no painel.`);
-  return { ok: true };
 }
 
-export function updateCustomer(id, patch) {
+export async function updateCustomer(id, patch) {
   const c = getCustomerById(id);
-  if (!c) return { ok: false, error: 'Cliente não encontrado' };
-  if (patch.email != null) {
-    const newEmail = String(patch.email).trim().toLowerCase();
-    if (logistics.customers.some((x) => x.id !== id && x.email.toLowerCase() === newEmail)) {
-      return { ok: false, error: 'Email já usado por outro cliente' };
-    }
-    c.email = newEmail;
+  if (!c) return { ok: false, error: 'Cliente não encontrado.' };
+  try {
+    const updated = await withBusy(() => boUpdateCustomer(id, patch));
+    if (!updated) return { ok: false, error: 'Falha ao atualizar cliente.' };
+    Object.assign(c, updated);
+    logAct(`Cliente ${c.name} atualizado.`);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao atualizar cliente.' };
   }
-  if (patch.name != null) c.name = String(patch.name).trim() || c.name;
-  if (patch.phone != null) c.phone = String(patch.phone).trim();
-  if (patch.city != null) c.city = String(patch.city).trim() || c.city;
-  if (patch.zone != null) c.zone = String(patch.zone).trim() || c.zone;
-  if (patch.avgRating != null) c.avgRating = Math.min(5, Math.max(0, Number(patch.avgRating) || 0));
-  if (patch.nif != null) c.nif = String(patch.nif).trim();
-  if (patch.marketingOptIn != null) c.marketingOptIn = !!patch.marketingOptIn;
-  if (patch.notes != null) c.notes = String(patch.notes).trim();
-  logAct(`Cliente ${c.name} atualizado.`);
-  return { ok: true };
 }
 
-export function deleteCustomer(id) {
-  if (logistics.orders.some((o) => o.clientId === id)) {
-    return { ok: false, error: 'Existem pedidos associados — não é possível eliminar.' };
-  }
+export async function deleteCustomer(id) {
   const i = logistics.customers.findIndex((c) => c.id === id);
-  if (i < 0) return { ok: false, error: 'Cliente não encontrado' };
-  const name = logistics.customers[i].name;
-  logistics.customers.splice(i, 1);
-  logAct(`Cliente ${name} eliminado.`);
-  return { ok: true };
+  if (i < 0) return { ok: false, error: 'Cliente não encontrado.' };
+  try {
+    await withBusy(() => boDeleteCustomer(id));
+    const name = logistics.customers[i].name;
+    logistics.customers.splice(i, 1);
+    logAct(`Cliente ${name} eliminado.`);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao eliminar cliente.' };
+  }
 }
 
 /** RF16 */
-export function approveOrder(orderId, { storeId, costEuro, etaMinutes, resources }) {
-  const o = getOrderById(orderId);
-  if (!o) return { ok: false, error: 'Pedido não encontrado' };
-  if (o.status !== ORDER_STATUS.PENDING && o.status !== ORDER_STATUS.INFO_REQUESTED) {
-    return { ok: false, error: 'Estado não permite aprovação' };
+export async function approveOrder(orderId, { storeId, costEuro, etaMinutes, resources }) {
+  try {
+    const order = await withBusy(() =>
+      boOrderAction(orderId, 'approve', { storeId, costEuro, etaMinutes, resources })
+    );
+    upsertOrder(order);
+    logAct(`Pedido ${orderId} aprovado (loja ${storeId}).`);
+    syncOperationalAggregatesFromOrders();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao aprovar pedido.' };
   }
-  o.storeId = storeId;
-  const st = getStoreById(storeId);
-  if (st) {
-    o.pickupLat = st.lat;
-    o.pickupLng = st.lng;
-  }
-  o.costEuro = Number(costEuro);
-  o.etaMinutes = Number(etaMinutes);
-  o.resources = resources;
-  o.status = ORDER_STATUS.APPROVED;
-  logAct(`Pedido ${orderId} aprovado (loja ${storeId}).`);
-  syncOperationalAggregatesFromOrders();
-  return { ok: true };
 }
 
 /** RF17 */
-export function rejectOrder(orderId, justification) {
+export async function rejectOrder(orderId, justification) {
   const j = (justification || '').trim();
-  if (!j) return { ok: false, error: 'Justificação obrigatória' };
-  const o = getOrderById(orderId);
-  if (!o) return { ok: false, error: 'Pedido não encontrado' };
-  o.status = ORDER_STATUS.REJECTED;
-  o.rejectionReason = j;
-  o.courierId = null;
-  sendClientEmail({
-    to: o.clientEmail,
-    subject: `Pedido ${o.id} — atualização`,
-    body: `O teu pedido foi rejeitado.\n\nMotivo: ${j}\n\nEquipa GoEverywhere`,
-    orderId,
-    kind: 'rejeição',
-  });
-  logAct(`Pedido ${orderId} rejeitado.`);
-  syncOperationalAggregatesFromOrders();
-  return { ok: true };
+  if (!j) return { ok: false, error: 'Justificação obrigatória.' };
+  try {
+    const order = await withBusy(() => boOrderAction(orderId, 'reject', { justification: j }));
+    upsertOrder(order);
+    sendClientEmail({
+      to: order.clientEmail,
+      subject: `Pedido ${order.id} — atualização`,
+      body: `O teu pedido foi rejeitado.\n\nMotivo: ${j}\n\nEquipa GoEverywhere`,
+      orderId,
+      kind: 'rejeição',
+    });
+    logAct(`Pedido ${orderId} rejeitado.`);
+    syncOperationalAggregatesFromOrders();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao rejeitar pedido.' };
+  }
 }
 
 /** RF18 */
-export function requestOrderInfo(orderId, message) {
+export async function requestOrderInfo(orderId, message) {
   const m = (message || '').trim();
-  if (!m) return { ok: false, error: 'Mensagem obrigatória' };
-  const o = getOrderById(orderId);
-  if (!o) return { ok: false, error: 'Pedido não encontrado' };
-  o.status = ORDER_STATUS.INFO_REQUESTED;
-  o.infoRequestMessage = m;
-  sendClientEmail({
-    to: o.clientEmail,
-    subject: `Pedido ${o.id} — precisamos de mais informações`,
-    body: `${m}\n\nResponde via app ou email.\nGoEverywhere`,
-    orderId,
-    kind: 'info_adicional',
-  });
-  logAct(`Pedido ${orderId}: pedido de informação ao cliente.`);
-  syncOperationalAggregatesFromOrders();
-  return { ok: true };
+  if (!m) return { ok: false, error: 'Mensagem obrigatória.' };
+  try {
+    const order = await withBusy(() => boOrderAction(orderId, 'request-info', { message: m }));
+    upsertOrder(order);
+    sendClientEmail({
+      to: order.clientEmail,
+      subject: `Pedido ${order.id} — precisamos de mais informações`,
+      body: `${m}\n\nResponde via app ou email.\nGoEverywhere`,
+      orderId,
+      kind: 'info_adicional',
+    });
+    logAct(`Pedido ${orderId}: pedido de informação ao cliente.`);
+    syncOperationalAggregatesFromOrders();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao pedir informação.' };
+  }
 }
 
 /** RF19 */
-export function assignCourierToOrder(orderId, courierId) {
-  const o = getOrderById(orderId);
-  const c = getCourierById(courierId);
-  if (!o || !c) return { ok: false, error: 'Dados inválidos' };
-  if (o.status !== ORDER_STATUS.APPROVED && o.status !== ORDER_STATUS.ASSIGNED) {
-    return { ok: false, error: 'Aprove o pedido antes de atribuir estafeta' };
+export async function assignCourierToOrder(orderId, courierId) {
+  try {
+    const order = await withBusy(() => boOrderAction(orderId, 'assign-courier', { courierId }));
+    upsertOrder(order);
+    logAct(`Pedido ${orderId} atribuído a ${courierId}.`);
+    syncOperationalAggregatesFromOrders();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao atribuir estafeta.' };
   }
-  if (c.state !== COURIER_STATE.E06 || !c.online) {
-    return { ok: false, error: 'Estafeta tem de estar Online (E-06) e disponível' };
-  }
-  if (!c.zones.includes(o.zone)) {
-    return { ok: false, error: 'Estafeta não cobre a zona do pedido' };
-  }
-  const active = logistics.orders.filter(
-    (x) => x.courierId === courierId && [ORDER_STATUS.ASSIGNED, ORDER_STATUS.IN_TRANSIT].includes(x.status)
-  ).length;
-  if (active >= c.maxConcurrent) {
-    return { ok: false, error: 'Limite de entregas simultâneas atingido' };
-  }
-  if (o.courierId && o.courierId !== courierId) {
-    const prev = getCourierById(o.courierId);
-    if (prev && prev.currentOrderId === orderId) {
-      prev.currentOrderId = null;
-      prev.etaMinutes = null;
-    }
-  }
-  o.courierId = courierId;
-  o.status = ORDER_STATUS.ASSIGNED;
-  c.currentOrderId = orderId;
-  c.etaMinutes = o.etaMinutes;
-  logAct(`Pedido ${orderId} atribuído a ${c.name}.`);
-  syncOperationalAggregatesFromOrders();
-  return { ok: true };
 }
 
 /** RF20 */
-export function setOrderPriority(orderId, priority) {
+export async function setOrderPriority(orderId, priority) {
   const p = Number(priority);
-  if (p < 1 || p > 5) return { ok: false, error: 'Prioridade 1–5' };
-  const o = getOrderById(orderId);
-  if (!o) return { ok: false, error: 'Pedido não encontrado' };
-  o.priority = p;
-  if (p === 5) {
-    pushUrgentAlert(`ALERTA: Pedido ${orderId} definido como prioridade 5 (Urgente).`);
+  if (p < 1 || p > 5) return { ok: false, error: 'Prioridade 1–5.' };
+  try {
+    const order = await withBusy(() => boOrderAction(orderId, 'priority', { priority: p }));
+    upsertOrder(order);
+    if (p === 5) pushUrgentAlert(`ALERTA: Pedido ${orderId} definido como prioridade 5 (Urgente).`);
+    logAct(`Pedido ${orderId}: prioridade ${p}.`);
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao alterar prioridade.' };
   }
-  logAct(`Pedido ${orderId}: prioridade ${p}.`);
-  return { ok: true };
 }
 
-export function startTransit(orderId) {
-  const o = getOrderById(orderId);
-  if (!o || o.status !== ORDER_STATUS.ASSIGNED) return { ok: false };
-  o.status = ORDER_STATUS.IN_TRANSIT;
-  logAct(`Pedido ${orderId} em trânsito.`);
-  syncOperationalAggregatesFromOrders();
-  return { ok: true };
+export async function startTransit(orderId) {
+  try {
+    const order = await withBusy(() => boOrderAction(orderId, 'start-transit'));
+    upsertOrder(order);
+    logAct(`Pedido ${orderId} em trânsito.`);
+    syncOperationalAggregatesFromOrders();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao iniciar trânsito.' };
+  }
 }
 
-export function completeDelivery(orderId) {
-  const o = getOrderById(orderId);
-  if (!o || o.status !== ORDER_STATUS.IN_TRANSIT) {
-    return { ok: false, error: 'Apenas pedidos em trânsito podem ser marcados como entregues.' };
+export async function completeDelivery(orderId) {
+  try {
+    const order = await withBusy(() => boOrderAction(orderId, 'complete'));
+    upsertOrder(order);
+    logAct(`Pedido ${orderId} entregue.`);
+    refreshAggregatesForCustomerId(order.clientId);
+    syncOperationalAggregatesFromOrders();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao concluir entrega.' };
   }
-  o.status = ORDER_STATUS.DELIVERED;
-  const c = o.courierId ? getCourierById(o.courierId) : null;
-  if (c && c.currentOrderId === orderId) {
-    c.currentOrderId = null;
-    c.etaMinutes = null;
-  }
-  if (c && o.destLat != null && o.destLng != null) {
-    c.lat = o.destLat;
-    c.lng = o.destLng;
-  }
-  logAct(`Pedido ${orderId} entregue.`);
-  refreshAggregatesForCustomerId(o.clientId);
-  syncOperationalAggregatesFromOrders();
-  return { ok: true };
 }
 
 export function addProduct({ name, sku, stock, price, category, imageUrl, brand, description, ean, lowStockThreshold }) {
@@ -767,45 +457,9 @@ export function availableCouriersForOrder(orderId) {
 }
 
 /** RF21 */
-export function registerCourier(payload) {
-  const c = {
-    id: uid('ST'),
-    name: payload.name,
-    email: payload.email,
-    phone: (payload.phone || '').trim(),
-    nif: payload.nif || '',
-    cc: payload.cc || '',
-    birthDate: payload.birthDate || '',
-    address: payload.address || '',
-    iban: payload.iban || '',
-    adminNotes: '',
-    state: COURIER_STATE.E01,
-    online: false,
-    maxConcurrent: Math.max(1, Number(payload.maxConcurrent) || 2),
-    zones: payload.zones || [],
-    vehicle: {
-      type: payload.vehicleType || '',
-      brand: payload.brand || '',
-      model: payload.model || '',
-      color: (payload.vehicleColor || '').trim(),
-      plate: payload.plate || '',
-      licenseNumber: payload.licenseNumber || '',
-      insuranceRef: payload.insuranceRef || '',
-      inspectionValidUntil: payload.inspectionValidUntil || '',
-    },
-    docs: {
-      idDoc: !!payload.docId,
-      license: !!payload.docLicense,
-      insurance: !!payload.docInsurance,
-      inspection: !!payload.docInspection,
-    },
-    lat: 41.15 + (Math.random() - 0.5) * 0.04,
-    lng: -8.63 + (Math.random() - 0.5) * 0.06,
-    stats: { deliveries: 0, rating: 0, onTimePct: 0 },
-    currentOrderId: null,
-    etaMinutes: null,
-  };
-  logistics.couriers.push(c);
+export async function registerCourier(payload) {
+  const c = await withBusy(() => boCreateCourier(payload));
+  upsertCourier(c);
   logAct(`Novo estafeta ${c.name} — Pendente Verificação.`);
   return c;
 }
@@ -819,45 +473,45 @@ export function canEditCourierData(c) {
 }
 
 /** RF22 */
-export function updateCourierVerified(courierId, patch) {
+export async function updateCourierVerified(courierId, patch) {
   const c = getCourierById(courierId);
-  if (!c) return { ok: false, error: 'Não encontrado' };
-  if (!canEditCourier(c)) return { ok: false, error: 'Edição apenas após verificação (E-02+) ou estados operacionais' };
-  Object.assign(c, {
-    name: patch.name ?? c.name,
-    email: patch.email ?? c.email,
-    phone: patch.phone !== undefined ? String(patch.phone).trim() : c.phone,
-    nif: patch.nif ?? c.nif,
-    cc: patch.cc ?? c.cc,
-    birthDate: patch.birthDate ?? c.birthDate,
-    address: patch.address ?? c.address,
-    iban: patch.iban ?? c.iban,
-    adminNotes: patch.adminNotes !== undefined ? String(patch.adminNotes).trim() : c.adminNotes,
-    maxConcurrent: patch.maxConcurrent != null ? Math.max(1, Number(patch.maxConcurrent)) : c.maxConcurrent,
-    zones: patch.zones ?? c.zones,
-  });
-  if (patch.vehicle) Object.assign(c.vehicle, patch.vehicle);
-  if (patch.docs) Object.assign(c.docs, patch.docs);
+  if (!c) return { ok: false, error: 'Não encontrado.' };
+  if (!canEditCourier(c)) return { ok: false, error: 'Edição apenas após verificação (E-02+) ou estados operacionais.' };
+  try {
+    const updated = await withBusy(() => boUpdateCourier(courierId, patch));
+    upsertCourier(updated);
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao atualizar estafeta.' };
+  }
   logAct(`Estafeta ${c.name} atualizado.`);
   return { ok: true };
 }
 
 /** RF23 */
-export function verifyCourier(courierId) {
+export async function verifyCourier(courierId) {
   const c = getCourierById(courierId);
   if (!c || c.state !== COURIER_STATE.E01) return { ok: false };
-  c.state = COURIER_STATE.E02;
-  c.online = false;
+  try {
+    const updated = await withBusy(() => boCourierAction(courierId, { action: 'verify' }));
+    upsertCourier(updated);
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao verificar estafeta.' };
+  }
   logAct(`Estafeta ${c.name} verificado (E-02). Pode ficar online para receber pedidos.`);
   return { ok: true };
 }
 
-export function rejectCourier(courierId, reason) {
+export async function rejectCourier(courierId, reason) {
   const r = (reason || '').trim();
-  if (!r) return { ok: false, error: 'Motivo obrigatório' };
+  if (!r) return { ok: false, error: 'Motivo obrigatório.' };
   const c = getCourierById(courierId);
   if (!c) return { ok: false };
-  c.state = COURIER_STATE.E03;
+  try {
+    const updated = await withBusy(() => boCourierAction(courierId, { action: 'reject', reason: r }));
+    upsertCourier(updated);
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao rejeitar estafeta.' };
+  }
   sendClientEmail({
     to: c.email,
     subject: 'Registo estafeta — documentos',
@@ -869,11 +523,16 @@ export function rejectCourier(courierId, reason) {
   return { ok: true };
 }
 
-export function requestCourierInfo(courierId, message) {
+export async function requestCourierInfo(courierId, message) {
   const m = (message || '').trim();
-  if (!m) return { ok: false, error: 'Mensagem obrigatória' };
+  if (!m) return { ok: false, error: 'Mensagem obrigatória.' };
   const c = getCourierById(courierId);
   if (!c) return { ok: false };
+  try {
+    await withBusy(() => boCourierAction(courierId, { action: 'request_info', message: m }));
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao pedir informação.' };
+  }
   sendClientEmail({
     to: c.email,
     subject: 'Informação em falta — registo estafeta',
@@ -885,52 +544,55 @@ export function requestCourierInfo(courierId, message) {
   return { ok: true };
 }
 
-export function suspendCourier(courierId) {
+export async function suspendCourier(courierId) {
   const c = getCourierById(courierId);
   if (!c) return { ok: false };
-  c.state = COURIER_STATE.E04;
-  c.online = false;
+  try {
+    const updated = await withBusy(() => boCourierAction(courierId, { action: 'suspend' }));
+    upsertCourier(updated);
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao suspender estafeta.' };
+  }
   logAct(`Estafeta ${c.name} suspenso.`);
   return { ok: true };
 }
 
-export function reactivateCourier(courierId) {
+export async function reactivateCourier(courierId) {
   const c = getCourierById(courierId);
   if (!c) return { ok: false };
-  if (c.state === COURIER_STATE.E03) c.state = COURIER_STATE.E01;
-  else if (c.state === COURIER_STATE.E04) {
-    c.state = COURIER_STATE.E05;
-    c.online = false;
+  try {
+    const updated = await withBusy(() => boCourierAction(courierId, { action: 'reactivate' }));
+    upsertCourier(updated);
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao reativar estafeta.' };
   }
   logAct(`Estafeta ${c.name} reativado.`);
   return { ok: true };
 }
 
 /** RF24 — E-02/E-05 offline, E-06 online disponível */
-export function setCourierOnline(courierId, online) {
+export async function setCourierOnline(courierId, online) {
   const c = getCourierById(courierId);
-  if (!c) return { ok: false, error: 'Não encontrado' };
-  if (online) {
-    if ([COURIER_STATE.E01, COURIER_STATE.E03, COURIER_STATE.E04].includes(c.state)) {
-      return { ok: false, error: 'Estado não permite ficar online' };
-    }
-    if (![COURIER_STATE.E02, COURIER_STATE.E05, COURIER_STATE.E06].includes(c.state)) {
-      return { ok: false, error: 'Estado inválido' };
-    }
-    c.online = true;
-    c.state = COURIER_STATE.E06;
-  } else {
-    c.online = false;
-    if (c.state === COURIER_STATE.E06) c.state = COURIER_STATE.E05;
+  if (!c) return { ok: false, error: 'Não encontrado.' };
+  try {
+    const updated = await withBusy(() => boCourierAction(courierId, { action: 'toggle_online', online: !!online }));
+    upsertCourier(updated);
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao alterar estado online.' };
   }
   logAct(`Estafeta ${c.name}: ${online ? 'Online (E-06)' : 'Offline (E-05)'}.`);
   return { ok: true };
 }
 
-export function setCourierMaxConcurrent(courierId, n) {
+export async function setCourierMaxConcurrent(courierId, n) {
   const c = getCourierById(courierId);
   if (!c) return { ok: false };
-  c.maxConcurrent = Math.max(1, Math.min(10, Number(n) || 1));
+  try {
+    const updated = await withBusy(() => boCourierAction(courierId, { action: 'set_max', maxConcurrent: n }));
+    upsertCourier(updated);
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao atualizar limite simultâneo.' };
+  }
   return { ok: true };
 }
 
@@ -1101,5 +763,4 @@ export function exportFullReportCsv() {
 
 export { ORDER_STATUS, orderStatusLabels, ts };
 
-seed();
-refreshCustomerAggregatesFromOrders({ silent: true });
+void initLogistics();

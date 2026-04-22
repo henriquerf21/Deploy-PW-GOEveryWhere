@@ -84,6 +84,22 @@
     "phone": {
       "type": "string"
     },
+    "city": {
+      "type": "string"
+    },
+    "zone": {
+      "type": "string"
+    },
+    "nif": {
+      "type": "string"
+    },
+    "notes": {
+      "type": "text"
+    },
+    "marketingOptIn": {
+      "type": "boolean",
+      "default": false
+    },
     "initials": {
       "type": "string"
     },
