@@ -100,6 +100,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { ShieldCheck, Mail, ArrowRight, Lock } from 'lucide-vue-next';
 import { setBoSession } from '../auth/session.js';
 import { loadGoogleScript, parseGoogleJwt } from '../utils/googleAuth.js';
+import { boLoginEmail, boLoginGoogle } from '../api/backofficeApi.js';
 import { toast } from '../utils/notify.js';
 
 const router = useRouter();
@@ -121,50 +122,60 @@ function goDash() {
   router.push(typeof redirect === 'string' && redirect.startsWith('/') ? redirect : '/dashboard');
 }
 
-function loginGoogleDemo() {
-  setBoSession({
-    method: 'google',
-    email: 'admin.demo@googleusercontent.com',
-    name: 'Admin (Google demo)',
-    picture: '',
-  });
-  toast('Sessão Google (demonstração sem cliente OAuth).', 'success');
-  goDash();
+async function loginGoogleDemo() {
+  try {
+    const data = await boLoginGoogle({
+      email: 'admin.demo@googleusercontent.com',
+      name: 'Admin (Google demo)',
+      picture: '',
+    });
+    setBoSession({ ...data.user, jwt: data.jwt });
+    toast('Sessão Google ativa.', 'success');
+    goDash();
+  } catch (err) {
+    toast(err.message || 'Falha no login Google.', 'error');
+  }
 }
 
 function onRecoverAccess() {
   toast('Recuperação de password: em produção liga ao serviço de identidade. Contacta o administrador da plataforma.', 'success');
 }
 
-function onSubmit() {
+async function onSubmit() {
   if (!password.value.trim()) {
     toast('Password obrigatória.', 'error');
     return;
   }
-  const local = email.value.split('@')[0].replace(/[._]/g, ' ');
-  setBoSession({
-    method: 'email',
-    email: email.value,
-    name: local ? local.replace(/\b\w/g, (c) => c.toUpperCase()) : 'Administrador',
-  });
-  toast('Sessão com email/password.', 'success');
-  goDash();
+  try {
+    const data = await boLoginEmail(email.value, password.value);
+    setBoSession({ ...data.user, jwt: data.jwt });
+    toast('Sessão com email/password.', 'success');
+    goDash();
+  } catch (err) {
+    toast(err.message || 'Falha no login.', 'error');
+  }
 }
 
-function handleGoogleCredential(response) {
+async function handleGoogleCredential(response) {
   const p = parseGoogleJwt(response.credential);
   if (!p?.email) {
     toast('Resposta Google inválida.', 'error');
     return;
   }
-  setBoSession({
-    method: 'google',
-    email: p.email,
-    name: p.name || p.email,
-    picture: p.picture || '',
-  });
-  toast('Sessão Google OAuth 2.0.', 'success');
-  goDash();
+  try {
+    const data = await boLoginGoogle({
+      email: p.email,
+      name: p.name || p.email,
+      picture: p.picture || '',
+      given_name: p.given_name || '',
+      family_name: p.family_name || '',
+    });
+    setBoSession({ ...data.user, jwt: data.jwt });
+    toast('Sessão Google OAuth 2.0.', 'success');
+    goDash();
+  } catch (err) {
+    toast(err.message || 'Falha no login Google.', 'error');
+  }
 }
 
 onMounted(async () => {

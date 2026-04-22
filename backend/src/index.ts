@@ -1,9 +1,5 @@
-// src/index.ts
-
 export default {
   register({ strapi }: { strapi: any }) {
-    console.log('🚀 A injetar lógica de foto no plugin Auth...');
-
     const authController = strapi.plugin('users-permissions').controller('auth');
     const originalCallback = authController.callback;
 
@@ -19,15 +15,11 @@ export default {
         if (accessToken) {
           try {
             const googleResponse = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${accessToken}`);
-            
-            // CORREÇÃO AQUI: Dizemos ao TS que o googleData é 'any' ou um objeto com picture
             const googleData: any = await googleResponse.json();
 
             const photoUrl = googleData.picture;
 
             if (photoUrl) {
-              console.log('📸 FOTO GOOGLE CAPTURADA DIRETAMENTE:', photoUrl);
-
               await strapi.entityService.update('plugin::users-permissions.user', userId, {
                 data: { picture: photoUrl },
               });
@@ -35,7 +27,7 @@ export default {
               ctx.response.body.user.picture = photoUrl;
             }
           } catch (error) {
-            console.error('❌ Erro ao buscar foto na Google:', error);
+            strapi.log.error('Failed to fetch Google profile picture', error);
           }
         }
       }

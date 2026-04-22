@@ -10,6 +10,46 @@
 
     <div class="row2">
       <section class="card block">
+        <h3>SLA operacional (aprox.)</h3>
+        <p class="block__sub">
+          Tempos médios desde a criação do pedido por estado atual; tempo até atribuição baseado na última atualização; backlog de
+          pendentes parados &gt; {{ sla?.stuckPendingThresholdMinutes ?? 45 }} min por zona.
+        </p>
+        <ul class="sla-grid">
+          <li>
+            <span class="sla-k">Média em pendente</span>
+            <span class="sla-v">{{ fmtMin(sla?.avgMinutesInPending) }}</span>
+          </li>
+          <li>
+            <span class="sla-k">Média em aprovado</span>
+            <span class="sla-v">{{ fmtMin(sla?.avgMinutesInApproved) }}</span>
+          </li>
+          <li>
+            <span class="sla-k">Média em atribuído+</span>
+            <span class="sla-v">{{ fmtMin(sla?.avgMinutesInAssigned) }}</span>
+          </li>
+          <li>
+            <span class="sla-k">Média até atribuição</span>
+            <span class="sla-v">{{ fmtMin(sla?.avgMinutesUntilAssigned) }}</span>
+          </li>
+        </ul>
+      </section>
+
+      <section class="card block">
+        <h3>Backlog crítico (pendentes parados)</h3>
+        <p v-if="!slaBacklog.length" class="empty-zones">Sem pendentes acima do limiar nas últimas amostras.</p>
+        <div v-else class="area-bars">
+          <div v-for="a in slaBacklog" :key="a.zone" class="ab">
+            <span class="ab__z">{{ a.zone }}</span>
+            <div class="ab__t"><div class="ab__f ab__f--risk" :style="{ width: (a.count / maxBacklog) * 100 + '%' }" /></div>
+            <span class="ab__n">{{ a.count }}</span>
+          </div>
+        </div>
+      </section>
+    </div>
+
+    <div class="row2">
+      <section class="card block">
         <h3>Volume horário por hora de criação</h3>
         <p class="block__sub">Pedidos criados por hora (0–23), hora local do browser.</p>
         <p v-if="!hasHourlyData" class="empty-zones">Ainda não há pedidos para desenhar o histograma.</p>
@@ -99,6 +139,17 @@ import {
   ORDER_STATUS,
   orderStatusLabels,
 } from '../stores/logisticsStore.js';
+
+const sla = computed(() => logistics.slaMetrics || null);
+
+const slaBacklog = computed(() => (Array.isArray(sla.value?.backlogStuckByZone) ? sla.value.backlogStuckByZone : []));
+
+const maxBacklog = computed(() => Math.max(...slaBacklog.value.map((z) => z.count), 1));
+
+function fmtMin(v) {
+  if (v == null) return '—';
+  return `${v} min`;
+}
 
 const hasHourlyData = computed(() => logistics.hourlyVolume.some((h) => h > 0));
 
@@ -341,6 +392,42 @@ const donutStyle = computed(() => {
 
 .ab__f--store {
   background: linear-gradient(90deg, #0d9488, var(--bo-brand));
+}
+
+.ab__f--risk {
+  background: linear-gradient(90deg, #f97316, #ef4444);
+}
+
+.sla-grid {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px 16px;
+  font-size: 13px;
+}
+
+.sla-grid li {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--bo-radius-sm);
+  border: 1px solid var(--bo-border);
+  background: var(--bo-page);
+}
+
+.sla-k {
+  color: var(--bo-text-secondary);
+  font-weight: 600;
+  font-size: 12px;
+}
+
+.sla-v {
+  font-weight: 800;
+  font-size: 18px;
+  font-family: var(--bo-font-display);
 }
 
 .rev-bars {

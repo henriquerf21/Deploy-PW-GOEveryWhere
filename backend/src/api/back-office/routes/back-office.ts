@@ -1,0 +1,31 @@
+export default {
+  routes: [
+    { method: 'GET', path: '/bo/bootstrap', handler: 'back-office.bootstrap', config: { auth: false } },
+    { method: 'POST', path: '/bo/auth/login', handler: 'back-office.login', config: { auth: false } },
+    { method: 'POST', path: '/bo/auth/google', handler: 'back-office.googleLogin', config: { auth: false } },
+
+    { method: 'GET', path: '/bo/orders', handler: 'back-office.listOrders', config: { auth: false } },
+    { method: 'GET', path: '/bo/orders/:id', handler: 'back-office.getOrder', config: { auth: false } },
+    { method: 'POST', path: '/bo/orders/:id/approve', handler: 'back-office.approveOrder', config: { auth: false } },
+    { method: 'POST', path: '/bo/orders/:id/reject', handler: 'back-office.rejectOrder', config: { auth: false } },
+    { method: 'POST', path: '/bo/orders/:id/request-info', handler: 'back-office.requestOrderInfo', config: { auth: false } },
+    { method: 'POST', path: '/bo/orders/:id/assign-courier', handler: 'back-office.assignCourier', config: { auth: false } },
+    { method: 'POST', path: '/bo/orders/:id/priority', handler: 'back-office.setPriority', config: { auth: false } },
+    { method: 'POST', path: '/bo/orders/:id/start-transit', handler: 'back-office.startTransit', config: { auth: false } },
+    { method: 'POST', path: '/bo/orders/:id/complete', handler: 'back-office.completeOrder', config: { auth: false } },
+
+    { method: 'GET', path: '/bo/couriers', handler: 'back-office.listCouriers', config: { auth: false } },
+    { method: 'GET', path: '/bo/couriers/:id', handler: 'back-office.getCourier', config: { auth: false } },
+    { method: 'POST', path: '/bo/couriers', handler: 'back-office.createCourier', config: { auth: false } },
+    { method: 'PATCH', path: '/bo/couriers/:id', handler: 'back-office.updateCourier', config: { auth: false } },
+    { method: 'POST', path: '/bo/couriers/:id/action', handler: 'back-office.courierAction', config: { auth: false } },
+
+    { method: 'GET', path: '/bo/map', handler: 'back-office.operationsMap', config: { auth: false } },
+    { method: 'GET', path: '/bo/dashboard', handler: 'back-office.dashboard', config: { auth: false } },
+    { method: 'GET', path: '/bo/reports', handler: 'back-office.reports', config: { auth: false } },
+    { method: 'GET', path: '/bo/customers', handler: 'back-office.customers', config: { auth: false } },
+    { method: 'POST', path: '/bo/customers', handler: 'back-office.createCustomer', config: { auth: false } },
+    { method: 'PATCH', path: '/bo/customers/:id', handler: 'back-office.updateCustomer', config: { auth: false } },
+    { method: 'DELETE', path: '/bo/customers/:id', handler: 'back-office.deleteCustomer', config: { auth: false } },
+  ],
+};

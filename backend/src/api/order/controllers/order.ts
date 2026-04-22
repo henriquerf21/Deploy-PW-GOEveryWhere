@@ -1,11 +1,3 @@
-/**
- * order controller
- *
- * Lista encomendas só pelo utilizador JWT (sem filters[user] na query REST).
- * Evita ValidationError "Invalid key user" quando o role não tem permissão
- * de leitura na coleção User usada em filtros de relação.
- */
-
 import { factories } from '@strapi/strapi';
 
 type JwtUser = { id: number; documentId?: string };

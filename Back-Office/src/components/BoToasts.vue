@@ -60,6 +60,16 @@ import { toasts, dismissToast } from '../utils/notify.js';
   background: #eff6ff;
 }
 
+.bo-toast--loading {
+  border-color: #fde68a;
+  background: #fffbeb;
+}
+
+.bo-toast--warn {
+  border-color: #fcd34d;
+  background: #fffbeb;
+}
+
 .bo-toast__x {
   border: none;
   background: transparent;

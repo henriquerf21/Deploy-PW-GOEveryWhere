@@ -4,10 +4,10 @@ export const toasts = ref([]);
 
 let _id = 0;
 
-export function toast(message, type = 'info') {
+export function toast(message, type = 'info', durationMs = 5000) {
   const id = ++_id;
   toasts.value = [...toasts.value, { id, message, type }];
-  setTimeout(() => dismissToast(id), 5000);
+  if (durationMs > 0) setTimeout(() => dismissToast(id), durationMs);
 }
 
 export function dismissToast(id) {
