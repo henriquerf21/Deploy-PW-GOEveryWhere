@@ -109,6 +109,16 @@
                 <span class="pay-method-label">Apple&nbsp;Pay</span>
               </button>
 
+              <button type="button" class="pay-method" :class="{ active: store.payment.method === 'googlepay' }" @click="setMethod('googlepay')">
+                <svg class="pay-logo pay-logo--googlepay" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                  <path fill="#4285F4" d="M17.64 12.2c0-.63-.06-1.25-.16-1.84H12v3.49h3.19c-.14.72-.54 1.35-1.15 1.76v2.46h1.87c1.08-1 1.73-2.46 1.73-4.87z"/>
+                  <path fill="#34A853" d="M12 18c1.62 0 2.98-.54 3.97-1.46l-1.87-2.46c-.5.35-1.15.55-2.1.55-1.61 0-2.98-1.09-3.47-2.55H6.55v2.55C7.54 16.63 9.61 18 12 18z"/>
+                  <path fill="#FBBC05" d="M8.53 12.09c-.12-.37-.19-.77-.19-1.19s.07-.82.19-1.19V7.16H6.55c-.41.83-.64 1.77-.64 2.74s.23 1.91.64 2.74l1.98-2.55z"/>
+                  <path fill="#EA4335" d="M12 5.92c.88 0 1.67.3 2.3.9l1.72-1.72C14.98 4.09 13.62 3.5 12 3.5c-2.39 0-4.46 1.37-5.45 3.66l1.98 2.55c.49-1.46 1.86-2.55 3.47-2.55z"/>
+                </svg>
+                <span class="pay-method-label">Google Pay</span>
+              </button>
+
               <button type="button" class="pay-method" :class="{ active: store.payment.method === 'card' }" @click="setMethod('card')">
                 <span class="pay-logo pay-logo--cards" aria-hidden="true">
                   <svg class="pay-logo__visa" viewBox="0 0 24 24"><path fill="#1A1F71" d="M9.112 8.262L5.97 15.758H3.92L2.374 9.775c-.094-.368-.175-.503-.461-.658C1.447 8.864.677 8.627 0 8.479l.046-.217h3.3a.904.904 0 01.894.764l.817 4.338 2.018-5.102zm8.033 5.049c.008-1.979-2.736-2.088-2.717-2.972.006-.269.262-.555.822-.628a3.66 3.66 0 011.913.336l.34-1.59a5.207 5.207 0 00-1.814-.333c-1.917 0-3.266 1.02-3.278 2.479-.012 1.079.963 1.68 1.698 2.04.756.367 1.01.603 1.006.931-.005.504-.602.725-1.16.734-.975.015-1.54-.263-1.992-.473l-.351 1.642c.453.208 1.289.39 2.156.398 2.037 0 3.37-1.006 3.377-2.564m5.061 2.447H24l-1.565-7.496h-1.656a.883.883 0 00-.826.55l-2.909 6.946h2.036l.405-1.12h2.488zm-2.163-2.656l1.02-2.815.588 2.815zm-8.16-4.84l-1.603 7.496H8.34l1.605-7.496z"/></svg>
@@ -121,13 +131,65 @@
             <div v-if="store.payment.method === 'mbway'" class="payment-fields">
               <div class="cf-field">
                 <label class="cf-label">Telemóvel MB Way</label>
-                <input v-model="store.payment.mbwayPhone" class="cf-input" type="tel" placeholder="912 345 678" autocomplete="tel" />
+                <input 
+                  :value="store.payment.mbwayPhone" 
+                  @input="handlePhoneInput"
+                  @keypress="onlyNumbers"
+                  class="cf-input" 
+                  type="tel" 
+                  inputmode="numeric" 
+                  placeholder="912 345 678" 
+                  maxlength="9" 
+                />
               </div>
             </div>
 
-            <div v-if="store.payment.method === 'card'" class="payment-fields card-grid">
-              <input v-model="store.payment.cardName" class="cf-input" type="text" placeholder="Nome no cartão" autocomplete="cc-name" />
-              <input v-model="store.payment.cardNumber" class="cf-input" type="text" placeholder="Número do cartão" inputmode="numeric" autocomplete="cc-number" />
+            <div v-if="store.payment.method === 'card'" class="payment-fields">
+              <div class="card-grid">
+                <div class="cf-field span-full">
+                  <label class="cf-label">Nome no cartão</label>
+                  <input v-model="store.payment.cardName" class="cf-input" type="text" placeholder="Nome impresso" autocomplete="cc-name" />
+                </div>
+                <div class="cf-field span-full">
+                  <label class="cf-label">Número do cartão</label>
+                  <input 
+                    :value="store.payment.cardNumber" 
+                    @input="handleCardNumberInput"
+                    @keypress="onlyNumbers"
+                    class="cf-input" 
+                    type="tel" 
+                    inputmode="numeric" 
+                    placeholder="0000 0000 0000 0000" 
+                    maxlength="19" 
+                  />
+                </div>
+                <div class="cf-field">
+                  <label class="cf-label">Validade (MM/AA)</label>
+                  <input 
+                    :value="store.payment.cardExpiry" 
+                    @input="handleExpiryInput"
+                    @keypress="onlyNumbers"
+                    class="cf-input" 
+                    type="tel" 
+                    inputmode="numeric"
+                    placeholder="MM/AA" 
+                    maxlength="5" 
+                  />
+                </div>
+                <div class="cf-field">
+                  <label class="cf-label">CVC</label>
+                  <input 
+                    :value="store.payment.cardCvc" 
+                    @input="handleCvcInput"
+                    @keypress="onlyNumbers"
+                    class="cf-input" 
+                    type="tel" 
+                    inputmode="numeric" 
+                    placeholder="123" 
+                    maxlength="3" 
+                  />
+                </div>
+              </div>
             </div>
 
             <p v-if="['applepay', 'googlepay'].includes(store.payment.method)" class="wallet-hint">
@@ -135,7 +197,12 @@
             </p>
           </section>
 
-          <button type="button" class="cf-btn-primary pay-submit" :disabled="processing" @click="handleConfirmOrder">
+          <button 
+            type="button" 
+            class="cf-btn-primary pay-submit" 
+            :disabled="processing || !isFormValid" 
+            @click="handleConfirmOrder"
+          >
             <Loader2 v-if="processing" class="spin" :size="18" />
             <span v-if="processing">A processar…</span>
             <span v-else>Pagar €{{ total.toFixed(2) }}</span>
@@ -163,7 +230,6 @@ import SiteFooter from '../components/SiteFooter.vue';
 import CheckoutWizardSteps from '../components/CheckoutWizardSteps.vue';
 import { User, Home, Store, Clock, Award, Loader2, CheckCircle2 } from 'lucide-vue-next';
 
-// Store
 import { 
   useOrderStore, 
   orderTotal, 
@@ -173,9 +239,10 @@ import {
   productDiscount, 
   cartProducts, 
   pointsToEarn, 
-  userPointsBalance, // Adicionado import dos pontos reais
+  userPointsBalance, 
   estimatedETA, 
   setPaymentMethod, 
+  setPaymentField,
   submitOrder,
   isCartValid, 
   isDeliveryValid 
@@ -188,7 +255,6 @@ const processing = ref(false);
 const showToast = ref(false);
 const mbwayLogoSrc = `${import.meta.env.BASE_URL}payment/mbway-logo.png`;
 
-// Bloqueio de segurança
 onMounted(() => {
   if (!isCartValid()) {
     router.replace('/order/select');
@@ -205,14 +271,68 @@ const urgentFeeVal = computed(() => urgentFee.value);
 const discountVal = computed(() => productDiscount.value);
 const total = computed(() => orderTotal.value);
 const pointsEarned = computed(() => pointsToEarn.value);
-const currentBalance = computed(() => userPointsBalance.value); // Saldo real do authStore
+const currentBalance = computed(() => userPointsBalance.value);
 const eta = computed(() => estimatedETA.value);
 
-// Ações
+// Validação de Formulário
+const isFormValid = computed(() => {
+  if (store.payment.method === 'mbway') {
+    return store.payment.mbwayPhone?.length === 9;
+  }
+  if (store.payment.method === 'card') {
+    return (
+      store.payment.cardName?.length > 2 &&
+      store.payment.cardNumber?.replace(/\s/g, '').length === 16 &&
+      store.payment.cardExpiry?.length === 5 &&
+      store.payment.cardCvc?.length === 3
+    );
+  }
+  return true;
+});
+
+// --- NOVO: Helper para bloquear teclas não numéricas ---
+function onlyNumbers(e) {
+  // Permite apenas números (0-9). 
+  // Caracteres especiais de controlo como Backspace funcionam por defeito no keypress de browsers modernos
+  if (!/[0-9]/.test(e.key)) {
+    e.preventDefault();
+  }
+}
+
+// Handlers com Máscaras e Limpeza Forçada
+function handlePhoneInput(e) {
+  const val = e.target.value.replace(/\D/g, '').slice(0, 9);
+  e.target.value = val; // Força a limpeza no elemento visual
+  setPaymentField('mbwayPhone', val);
+}
+
+function handleCardNumberInput(e) {
+  const digits = e.target.value.replace(/\D/g, '').slice(0, 16);
+  const formatted = digits.replace(/(\d{4})(?=\d)/g, '$1 ');
+  e.target.value = formatted; // Força a limpeza e formatação no elemento visual
+  setPaymentField('cardNumber', formatted);
+}
+
+function handleExpiryInput(e) {
+  let digits = e.target.value.replace(/\D/g, '').slice(0, 4);
+  let formatted = digits;
+  if (digits.length >= 3) {
+    formatted = digits.slice(0, 2) + '/' + digits.slice(2);
+  }
+  e.target.value = formatted;
+  setPaymentField('cardExpiry', formatted);
+}
+
+function handleCvcInput(e) {
+  const val = e.target.value.replace(/\D/g, '').slice(0, 3);
+  e.target.value = val;
+  setPaymentField('cardCvc', val);
+}
+
 function setMethod(m) { setPaymentMethod(m); }
 
 async function handleConfirmOrder() {
-  if (processing.value) return;
+  if (processing.value || !isFormValid.value) return;
   processing.value = true;
 
   const result = await submitOrder();
@@ -228,6 +348,7 @@ async function handleConfirmOrder() {
   }
 }
 </script>
+
 
 <style scoped>
 .page-wrapper {
@@ -248,6 +369,23 @@ async function handleConfirmOrder() {
 .summary-card,
 .details-card {
   padding: 1.5rem 1.5rem 1.75rem;
+}
+
+.card-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 0.5rem;
+}
+
+.span-full {
+  grid-column: span 2;
+}
+
+.pay-submit:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  filter: grayscale(1);
 }
 
 .summary-card {
@@ -490,14 +628,14 @@ async function handleConfirmOrder() {
 
 .pay-logo--applepay,
 .pay-logo--googlepay {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   color: var(--cf-ink);
 }
 
 .pay-method.active .pay-logo--applepay,
 .pay-method.active .pay-logo--googlepay {
-  color: var(--cf-cta-hover);
+  color: initial;
 }
 
 .pay-logo--cards {
