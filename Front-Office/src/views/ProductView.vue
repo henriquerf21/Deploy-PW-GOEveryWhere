@@ -63,7 +63,7 @@
             </router-link>
 
             <p class="shop-fine">
-              Portes grátis acima de €25 · Pagamento seguro · Acompanhas a encomenda no site
+              Pagamento seguro · Acompanhas a encomenda no site
             </p>
             <a href="#info-produto" class="shop-info-link">Saber mais sobre o produto</a>
           </div>
@@ -143,7 +143,7 @@
           <Truck :size="20" :stroke-width="1.5" class="info-delivery-ic" aria-hidden="true" />
           <p>
             <strong>Entrega GoEverywhere.</strong>
-            Encomendas na tua zona com acompanhamento no site — portes grátis em compras acima de €25.
+            Encomendas na tua zona com acompanhamento no site
           </p>
         </div>
       </div>
