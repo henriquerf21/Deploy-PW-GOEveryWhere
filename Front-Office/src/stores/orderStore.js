@@ -28,7 +28,7 @@ export const PRODUCTS = [
 
 // ── STATE ────────────────────────────────────────────────────────
 const store = reactive({
-  cart: { items: { 'frasco-1': 1, 'pack-2': 0, 'pack-3': 0 }, urgentDelivery: false },
+  cart: { items: { 'frasco-1': 0, 'pack-2': 0, 'pack-3': 0 }, urgentDelivery: false },
   delivery: {
     name: '', phone: '', address: '', postalCode: '', city: '',
     assignedStore: null, estimatedDistance: null,
@@ -50,20 +50,22 @@ const store = reactive({
 export const cartItemCount = computed(() => Object.values(store.cart.items).reduce((sum, qty) => sum + qty, 0));
 export const cartProducts = computed(() => PRODUCTS.filter(p => store.cart.items[p.id] > 0).map(p => ({ ...p, qty: store.cart.items[p.id], lineTotal: p.price * store.cart.items[p.id] })));
 export const subtotal = computed(() => PRODUCTS.reduce((sum, p) => sum + (p.price * store.cart.items[p.id]), 0));
-export const deliveryFee = computed(() => (subtotal.value >= 25 ? 0 : 2.99));
+export const deliveryFee = computed(() => 2.99);
 export const urgentFee = computed(() => store.cart.urgentDelivery ? 1.50 : 0);
-export const orderTotal = computed(() => subtotal.value + deliveryFee.value + urgentFee.value);
 export const estimatedETA = computed(() => 30);
 
-// Regra do Caderno de Encargos: 10 pontos por euro (baseado no subtotal)
 export const pointsToEarn = computed(() => Math.floor(subtotal.value * 10));
+export const userPointsBalance = computed(() => authState.user?.go_point?.points || 0);
+export const canRedeemDelivery = computed(() => userPointsBalance.value >= 500);
+export const canRedeemProduct  = computed(() => userPointsBalance.value >= 1000);
 
-// Getters Dinâmicos para os pontos do utilizador (via authStore/Strapi relation)
-export const userPointsBalance = computed(() => {
-  return authState.user?.go_point?.points || 0;
+export const goPointsDiscount = computed(() => {
+  if (store.payment.goPointsRedemption === 'product' && canRedeemProduct.value) return subtotal.value;
+  if (store.payment.goPointsRedemption === 'delivery' && canRedeemDelivery.value) return deliveryFee.value;
+  return 0;
 });
 
-export const productDiscount = computed(() => 0);
+export const orderTotal = computed(() => Math.max(0, subtotal.value + deliveryFee.value + urgentFee.value - goPointsDiscount.value));
 
 // ── ACTIONS ──────────────────────────────────────────────────────
 export function setCartQty(productId, qty) { store.cart.items[productId] = Math.max(0, qty); }
@@ -73,6 +75,10 @@ export function setPaymentMethod(method) { store.payment.method = method; }
 export function setPaymentField(field, value) { store.payment[field] = value; }
 export function toggleGoPoints() { store.payment.useGoPoints = !store.payment.useGoPoints; }
 export function assignDefaultStore() { findNearestStore(41.5518, -8.4229); }
+
+export function toggleGoPointsRedemption(type) {
+  store.payment.goPointsRedemption = store.payment.goPointsRedemption === type ? null : type;
+}
 
 export function findNearestStore(lat, lng) {
   let nearest = CONTINENTE_STORES[0];
@@ -86,7 +92,9 @@ export function findNearestStore(lat, lng) {
 }
 
 export function isCartValid() { return cartItemCount.value > 0; }
-export function isDeliveryValid() { return !!(store.delivery.name && store.delivery.address); }
+export function isDeliveryValid() {
+  return !!(store.delivery.name?.trim().length >= 3 && store.delivery.address?.trim().length >= 5 && store.delivery.postalCode && store.delivery.city);
+}
 
 export function rateOrder(orderId, rating) {
   const order = store.orderHistory.find(o => o.id === orderId);
@@ -106,7 +114,7 @@ export function reOrder(oldOrder) {
   }
 }
 
-// ── STRAPI INTEGRATION (v5) ──────────────────────────────────────
+// ── STRAPI INTEGRATION ───────────────────────────────────────────
 
 export async function refreshUserProfile() {
   if (!authState.token) return;
@@ -116,25 +124,31 @@ export async function refreshUserProfile() {
     });
     const userData = await response.json();
     if (response.ok) {
-      authState.user = { ...authState.user, ...userData };
+      const newPoints = userData?.go_point?.points;
+      const currentPoints = authState.user?.go_point?.points;
+      if (newPoints !== currentPoints) {
+        authState.user = { ...authState.user, ...userData };
+      }
     }
   } catch (error) {
-    console.error("Erro ao atualizar pontos do utilizador:", error);
+    console.error('Erro ao atualizar perfil:', error);
   }
 }
 
 export async function fetchUserOrders() {
   if (!authState.user || !authState.token) return;
-  store.loading = true;
+
+  if (store.orderHistory.length === 0) {
+    store.loading = true;
+  }
 
   try {
-    const url = `${API_URL}/orders?populate=*`;
-    const response = await fetch(url, {
+    const response = await fetch(`${API_URL}/orders?populate=*`, {
       headers: { 'Authorization': `Bearer ${authState.token}` }
     });
     const res = await response.json();
 
-    if (!response.ok) throw new Error(res.error?.message || "Erro no GET");
+    if (!response.ok) throw new Error(res.error?.message || 'Erro no GET');
 
     const allOrders = (res.data || []).map(order => {
       const attr = order.attributes || order;
@@ -152,14 +166,28 @@ export async function fetchUserOrders() {
       };
     });
 
+    // 1. Ordenação crucial: Mais recente primeiro
     allOrders.sort((a, b) => b.id - a.id);
-    store.orderHistory = allOrders;
 
+    // 2. Estados que encerram uma encomenda
     const terminalStates = ['S-04', 'S-11', 'S-12', 'S-13', 'S-14', 'S-15', 'S-16'];
-    store.activeOrder = allOrders.find(o => !terminalStates.includes(o.status)) || null;
+
+    // 3. CORREÇÃO DA LÓGICA:
+    // Olhamos APENAS para a encomenda mais recente (index 0).
+    // Se ela não for terminal, é a ativa. Caso contrário, não há nenhuma ativa.
+    if (allOrders.length > 0 && !terminalStates.includes(allOrders[0].status)) {
+      store.activeOrder = allOrders[0];
+    } else {
+      store.activeOrder = null;
+    }
+
+    // 4. Atualiza o histórico apenas se houver mudanças reais
+    if (JSON.stringify(allOrders) !== JSON.stringify(store.orderHistory)) {
+      store.orderHistory = allOrders;
+    }
 
   } catch (error) {
-    console.error("Erro ao procurar encomendas:", error);
+    console.error('Erro ao procurar encomendas:', error);
   } finally {
     store.loading = false;
   }
@@ -169,6 +197,10 @@ export async function submitOrder() {
   if (!authState.user || !authState.token) return { success: false, error: 'Não autenticado' };
 
   try {
+    const pointsUsed = store.payment.goPointsRedemption === 'product' ? 1000
+                     : store.payment.goPointsRedemption === 'delivery' ? 500
+                     : 0;
+
     const body = {
       data: {
         total_price: orderTotal.value,
@@ -176,7 +208,9 @@ export async function submitOrder() {
         store_name: store.delivery.assignedStore?.name || 'Continente Braga',
         items: cartProducts.value.map(p => ({ name: p.name, qty: p.qty })),
         is_urgent: store.cart.urgentDelivery,
-       
+        user: authState.user.id,
+        go_points_redemption: store.payment.goPointsRedemption || null,
+        go_points_used: pointsUsed,
       }
     };
 
@@ -192,26 +226,28 @@ export async function submitOrder() {
     const result = await response.json();
 
     if (response.ok) {
-      // 1. Limpar o carrinho local após o sucesso
-      Object.keys(store.cart.items).forEach(id => store.cart.items[id] = 0);
-      store.cart.urgentDelivery = false;
-
-      // 2. Atualizar histórico e perfil (pontos)
+      // Atualiza o histórico imediatamente após a compra
       await fetchUserOrders();
-      await refreshUserProfile();
-
       return { success: true };
     } else {
-      // Log detalhado para te ajudar a depurar no browser
-      console.error("Erro detalhado do Strapi:", result.error);
-      return {
-        success: false,
-        error: result.error?.message || "Erro na criação da encomenda"
-      };
+      return { success: false, error: result.error?.message || 'Erro na criação da encomenda' };
     }
   } catch (e) {
     return { success: false, error: e.message };
   }
+}
+
+export function resetCart() {
+  Object.keys(store.cart.items).forEach(id => store.cart.items[id] = 0);
+  store.cart.urgentDelivery = false;
+  store.payment = {
+    method: 'mbway',
+    mbwayPhone: '',
+    cardName: '',
+    cardNumber: '',
+    useGoPoints: false,
+    goPointsRedemption: null,
+  };
 }
 
 export function useOrderStore() { return store; }
