@@ -19,7 +19,7 @@
           <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#f57f17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/></svg>
           <div>
             <span class="gp-balance">{{ userPointsBalance }} GoPoints</span>
-            </div>
+          </div>
         </div>
         <div class="gp-tiers">
           <span class="tier" :class="{ available: userPointsBalance >= 500 }">
@@ -33,25 +33,21 @@
         </div>
       </div>
 
-      <div v-if="store.loading" class="loading-history">
+      <div v-if="store.loading && sortedOrders.length === 0" class="loading-history">
         <p>A carregar o teu histórico...</p>
       </div>
 
       <div class="orders-list" v-else-if="sortedOrders.length > 0">
-        <div
-          v-for="order in sortedOrders"
-          :key="order.id"
-          class="order-card"
-        >
-        <div class="order-top">
-        <div>
-          <h3>Encomenda #{{ order.id }}</h3> 
-          <span class="order-date">{{ order.date }}</span>
-        </div>
-        <span class="status" :class="statusClass(order.status)">
-          {{ statusLabel(order.status) }}
-        </span>
-      </div>
+        <div v-for="order in sortedOrders" :key="order.id" class="order-card">
+          <div class="order-top">
+            <div>
+              <h3>Encomenda #{{ order.id }}</h3>
+              <span class="order-date">{{ order.date }}</span>
+            </div>
+            <span class="status" :class="statusClass(order.status)">
+              {{ statusLabel(order.status) }}
+            </span>
+          </div>
           <div class="order-items">
             <span v-for="p in order.products" :key="p.name" class="order-product">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="#00c853"><circle cx="12" cy="12" r="8"/></svg>
@@ -87,76 +83,86 @@
         </div>
       </div>
 
-      <div v-else class="empty-state">
+      <div v-else-if="!store.loading" class="empty-state">
         <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#d1d5db" stroke-width="1.5"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
         <h3>Sem histórico</h3>
         <p>Ainda não tens encomendas concluídas.</p>
         <router-link to="/order/select" class="btn-new">Começar encomenda</router-link>
       </div>
     </main>
+
     <SiteFooter />
 
     <div v-if="showRatingModal" class="rating-modal-overlay">
-       <div class="rating-modal">
-          <h3>Avaliar Encomenda</h3>
-          <div class="stars">
-             <button v-for="i in 5" :key="i" @click="ratingValue = i" :class="{ active: i <= ratingValue }">★</button>
-          </div>
-          <p>{{ ratingLabels[ratingValue - 1] || 'Seleciona uma nota' }}</p>
-          <div class="modal-btns">
-             <button @click="showRatingModal = false">Cancelar</button>
-             <button @click="submitRating" :disabled="ratingValue === 0">Confirmar</button>
-          </div>
-       </div>
+      <div class="rating-modal">
+        <h3>Avaliar Encomenda</h3>
+        <div class="stars">
+          <button v-for="i in 5" :key="i" @click="ratingValue = i" :class="{ active: i <= ratingValue }">★</button>
+        </div>
+        <p>{{ ratingLabels[ratingValue - 1] || 'Seleciona uma nota' }}</p>
+        <div class="modal-btns">
+          <button @click="showRatingModal = false">Cancelar</button>
+          <button @click="submitRating" :disabled="ratingValue === 0">Confirmar</button>
+        </div>
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onUnmounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import SiteHeader from '../components/SiteHeader.vue';
 import SiteFooter from '../components/SiteFooter.vue';
-import { 
-  useOrderStore, 
-  ORDER_STATES, 
-  reOrder, 
-  rateOrder, 
+import {
+  useOrderStore,
+  ORDER_STATES,
+  reOrder,
+  rateOrder,
   fetchUserOrders,
   refreshUserProfile,
-  userPointsBalance 
+  userPointsBalance
 } from '../stores/orderStore.js';
 
 const router = useRouter();
 const store = useOrderStore();
 
-// Estados para avaliação
 const showRatingModal = ref(false);
 const ratingOrder = ref(null);
 const ratingValue = ref(0);
 const ratingLabels = ['Mau', 'Medíocre', 'Razoável', 'Bom', 'Excelente'];
 
-// ── LÓGICA DE ORDENAÇÃO E FILTRO ─────────────────────────────────
+// ── LÓGICA DE ORDENAÇÃO (APENAS UMA DECLARAÇÃO AQUI) ──
 const sortedOrders = computed(() => {
   if (!store.orderHistory) return [];
-
   const terminalStates = ['S-04', 'S-11', 'S-12', 'S-13', 'S-14', 'S-15', 'S-16'];
-
   return [...store.orderHistory]
     .filter(order => terminalStates.includes(order.status))
     .sort((a, b) => Number(b.id) - Number(a.id));
 });
 
-// ── CICLO DE VIDA ────────────────────────────────────────────────
+let refreshInterval = null;
+
 onMounted(async () => {
-  // Carrega encomendas e atualiza perfil (pontos) em simultâneo
-  await Promise.all([
-    fetchUserOrders(),
-    refreshUserProfile()
-  ]);
+  // Carrega imediatamente ao entrar
+  await Promise.all([fetchUserOrders(), refreshUserProfile()]);
+
+  // Configura o intervalo de atualização (30 segundos)
+  refreshInterval = setInterval(async () => {
+    const terminalStates = ['S-04', 'S-11', 'S-12', 'S-13', 'S-14', 'S-15', 'S-16'];
+    const hasActive = store.orderHistory.some(o => !terminalStates.includes(o.status));
+    
+    // Se houver encomendas ativas, atualiza em background
+    if (hasActive) {
+      await Promise.all([fetchUserOrders(), refreshUserProfile()]);
+    }
+  }, 30000);
 });
 
-// ── MÉTODOS ──────────────────────────────────────────────────────
+onUnmounted(() => {
+  if (refreshInterval) clearInterval(refreshInterval);
+});
+
 function statusLabel(status) {
   return ORDER_STATES[status]?.label || status;
 }
@@ -185,7 +191,6 @@ function repeatOrder(order) {
   router.push('/order/select');
 }
 </script>
-
 
 
 <style scoped>

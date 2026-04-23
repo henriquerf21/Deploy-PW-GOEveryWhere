@@ -23,33 +23,33 @@
               <span class="summary-amount">€{{ item.lineTotal.toFixed(2) }}</span>
             </li>
           </ul>
-          
+
           <hr class="inner-rule" />
-          
+
           <div class="summary-line muted">
             <span>Subtotal</span>
             <span>€{{ subTotal.toFixed(2) }}</span>
           </div>
-          
+
           <div class="summary-line muted">
             <span>Portes</span>
             <span :class="{ 'price-free': deliveryFeeVal === 0 }">
               {{ deliveryFeeVal === 0 ? 'Grátis' : `€${deliveryFeeVal.toFixed(2)}` }}
             </span>
           </div>
-          
+
           <div v-if="urgentFeeVal > 0" class="summary-line warn-line">
             <span>Urgente</span>
             <span>€{{ urgentFeeVal.toFixed(2) }}</span>
           </div>
 
           <div v-if="discountVal > 0" class="summary-line discount-line">
-            <span>Desconto</span>
+            <span>Desconto GoPoints</span>
             <span>−€{{ discountVal.toFixed(2) }}</span>
           </div>
-          
+
           <hr class="inner-rule" />
-          
+
           <div class="summary-line total-line">
             <span>Total</span>
             <span>€{{ total.toFixed(2) }}</span>
@@ -131,15 +131,15 @@
             <div v-if="store.payment.method === 'mbway'" class="payment-fields">
               <div class="cf-field">
                 <label class="cf-label">Telemóvel MB Way</label>
-                <input 
-                  :value="store.payment.mbwayPhone" 
+                <input
+                  :value="store.payment.mbwayPhone"
                   @input="handlePhoneInput"
                   @keypress="onlyNumbers"
-                  class="cf-input" 
-                  type="tel" 
-                  inputmode="numeric" 
-                  placeholder="912 345 678" 
-                  maxlength="9" 
+                  class="cf-input"
+                  type="tel"
+                  inputmode="numeric"
+                  placeholder="912 345 678"
+                  maxlength="9"
                 />
               </div>
             </div>
@@ -152,41 +152,41 @@
                 </div>
                 <div class="cf-field span-full">
                   <label class="cf-label">Número do cartão</label>
-                  <input 
-                    :value="store.payment.cardNumber" 
+                  <input
+                    :value="store.payment.cardNumber"
                     @input="handleCardNumberInput"
                     @keypress="onlyNumbers"
-                    class="cf-input" 
-                    type="tel" 
-                    inputmode="numeric" 
-                    placeholder="0000 0000 0000 0000" 
-                    maxlength="19" 
+                    class="cf-input"
+                    type="tel"
+                    inputmode="numeric"
+                    placeholder="0000 0000 0000 0000"
+                    maxlength="19"
                   />
                 </div>
                 <div class="cf-field">
                   <label class="cf-label">Validade (MM/AA)</label>
-                  <input 
-                    :value="store.payment.cardExpiry" 
+                  <input
+                    :value="store.payment.cardExpiry"
                     @input="handleExpiryInput"
                     @keypress="onlyNumbers"
-                    class="cf-input" 
-                    type="tel" 
+                    class="cf-input"
+                    type="tel"
                     inputmode="numeric"
-                    placeholder="MM/AA" 
-                    maxlength="5" 
+                    placeholder="MM/AA"
+                    maxlength="5"
                   />
                 </div>
                 <div class="cf-field">
                   <label class="cf-label">CVC</label>
-                  <input 
-                    :value="store.payment.cardCvc" 
+                  <input
+                    :value="store.payment.cardCvc"
                     @input="handleCvcInput"
                     @keypress="onlyNumbers"
-                    class="cf-input" 
-                    type="tel" 
-                    inputmode="numeric" 
-                    placeholder="123" 
-                    maxlength="3" 
+                    class="cf-input"
+                    type="tel"
+                    inputmode="numeric"
+                    placeholder="123"
+                    maxlength="3"
                   />
                 </div>
               </div>
@@ -197,10 +197,79 @@
             </p>
           </section>
 
-          <button 
-            type="button" 
-            class="cf-btn-primary pay-submit" 
-            :disabled="processing || !isFormValid" 
+          <hr class="cf-divider" />
+
+          <!-- ── GoPoints Redemption ─────────────────────────────── -->
+          <section
+            v-if="canRedeemDelivery || canRedeemProduct"
+            class="pay-section gopoints-section"
+            aria-labelledby="gopoints-h"
+          >
+            <h2 id="gopoints-h" class="side-title gopoints-title">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f57f17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                <circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/>
+              </svg>
+              Usar GoPoints
+              <span class="gopoints-balance-badge">{{ currentBalance }} pts</span>
+            </h2>
+
+            <div class="gopoints-options">
+              <!-- 500 pts — Entrega grátis -->
+              <button
+                type="button"
+                class="gopoints-option"
+                :class="{
+                  active: store.payment.goPointsRedemption === 'delivery',
+                  unavailable: !canRedeemDelivery
+                }"
+                :disabled="!canRedeemDelivery"
+                @click="handleToggleRedemption('delivery')"
+              >
+                <div class="gopoints-option-top">
+                  <span class="gopoints-option-cost">500 pts</span>
+                  <span v-if="store.payment.goPointsRedemption === 'delivery'" class="gopoints-check" aria-label="Selecionado">✓</span>
+                </div>
+                <span class="gopoints-option-label">Entrega grátis</span>
+                <span class="gopoints-option-saving">
+                  {{ deliveryFeeVal > 0 ? `−€${deliveryFeeVal.toFixed(2)}` : 'Já grátis' }}
+                </span>
+              </button>
+
+              <!-- 1000 pts — Produto grátis -->
+              <button
+                type="button"
+                class="gopoints-option"
+                :class="{
+                  active: store.payment.goPointsRedemption === 'product',
+                  unavailable: !canRedeemProduct
+                }"
+                :disabled="!canRedeemProduct"
+                @click="handleToggleRedemption('product')"
+              >
+                <div class="gopoints-option-top">
+                  <span class="gopoints-option-cost">1000 pts</span>
+                  <span v-if="store.payment.goPointsRedemption === 'product'" class="gopoints-check" aria-label="Selecionado">✓</span>
+                </div>
+                <span class="gopoints-option-label">Produto grátis</span>
+                <span class="gopoints-option-saving">−€{{ subTotal.toFixed(2) }}</span>
+              </button>
+            </div>
+
+            <p v-if="store.payment.goPointsRedemption" class="gopoints-hint gopoints-hint--active">
+              <template v-if="store.payment.goPointsRedemption === 'delivery'">
+                500 pts serão descontados do teu saldo ao confirmar.
+              </template>
+              <template v-else>
+                1000 pts serão descontados do teu saldo ao confirmar. A entrega é paga na mesma.
+              </template>
+            </p>
+          </section>
+          <!-- ── /GoPoints Redemption ────────────────────────────── -->
+
+          <button
+            type="button"
+            class="cf-btn-primary pay-submit"
+            :disabled="processing || !isFormValid"
             @click="handleConfirmOrder"
           >
             <Loader2 v-if="processing" class="spin" :size="18" />
@@ -230,51 +299,58 @@ import SiteFooter from '../components/SiteFooter.vue';
 import CheckoutWizardSteps from '../components/CheckoutWizardSteps.vue';
 import { User, Home, Store, Clock, Award, Loader2, CheckCircle2 } from 'lucide-vue-next';
 
-import { 
-  useOrderStore, 
-  orderTotal, 
-  subtotal, 
-  deliveryFee, 
-  urgentFee, 
-  productDiscount, 
-  cartProducts, 
-  pointsToEarn, 
-  userPointsBalance, 
-  estimatedETA, 
-  setPaymentMethod, 
+import {
+  useOrderStore,
+  orderTotal,
+  subtotal,
+  deliveryFee,
+  urgentFee,
+  goPointsDiscount,
+  cartProducts,
+  pointsToEarn,
+  userPointsBalance,
+  estimatedETA,
+  canRedeemDelivery,
+  canRedeemProduct,
+  toggleGoPointsRedemption,
+  setPaymentMethod,
   setPaymentField,
   submitOrder,
-  isCartValid, 
-  isDeliveryValid 
+  resetCart,
+  isCartValid,
+  isDeliveryValid
 } from '../stores/orderStore.js';
 
 const router = useRouter();
 const store = useOrderStore();
 
-const processing = ref(false);
-const showToast = ref(false);
-const mbwayLogoSrc = `${import.meta.env.BASE_URL}payment/mbway-logo.png`;
+const processing    = ref(false);
+const showToast     = ref(false);
+const orderSubmitted = ref(false);
+const mbwayLogoSrc  = `${import.meta.env.BASE_URL}payment/mbway-logo.png`;
 
 onMounted(() => {
-  if (!isCartValid()) {
-    router.replace('/order/select');
-  } else if (!isDeliveryValid()) {
-    router.replace('/order/delivery');
+  if (!orderSubmitted.value) {
+    if (!isCartValid()) {
+      router.replace('/order/select');
+    } else if (!store.delivery.name || !store.delivery.address) {
+      router.replace('/order/delivery');
+    }
   }
 });
 
-// Computed Mappings
-const cartItems = computed(() => cartProducts.value);
-const subTotal = computed(() => subtotal.value);
+// ── Computed Mappings ─────────────────────────────────────────────
+const cartItems      = computed(() => cartProducts.value);
+const subTotal       = computed(() => subtotal.value);
 const deliveryFeeVal = computed(() => deliveryFee.value);
-const urgentFeeVal = computed(() => urgentFee.value);
-const discountVal = computed(() => productDiscount.value);
-const total = computed(() => orderTotal.value);
-const pointsEarned = computed(() => pointsToEarn.value);
+const urgentFeeVal   = computed(() => urgentFee.value);
+const discountVal    = computed(() => goPointsDiscount.value);
+const total          = computed(() => orderTotal.value);
+const pointsEarned   = computed(() => pointsToEarn.value);
 const currentBalance = computed(() => userPointsBalance.value);
-const eta = computed(() => estimatedETA.value);
+const eta            = computed(() => estimatedETA.value);
 
-// Validação de Formulário
+// ── Validação ─────────────────────────────────────────────────────
 const isFormValid = computed(() => {
   if (store.payment.method === 'mbway') {
     return store.payment.mbwayPhone?.length === 9;
@@ -290,26 +366,21 @@ const isFormValid = computed(() => {
   return true;
 });
 
-// --- NOVO: Helper para bloquear teclas não numéricas ---
+// ── Helpers ───────────────────────────────────────────────────────
 function onlyNumbers(e) {
-  // Permite apenas números (0-9). 
-  // Caracteres especiais de controlo como Backspace funcionam por defeito no keypress de browsers modernos
-  if (!/[0-9]/.test(e.key)) {
-    e.preventDefault();
-  }
+  if (!/[0-9]/.test(e.key)) e.preventDefault();
 }
 
-// Handlers com Máscaras e Limpeza Forçada
 function handlePhoneInput(e) {
   const val = e.target.value.replace(/\D/g, '').slice(0, 9);
-  e.target.value = val; // Força a limpeza no elemento visual
+  e.target.value = val;
   setPaymentField('mbwayPhone', val);
 }
 
 function handleCardNumberInput(e) {
   const digits = e.target.value.replace(/\D/g, '').slice(0, 16);
   const formatted = digits.replace(/(\d{4})(?=\d)/g, '$1 ');
-  e.target.value = formatted; // Força a limpeza e formatação no elemento visual
+  e.target.value = formatted;
   setPaymentField('cardNumber', formatted);
 }
 
@@ -331,6 +402,11 @@ function handleCvcInput(e) {
 
 function setMethod(m) { setPaymentMethod(m); }
 
+function handleToggleRedemption(type) {
+  toggleGoPointsRedemption(type);
+}
+
+// ── Submissão ─────────────────────────────────────────────────────
 async function handleConfirmOrder() {
   if (processing.value || !isFormValid.value) return;
   processing.value = true;
@@ -338,8 +414,10 @@ async function handleConfirmOrder() {
   const result = await submitOrder();
 
   if (result && result.success) {
+    orderSubmitted.value = true;
     showToast.value = true;
     setTimeout(() => {
+      resetCart();
       router.push('/order/tracking');
     }, 2000);
   } else {
