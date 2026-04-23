@@ -9,9 +9,6 @@
       <header class="cf-checkout-head">
         <p class="cf-checkout-kicker">Morada e contacto</p>
         <h1 class="cf-checkout-title">Entrega</h1>
-        <p class="cf-checkout-sub">
-          Os dados servem para te contactarmos e para o estafeta te encontrar. A loja de recolha é escolhida automaticamente.
-        </p>
       </header>
 
       <div class="form-card cf-panel">

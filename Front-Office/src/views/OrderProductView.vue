@@ -24,7 +24,6 @@
 
           <div class="order-content">
             <h2 class="order-content-title">Packs</h2>
-            <p class="order-content-hint">Toca numa linha para selecionar; ajusta a quantidade com + e −.</p>
 
             <div
               v-for="product in products"

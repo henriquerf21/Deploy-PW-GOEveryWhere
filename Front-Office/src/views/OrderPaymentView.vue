@@ -9,9 +9,6 @@
       <header class="cf-checkout-head">
         <p class="cf-checkout-kicker">Último passo</p>
         <h1 class="cf-checkout-title">Pagamento</h1>
-        <p class="cf-checkout-sub">
-          Confirma o resumo, escolhe o método e finaliza. O total inclui portes e opções que selecionaste.
-        </p>
       </header>
 
       <div class="payment-layout">
@@ -250,8 +247,8 @@
                   <span class="gopoints-option-cost">1000 pts</span>
                   <span v-if="store.payment.goPointsRedemption === 'product'" class="gopoints-check" aria-label="Selecionado">✓</span>
                 </div>
-                <span class="gopoints-option-label">Produto grátis</span>
-                <span class="gopoints-option-saving">−€{{ subTotal.toFixed(2) }}</span>
+                <span class="gopoints-option-label">Desconto de 10€</span>
+                <span class="gopoints-option-saving">−€{{ goPointsDiscount.toFixed(2) }}</span>
               </button>
             </div>
 

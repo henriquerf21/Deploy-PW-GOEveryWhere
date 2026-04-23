@@ -60,8 +60,15 @@ export const canRedeemDelivery = computed(() => userPointsBalance.value >= 500);
 export const canRedeemProduct  = computed(() => userPointsBalance.value >= 1000);
 
 export const goPointsDiscount = computed(() => {
-  if (store.payment.goPointsRedemption === 'product' && canRedeemProduct.value) return subtotal.value;
-  if (store.payment.goPointsRedemption === 'delivery' && canRedeemDelivery.value) return deliveryFee.value;
+  // 1000 pts agora equivalem a 10€ de desconto fixo
+  if (store.payment.goPointsRedemption === 'product' && canRedeemProduct.value) {
+    return Math.min(subtotal.value, 10.00);
+  }
+  
+  if (store.payment.goPointsRedemption === 'delivery' && canRedeemDelivery.value) {
+    return deliveryFee.value;
+  }
+  
   return 0;
 });
 
