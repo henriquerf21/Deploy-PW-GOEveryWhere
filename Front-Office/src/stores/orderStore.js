@@ -215,8 +215,16 @@ export async function fetchUserOrders() {
 
     const allOrders = (res.data || []).map(order => {
       const attr = order.attributes || order;
-      console.log('order raw:', order.id, order.documentId, order);
       const statusCode = attr.order_status ? attr.order_status.substring(0, 4) : 'S-01';
+
+      // O Back-Office guarda a mensagem S-03 em items.boMeta.infoRequestMessage
+      const boMeta = (attr.items && !Array.isArray(attr.items)) ? attr.items.boMeta : null;
+      const adminMsg = attr.adminMessage || order.adminMessage || boMeta?.infoRequestMessage || null;
+      const clientRep = attr.clientReply || order.clientReply || null;
+
+      if (statusCode === 'S-03') {
+        console.log('[S-03] adminMessage:', adminMsg);
+      }
 
       return {
         id: Number(order.id),
@@ -227,7 +235,9 @@ export async function fetchUserOrders() {
         total: attr.total_price,
         status: statusCode,
         rating: attr.rating,
-        store: attr.store_name
+        store: attr.store_name,
+        adminMessage: adminMsg,
+        clientReply: clientRep,
       };
     });
 
@@ -339,6 +349,36 @@ export async function cancelActiveOrder(orderId, reason) {
 
     const err = await response.json();
     return { success: false, error: err?.error?.message || 'Erro ao cancelar no servidor' };
+  } catch (err) {
+    console.error(err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function replyToInfoRequest(documentId, reply) {
+  if (!authState.user || !authState.token) return { success: false, error: 'Não autenticado' };
+  try {
+    const response = await fetch(`${API_URL}/orders/${documentId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authState.token}`
+      },
+      body: JSON.stringify({
+        data: {
+          clientReply: reply,
+          order_status: 'S-02 Em Análise'
+        }
+      })
+    });
+
+    if (response.ok) {
+      await fetchUserOrders();
+      return { success: true };
+    }
+
+    const err = await response.json();
+    return { success: false, error: err?.error?.message || 'Erro ao enviar resposta' };
   } catch (err) {
     console.error(err);
     return { success: false, error: err.message };

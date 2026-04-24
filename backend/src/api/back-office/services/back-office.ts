@@ -201,6 +201,7 @@ function buildPublicOrder(entry: any) {
     courierId: courier?.documentId ? idToPublic('ST', courier.documentId) : (courier?.id ? idToPublic('ST', courier.id) : null),
     rejectionReason: attrs.rejectionReason || null,
     infoRequestMessage: bo.infoRequestMessage || null,
+    clientReply: attrs.clientReply || null,
   };
 }
 

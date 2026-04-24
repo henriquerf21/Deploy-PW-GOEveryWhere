@@ -103,6 +103,12 @@
     },
     "go_points_redemption": {
       "type": "string"
+    },
+    "adminMessage": {
+      "type": "text"
+    },
+    "clientReply": {
+      "type": "text"
     }
   }
 }

@@ -139,7 +139,72 @@
           </li>
         </ul>
 
-        <div class="info-delivery reveal" data-delay="2">
+        <!-- Informação Nutricional Detalhada (RF02) -->
+        <div class="nutrition-section reveal" data-delay="2">
+          <div class="nutrition-header" @click="nutritionOpen = !nutritionOpen">
+            <div class="nutrition-header-left">
+              <ClipboardList :size="22" :stroke-width="1.5" class="nutrition-header-ic" aria-hidden="true" />
+              <div>
+                <h3 class="nutrition-title">Informação Nutricional</h3>
+                <p class="nutrition-subtitle">Valores médios por goma, porção e 100g</p>
+              </div>
+            </div>
+            <ChevronDown
+              :size="20"
+              :stroke-width="2"
+              class="nutrition-chevron"
+              :class="{ open: nutritionOpen }"
+              aria-hidden="true"
+            />
+          </div>
+
+          <Transition name="nutrition-slide">
+            <div v-show="nutritionOpen" class="nutrition-body">
+              <div class="nutrition-badges">
+                <span class="nbadge nbadge-protein">🏋️ 5g Proteína / goma</span>
+                <span class="nbadge nbadge-sugar">🍬 0% Açúcar adicionado</span>
+                <span class="nbadge nbadge-cal">🔥 22 kcal / goma</span>
+              </div>
+
+              <div class="nutrition-table-wrap">
+                <table class="nutrition-table" aria-label="Tabela nutricional GoGummies">
+                  <thead>
+                    <tr>
+                      <th>Nutriente</th>
+                      <th>Por goma <span class="th-sub">(8g)</span></th>
+                      <th>Por porção <span class="th-sub">(3 gomas — 24g)</span></th>
+                      <th>Por 100g</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="row in nutritionData" :key="row.nutrient" :class="{ 'row-highlight': row.highlight }">
+                      <td class="nutrient-name">
+                        <span v-if="row.indent" class="indent-dash">—</span>
+                        {{ row.nutrient }}
+                      </td>
+                      <td>{{ row.perGoma }}</td>
+                      <td class="col-portion">{{ row.perPortion }}</td>
+                      <td>{{ row.per100g }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+
+              <div class="nutrition-extra">
+                <div class="nutrition-extra-block">
+                  <h4><Leaf :size="16" :stroke-width="1.5" aria-hidden="true" /> Ingredientes</h4>
+                  <p>Proteína de soro de leite (whey) hidrolisada, agente de volume (maltitol), água, gelatina, acidificante (ácido cítrico), aroma natural de limão, corante (curcumina), edulcorante (sucralose).</p>
+                </div>
+                <div class="nutrition-extra-block">
+                  <h4><AlertTriangle :size="16" :stroke-width="1.5" aria-hidden="true" /> Alérgenos</h4>
+                  <p>Contém <strong>leite</strong> (proteína whey). Pode conter vestígios de soja e ovo. Sem glúten.</p>
+                </div>
+              </div>
+            </div>
+          </Transition>
+        </div>
+
+        <div class="info-delivery reveal" data-delay="3">
           <Truck :size="20" :stroke-width="1.5" class="info-delivery-ic" aria-hidden="true" />
           <p>
             <strong>Entrega GoEverywhere.</strong>
@@ -174,14 +239,32 @@ import SiteHeader from '../components/SiteHeader.vue';
 import SiteFooter from '../components/SiteFooter.vue';
 import { MEDIA } from '../config/media.js';
 import {
+  AlertTriangle,
   ArrowRight,
   Candy,
+  ChevronDown,
+  ClipboardList,
   Dumbbell,
+  Leaf,
   MessageCircle,
   Package,
   ShieldCheck,
   Truck,
 } from 'lucide-vue-next';
+
+const nutritionOpen = ref(true);
+
+const nutritionData = [
+  { nutrient: 'Energia',                   perGoma: '22 kcal',  perPortion: '66 kcal',  per100g: '275 kcal',  highlight: false },
+  { nutrient: 'Gorduras',                   perGoma: '0,3 g',   perPortion: '0,9 g',   per100g: '3,8 g',    highlight: false },
+  { nutrient: 'Saturadas',                  perGoma: '0,1 g',   perPortion: '0,3 g',   per100g: '1,3 g',    highlight: false, indent: true },
+  { nutrient: 'Hidratos de Carbono',        perGoma: '1,2 g',   perPortion: '3,6 g',   per100g: '15 g',     highlight: false },
+  { nutrient: 'Açúcares',                   perGoma: '0 g',     perPortion: '0 g',     per100g: '0 g',      highlight: false, indent: true },
+  { nutrient: 'Polióis (maltitol)',          perGoma: '1,0 g',   perPortion: '3,0 g',   per100g: '12,5 g',   highlight: false, indent: true },
+  { nutrient: 'Fibra',                       perGoma: '0,2 g',   perPortion: '0,6 g',   per100g: '2,5 g',    highlight: false },
+  { nutrient: 'Proteína',                    perGoma: '5,0 g',   perPortion: '15,0 g',  per100g: '62,5 g',   highlight: true },
+  { nutrient: 'Sal',                         perGoma: '0,01 g',  perPortion: '0,03 g',  per100g: '0,13 g',   highlight: false },
+];
 
 const selectedPack = ref('2');
 
@@ -803,6 +886,274 @@ const infoCards = [
   }
   .info-cards {
     grid-template-columns: 1fr;
+  }
+}
+
+/* ══════════════════════════════════════════
+   INFORMAÇÃO NUTRICIONAL (RF02)
+   ══════════════════════════════════════════ */
+.nutrition-section {
+  margin-top: 1.75rem;
+  border: 1px solid var(--line);
+  border-radius: 1rem;
+  background: #fff;
+  overflow: hidden;
+  transition: box-shadow 0.3s ease;
+}
+
+.nutrition-section:hover {
+  box-shadow: 0 8px 28px rgba(15, 23, 42, 0.06);
+}
+
+.nutrition-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 1.15rem 1.25rem;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s ease;
+}
+
+.nutrition-header:hover {
+  background: var(--surface);
+}
+
+.nutrition-header-left {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+}
+
+.nutrition-header-ic {
+  color: var(--cta);
+  flex-shrink: 0;
+}
+
+.nutrition-title {
+  margin: 0;
+  font-size: 0.9375rem;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.nutrition-subtitle {
+  margin: 0.15rem 0 0;
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.nutrition-chevron {
+  color: var(--muted);
+  transition: transform 0.3s ease;
+  flex-shrink: 0;
+}
+
+.nutrition-chevron.open {
+  transform: rotate(180deg);
+}
+
+.nutrition-body {
+  border-top: 1px solid var(--line);
+  padding: 1.25rem;
+}
+
+/* Slide transition */
+.nutrition-slide-enter-active {
+  animation: nutritionIn 0.35s ease;
+}
+.nutrition-slide-leave-active {
+  animation: nutritionOut 0.25s ease;
+}
+@keyframes nutritionIn {
+  from { opacity: 0; max-height: 0; }
+  to   { opacity: 1; max-height: 800px; }
+}
+@keyframes nutritionOut {
+  from { opacity: 1; }
+  to   { opacity: 0; max-height: 0; }
+}
+
+/* Badges */
+.nutrition-badges {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin-bottom: 1.25rem;
+}
+
+.nbadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  padding: 0.4rem 0.75rem;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.01em;
+}
+
+.nbadge-protein {
+  background: rgba(16, 185, 129, 0.1);
+  color: #059669;
+  border: 1px solid rgba(16, 185, 129, 0.22);
+}
+
+.nbadge-sugar {
+  background: rgba(99, 102, 241, 0.08);
+  color: #4f46e5;
+  border: 1px solid rgba(99, 102, 241, 0.18);
+}
+
+.nbadge-cal {
+  background: rgba(245, 158, 11, 0.1);
+  color: #b45309;
+  border: 1px solid rgba(245, 158, 11, 0.22);
+}
+
+/* Tabela */
+.nutrition-table-wrap {
+  overflow-x: auto;
+  border-radius: 0.65rem;
+  border: 1px solid var(--line);
+}
+
+.nutrition-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8125rem;
+  line-height: 1.4;
+}
+
+.nutrition-table thead {
+  background: var(--surface);
+}
+
+.nutrition-table th {
+  padding: 0.7rem 0.85rem;
+  text-align: left;
+  font-weight: 700;
+  font-size: 0.6875rem;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.th-sub {
+  font-weight: 500;
+  text-transform: none;
+  letter-spacing: 0;
+  color: #9ca3af;
+}
+
+.nutrition-table td {
+  padding: 0.6rem 0.85rem;
+  border-bottom: 1px solid #f3f4f6;
+  color: var(--ink);
+}
+
+.nutrition-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.nutrition-table tbody tr:hover {
+  background: #fafbfc;
+}
+
+.row-highlight {
+  background: rgba(16, 185, 129, 0.05) !important;
+}
+
+.row-highlight .nutrient-name {
+  color: #059669;
+  font-weight: 700;
+}
+
+.row-highlight td {
+  font-weight: 600;
+}
+
+.nutrient-name {
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+.indent-dash {
+  color: #d1d5db;
+  font-size: 0.75rem;
+}
+
+.col-portion {
+  font-weight: 600;
+  color: var(--ink);
+}
+
+/* Ingredientes e Alérgenos */
+.nutrition-extra {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  margin-top: 1.25rem;
+}
+
+.nutrition-extra-block {
+  padding: 1rem;
+  background: var(--surface);
+  border-radius: 0.65rem;
+  border: 1px solid var(--line);
+}
+
+.nutrition-extra-block h4 {
+  margin: 0 0 0.45rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--ink);
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.nutrition-extra-block h4 svg {
+  color: var(--cta);
+  flex-shrink: 0;
+}
+
+.nutrition-extra-block p {
+  margin: 0;
+  font-size: 0.8125rem;
+  line-height: 1.55;
+  color: var(--muted);
+}
+
+.nutrition-extra-block strong {
+  color: #dc2626;
+  font-weight: 700;
+}
+
+@media (max-width: 900px) {
+  .nutrition-extra {
+    grid-template-columns: 1fr;
+  }
+
+  .nutrition-table th:nth-child(4),
+  .nutrition-table td:nth-child(4) {
+    display: none;
+  }
+}
+
+@media (max-width: 480px) {
+  .nutrition-badges {
+    flex-direction: column;
+  }
+
+  .nutrition-body {
+    padding: 1rem 0.75rem;
   }
 }
 
