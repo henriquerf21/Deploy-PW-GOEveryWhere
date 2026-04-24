@@ -207,13 +207,26 @@ import {
   deliveryFee,
 } from '../stores/orderStore.js';
 
+// Importação da Store de Autenticação
+import { useAuthStore } from '../stores/authStore.js';
+
 const router = useRouter();
 const store = useOrderStore();
+const auth = useAuthStore();
 
 const gpsLoading = ref(false);
 const errors = reactive({
   name: '', phone: '', address: '', postalCode: '', city: ''
 });
+
+// --- FUNÇÃO DE AUXÍLIO PARA PREENCHIMENTO ---
+// Esta função atualiza o campo na store e valida-o logo a seguir
+function setDeliveryField(field, value) {
+  if (value) {
+    store.delivery[field] = value;
+    validateField(field); 
+  }
+}
 
 // --- COMPUTE PARA O MAPA ---
 const deliveryDestCoords = computed(() => {
@@ -279,24 +292,18 @@ async function detectGPS() {
   gpsLoading.value = true;
 
   const options = {
-    enableHighAccuracy: true, // Força o uso do GPS real em vez de apenas Wi-Fi/IP
-    timeout: 10000,           // Aumentamos para 10s para dar tempo ao GPS de "fixar"
-    maximumAge: 0             // Não aceita localizações em cache (antigas)
+    enableHighAccuracy: true,
+    timeout: 10000,
+    maximumAge: 0
   };
 
   navigator.geolocation.getCurrentPosition(
     async (pos) => {
-      const { latitude, longitude, accuracy } = pos.coords;
-      
-      console.log(`Precisão obtida: ${accuracy} metros`);
-
-      // 1. Guardar coordenadas para lógica de proximidade
+      const { latitude, longitude } = pos.coords;
       store.delivery.gpsLat = latitude;
       store.delivery.gpsLng = longitude;
 
       try {
-        // 2. REVERSE GEOCODING (Nominatim) - Transforma coordenadas em Morada Real
-        // Requisito RF04/RF05 do teu Caderno de Encargos
         const response = await fetch(
           `https://nominatim.openstreetmap.org/reverse?format=json&lat=${latitude}&lon=${longitude}&addressdetails=1`,
           { headers: { 'Accept-Language': 'pt-PT' } }
@@ -305,23 +312,18 @@ async function detectGPS() {
 
         if (data.address) {
           const addr = data.address;
-          
-          // Preenchimento automático inteligente
           store.delivery.address = `${addr.road || ''}${addr.house_number ? ', ' + addr.house_number : ''}`;
           store.delivery.city = addr.city || addr.town || addr.village || 'Braga';
           
-          // Limpeza do código postal (Nominatim às vezes envia formatos longos)
           if (addr.postcode) {
             const cp = addr.postcode.replace(/\s/g, '').slice(0, 8);
             store.delivery.postalCode = cp.includes('-') ? cp : `${cp.slice(0, 4)}-${cp.slice(4, 7)}`;
           }
 
-          // 3. Atualizar a loja mais próxima com base nas novas coordenadas
           findNearestStore(latitude, longitude);
         }
       } catch (err) {
         console.error("Erro no reverse geocoding:", err);
-        // Fallback: se a API falhar, mantém as coordenadas mas avisa
         store.delivery.address = `Localização aproximada (Lat: ${latitude.toFixed(4)})`;
       } finally {
         gpsLoading.value = false;
@@ -329,8 +331,7 @@ async function detectGPS() {
     },
     (err) => {
       gpsLoading.value = false;
-      console.warn(`Erro GPS (${err.code}): ${err.message}`);
-      alert("Não foi possível obter a localização precisa. Verifica as permissões do teu browser.");
+      alert("Não foi possível obter a localização. Verifica as permissões.");
     },
     options
   );
@@ -347,9 +348,29 @@ onMounted(() => {
     router.replace('/order/select');
     return;
   }
+
+  // Autopreenchimento com dados do utilizador autenticado
+  const u = auth.user;
+  if (u) {
+    const fullName = `${u.firstName || ''} ${u.lastName || ''}`.trim();
+    if (fullName) setDeliveryField('name', fullName);
+    
+    if (u.phone) {
+      // Garante que o telefone tem o prefixo correto para a validação do checkout
+      const cleanPhone = u.phone.replace(/\D/g, '').slice(-9);
+      setDeliveryField('phone', `+351 ${cleanPhone}`);
+    }
+    
+    if (u.defaultAddress)    setDeliveryField('address',    u.defaultAddress);
+    if (u.defaultPostalCode) setDeliveryField('postalCode', u.defaultPostalCode);
+    if (u.defaultCity)       setDeliveryField('city',       u.defaultCity);
+  }
+
+  // Fallback para telefone se não tiver no perfil
   if (!store.delivery.phone) {
     store.delivery.phone = '+351 ';
   }
+
   if (!store.delivery.assignedStore) assignDefaultStore();
 });
 

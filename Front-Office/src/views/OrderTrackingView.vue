@@ -1,99 +1,3 @@
-<script setup>
-import SiteHeader from '../components/SiteHeader.vue';
-import SiteFooter from '../components/SiteFooter.vue';
-import DeliveryRouteMap from '../components/DeliveryRouteMap.vue';
-import { getDestinationLatLng } from '../utils/mapCoords.js';
-import { ref, computed, onMounted, onUnmounted } from 'vue';
-import { useRouter } from 'vue-router';
-import { useOrderStore, ORDER_STATES, fetchUserOrders } from '../stores/orderStore.js';
-
-const router = useRouter();
-const store = useOrderStore();
-
-const order = computed(() => store.activeOrder);
-const toastMessage = ref('');
-let pollingTimer = null;
-
-// ── CICLO DE VIDA ──────────────────────────────────────────────────
-onMounted(async () => {
-  await fetchUserOrders();
-  
-  // Polling para atualizar o estado automaticamente
-  pollingTimer = setInterval(async () => {
-    if (order.value && !ORDER_STATES[order.value.status]?.terminal) {
-      const oldStatus = order.value.status;
-      await fetchUserOrders();
-      
-      if (order.value && order.value.status !== oldStatus) {
-        showStateToast(order.value.status);
-      }
-    }
-  }, 5000);
-});
-
-onUnmounted(() => {
-  clearInterval(pollingTimer);
-});
-
-// ── COMPUTED ────────────────────────────────────────────────────────
-const currentStateData = computed(() => order.value ? ORDER_STATES[order.value.status] : null);
-
-// Lógica de progresso da barra (0 a 100%)
-const routeProgress = computed(() => {
-  if (!order.value) return 0;
-  const flow = ['S-01','S-02','S-05','S-06','S-07','S-08','S-09','S-10','S-11'];
-  const idx = flow.indexOf(order.value.status);
-  return idx < 0 ? 0 : Math.min(100, (idx / (flow.length - 1)) * 100);
-});
-
-const trackingMapCoords = computed(() => {
-  const o = order.value;
-  if (!o) return null;
-  const storeLat = o.store?.lat || 41.5518;
-  const storeLng = o.store?.lng || -8.4229;
-  const dest = getDestinationLatLng(o.delivery || {}, storeLat, storeLng);
-  return { storeLat, storeLng, destLat: dest.lat, destLng: dest.lng };
-});
-
-const timelineSteps = computed(() => {
-  if (!order.value) return [];
-  
-  // CORREÇÃO: Labels mais precisas para evitar confusão
-  const flow = [
-    { state: 'S-01', label: 'Pedido Recebido' }, // Antes era "Enviada"
-    { state: 'S-02', label: 'Em Análise' },
-    { state: 'S-05', label: 'Aprovada' },
-    { state: 'S-07', label: 'Preparação' },
-    { state: 'S-09', label: 'Em Trânsito' },
-    { state: 'S-11', label: 'Entregue' },
-  ];
-
-  // Sequência de estados completa para comparação
-  const currentFlow = ['S-01','S-02','S-05','S-06','S-07','S-08','S-09','S-10','S-11'];
-  const currentIdx = currentFlow.indexOf(order.value.status);
-
-  return flow.map((step) => {
-    const stepIdx = currentFlow.indexOf(step.state);
-    return {
-      ...step,
-      // Só fica "done" (check branco) se o estado atual já ULTRAPASSOU este passo
-      done: stepIdx < currentIdx && stepIdx !== -1,
-      // Fica "active" (cor sólida) se este for o estado atual
-      active: step.state === order.value.status
-    };
-  });
-});
-
-// ── MÉTODOS ────────────────────────────────────────────────────────
-function showStateToast(newState) {
-  const data = ORDER_STATES[newState];
-  if (data) {
-    toastMessage.value = `Atualização: ${data.label}`;
-    setTimeout(() => { toastMessage.value = ''; }, 3000);
-  }
-}
-</script>
-
 <template>
   <div class="page-wrapper cf-checkout">
     <SiteHeader />
@@ -152,6 +56,14 @@ function showStateToast(newState) {
               <span class="timeline-label">{{ step.label }}</span>
             </div>
           </div>
+
+          <!-- Botão de cancelamento — só aparece nos estados S-01 a S-06 -->
+          <div v-if="['S-01', 'S-02', 'S-03', 'S-05', 'S-06'].includes(order.status)" class="cancel-zone">
+            <button class="btn-cancel-active" @click="openCancelModal(order)">
+              Cancelar Pedido
+            </button>
+            <p class="cancel-hint">Podes cancelar enquanto o pedido não for aceite por um estafeta.</p>
+          </div>
         </div>
       </div>
 
@@ -169,10 +81,340 @@ function showStateToast(newState) {
         {{ toastMessage }}
       </div>
     </Transition>
+
+    <!-- Modal de Cancelamento (S-13) -->
+    <div v-if="showCancelModal" class="modal-overlay">
+      <div class="modal-card cancel-modal">
+        <h3>Cancelar Encomenda</h3>
+        <p>Indica o motivo do cancelamento (obrigatório):</p>
+        <textarea
+          v-model="cancelReasonInput"
+          placeholder="Ex: Enganei-me na morada ou nos itens..."
+          class="cancel-textarea"
+        ></textarea>
+        <div class="modal-btns">
+          <button @click="showCancelModal = false" class="btn-back">Voltar</button>
+          <button
+            @click="confirmOrderCancellation"
+            :disabled="cancelReasonInput.trim().length < 5 || cancelling"
+            class="btn-confirm-cancel"
+          >
+            {{ cancelling ? 'A cancelar encomenda...' : 'Confirmar Cancelamento' }}
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Modal de Sucesso pós-cancelamento -->
+    <div v-if="showSuccessModal" class="modal-overlay">
+      <div class="modal-card success-modal">
+        <div class="success-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="1.5"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+        </div>
+        <h3>Encomenda Cancelada</h3>
+        <p>A tua encomenda foi cancelada com sucesso.</p>
+        <div class="modal-btns success-btns">
+          <button @click="goToHistory" class="btn-history">
+            Ver Histórico
+          </button>
+          <button @click="goToNewOrder" class="btn-reorder">
+            Encomendar Novamente
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </template>
 
+
+<script setup>
+import SiteHeader from '../components/SiteHeader.vue';
+import SiteFooter from '../components/SiteFooter.vue';
+import DeliveryRouteMap from '../components/DeliveryRouteMap.vue';
+import { getDestinationLatLng } from '../utils/mapCoords.js';
+import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { useRouter } from 'vue-router';
+import { useOrderStore, ORDER_STATES, fetchUserOrders, cancelActiveOrder } from '../stores/orderStore.js';
+
+const router = useRouter();
+const store = useOrderStore();
+
+const order = computed(() => store.activeOrder);
+const toastMessage = ref('');
+let pollingTimer = null;
+
+// --- Cancelamento (S-13) ---
+const showCancelModal = ref(false);
+const orderToCancel = ref(null);
+const cancelReasonInput = ref('');
+const cancelling = ref(false);
+const showSuccessModal = ref(false);
+
+function openCancelModal(o) {
+  orderToCancel.value = o;
+  cancelReasonInput.value = '';
+  showCancelModal.value = true;
+}
+
+async function confirmOrderCancellation() {
+  if (!orderToCancel.value || cancelReasonInput.value.trim().length < 5) return;
+  cancelling.value = true;
+  const result = await cancelActiveOrder(orderToCancel.value.documentId, cancelReasonInput.value);
+  if (result.success) {
+    showCancelModal.value = false;
+    cancelReasonInput.value = '';
+    showSuccessModal.value = true;
+  } else {
+    alert(`Erro: ${result.error}`);
+  }
+  cancelling.value = false;
+}
+
+function goToHistory() {
+  showSuccessModal.value = false;
+  router.push('/order/history');
+}
+
+function goToNewOrder() {
+  showSuccessModal.value = false;
+  router.push('/order/select');
+}
+
+// ── CICLO DE VIDA ──────────────────────────────────────────────────
+onMounted(async () => {
+  await fetchUserOrders();
+  pollingTimer = setInterval(async () => {
+    if (order.value && !ORDER_STATES[order.value.status]?.terminal) {
+      const oldStatus = order.value.status;
+      await fetchUserOrders();
+      if (order.value && order.value.status !== oldStatus) {
+        showStateToast(order.value.status);
+      }
+    }
+  }, 5000);
+});
+
+onUnmounted(() => {
+  clearInterval(pollingTimer);
+});
+
+// ── COMPUTED ────────────────────────────────────────────────────────
+const currentStateData = computed(() => order.value ? ORDER_STATES[order.value.status] : null);
+
+const routeProgress = computed(() => {
+  if (!order.value) return 0;
+  const flow = ['S-01','S-02','S-05','S-06','S-07','S-08','S-09','S-10','S-11'];
+  const idx = flow.indexOf(order.value.status);
+  return idx < 0 ? 0 : Math.min(100, (idx / (flow.length - 1)) * 100);
+});
+
+const trackingMapCoords = computed(() => {
+  const o = order.value;
+  if (!o) return null;
+  const storeLat = o.store?.lat || 41.5518;
+  const storeLng = o.store?.lng || -8.4229;
+  const dest = getDestinationLatLng(o.delivery || {}, storeLat, storeLng);
+  return { storeLat, storeLng, destLat: dest.lat, destLng: dest.lng };
+});
+
+const timelineSteps = computed(() => {
+  if (!order.value) return [];
+  const flow = [
+    { state: 'S-01', label: 'Pedido Recebido' },
+    { state: 'S-02', label: 'Em Análise' },
+    { state: 'S-05', label: 'Aprovada' },
+    { state: 'S-07', label: 'Preparação' },
+    { state: 'S-09', label: 'Em Trânsito' },
+    { state: 'S-11', label: 'Entregue' },
+  ];
+  const currentFlow = ['S-01','S-02','S-05','S-06','S-07','S-08','S-09','S-10','S-11'];
+  const currentIdx = currentFlow.indexOf(order.value.status);
+  return flow.map((step) => {
+    const stepIdx = currentFlow.indexOf(step.state);
+    return {
+      ...step,
+      done: stepIdx < currentIdx && stepIdx !== -1,
+      active: step.state === order.value.status
+    };
+  });
+});
+
+// ── MÉTODOS ────────────────────────────────────────────────────────
+function showStateToast(newState) {
+  const data = ORDER_STATES[newState];
+  if (data) {
+    toastMessage.value = `Atualização: ${data.label}`;
+    setTimeout(() => { toastMessage.value = ''; }, 3000);
+  }
+}
+</script>
+
+
 <style scoped>
+.success-modal {
+  text-align: center;
+}
+
+.success-icon {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 1rem;
+}
+
+.success-btns {
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.btn-history {
+  background: var(--cf-card);
+  color: var(--cf-muted);
+  border: 1px solid var(--cf-line);
+  padding: 0.75rem 1.25rem;
+  border-radius: var(--cf-radius);
+  font-family: var(--cf-font);
+  font-weight: 600;
+  cursor: pointer;
+  width: 100%;
+}
+
+.btn-history:hover {
+  background: var(--cf-surface);
+}
+
+.btn-reorder {
+  background: var(--cf-cta);
+  color: white;
+  border: none;
+  padding: 0.75rem 1.25rem;
+  border-radius: var(--cf-radius);
+  font-family: var(--cf-font);
+  font-weight: 700;
+  cursor: pointer;
+  width: 100%;
+  box-shadow: 0 2px 8px rgba(16, 185, 129, 0.25);
+}
+
+.btn-reorder:hover {
+  background: var(--cf-cta-hover);
+}
+
+.cancel-zone {
+  margin-top: 2rem;
+  text-align: center;
+  padding: 1.5rem;
+  border-top: 1px dashed var(--cf-line);
+}
+
+.btn-cancel-active {
+  background: white;
+  color: #ef4444;
+  border: 1px solid #ef4444;
+  padding: 0.75rem 1.5rem;
+  border-radius: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-cancel-active:hover {
+  background: #fef2f2;
+  transform: translateY(-2px);
+}
+
+.cancel-hint {
+  font-size: 0.8rem;
+  color: var(--cf-muted);
+  margin-top: 0.5rem;
+}
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.45);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 200;
+  padding: 1rem;
+}
+
+.modal-card {
+  background: var(--cf-card);
+  border-radius: var(--cf-radius-lg);
+  padding: 1.75rem;
+  max-width: 400px;
+  width: 100%;
+  border: 1px solid var(--cf-line);
+  box-shadow: 0 24px 64px rgba(15, 23, 42, 0.18);
+  text-align: center;
+}
+
+.modal-card h3 {
+  font-family: var(--cf-display);
+  font-size: 1.125rem;
+  font-weight: 700;
+  margin-bottom: 0.5rem;
+}
+
+.modal-card p {
+  font-size: 0.875rem;
+  color: var(--cf-muted);
+  margin-bottom: 1.25rem;
+}
+
+.cancel-textarea {
+  width: 100%;
+  min-height: 100px;
+  padding: 12px;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  margin: 1rem 0;
+  font-family: inherit;
+  resize: none;
+}
+
+.modal-btns {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+.btn-back {
+  background: var(--cf-card);
+  color: var(--cf-muted);
+  border: 1px solid var(--cf-line);
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--cf-radius);
+  font-family: var(--cf-font);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-back:hover {
+  background: var(--cf-surface);
+}
+
+.btn-confirm-cancel {
+  background: #ef4444;
+  color: white;
+  border: none;
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--cf-radius);
+  font-family: var(--cf-font);
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.btn-confirm-cancel:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+
+
+
 .page-wrapper {
   min-height: 100vh;
   display: flex;

@@ -56,33 +56,13 @@
             <p>Resumo das compras passadas</p>
           </router-link>
 
-          <div class="dash-card reveal" data-delay="4">
+          <router-link to="/settings" class="dash-card reveal" data-delay="4">
             <span class="dash-icon" aria-hidden="true">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1-1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
             </span>
             <h3>Definições</h3>
             <p>Gerir dados e segurança</p>
-          </div>
-        </div>
-
-        <div class="info-card reveal" data-delay="2">
-          <h3>Os teus dados</h3>
-          <div class="info-row">
-            <span class="info-label">Nome de perfil</span>
-            <span class="info-value">{{ user?.firstName || user?.username || '-' }}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Endereço de Email</span>
-            <span class="info-value">{{ user?.email || '-' }}</span>
-          </div>
-          <div class="info-row" v-if="user?.phone">
-            <span class="info-label">Telefone</span>
-            <span class="info-value">{{ user.phone }}</span>
-          </div>
-          <div class="info-row">
-            <span class="info-label">Método de autenticação</span>
-            <span class="info-value">{{ user?.authMethod === 'google' ? 'Google OAuth 2.0' : 'Email / Password' }}</span>
-          </div>
+          </router-link>
         </div>
       </div>
     </main>
@@ -205,8 +185,14 @@ function handleLogout() {
   text-decoration: none;
   color: #1e293b;
   box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.05);
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
   border: 2px solid transparent;
+
+  transition: 
+    transform 0.2s cubic-bezier(0.4, 0, 0.2, 1), 
+    box-shadow 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+  
+  /* Garante que a transição de cor é nula */
+  transition-property: transform, box-shadow;
 }
 .dash-card:hover {
   border-color: var(--go-primary, #00c853);
