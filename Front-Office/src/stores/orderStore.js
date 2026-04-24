@@ -20,11 +20,11 @@ export const ORDER_STATES = {
   'S-15': { label: 'Concluído e Avaliado', color: '#059669', icon: '⭐', terminal: true },
 };
 
-export const PRODUCTS = [
+export const PRODUCTS = reactive([
   { id: 'frasco-1', name: '1 Frasco', desc: '30 gomas proteicas', price: 14.99, gomas: 30 },
   { id: 'pack-2', name: 'Pack 2 Frascos', desc: 'Poupa 10% — 60 gomas', price: 26.99, gomas: 60, popular: true, discount: '-10%' },
   { id: 'pack-3', name: 'Pack 3 Frascos', desc: 'Poupa 15% — 90 gomas', price: 38.24, gomas: 90, discount: '-15%' },
-];
+]);
 
 // ── STATE ────────────────────────────────────────────────────────
 const store = reactive({
@@ -45,6 +45,35 @@ const store = reactive({
   orderHistory: [],
   loading: false
 });
+
+function toNum(v, fallback = 0) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function normalizeProductFromStrapi(entry) {
+  const raw = entry?.attributes || entry || {};
+  const baseId = raw.sku || raw.code || raw.documentId || entry?.documentId || entry?.id || `prod-${Date.now()}`;
+  return {
+    id: String(baseId).toLowerCase().replace(/[^a-z0-9-_]/g, '-'),
+    name: raw.name || 'Produto',
+    desc: raw.desc || '',
+    price: Math.max(0, toNum(raw.price, 0)),
+    gomas: Math.max(0, toNum(raw.gomas, 0)),
+    popular: !!raw.popular,
+    discount: raw.discountLabel || raw.discount || '',
+    imageUrl: raw.imageUrl || '',
+    sortOrder: toNum(raw.sortOrder, 0),
+  };
+}
+
+function syncCartItemsWithProducts() {
+  const next = {};
+  for (const p of PRODUCTS) {
+    next[p.id] = Number(store.cart.items[p.id] || 0);
+  }
+  store.cart.items = next;
+}
 
 // ── COMPUTED ─────────────────────────────────────────────────────
 export const cartItemCount = computed(() => Object.values(store.cart.items).reduce((sum, qty) => sum + qty, 0));
@@ -122,6 +151,22 @@ export function reOrder(oldOrder) {
 }
 
 // ── STRAPI INTEGRATION ───────────────────────────────────────────
+
+export async function fetchCatalogProducts() {
+  try {
+    const response = await fetch(`${API_URL}/bo/public-products`);
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(json?.error?.message || 'Erro ao carregar catálogo.');
+    const rows = Array.isArray(json?.data) ? json.data : [];
+    const mapped = rows.map(normalizeProductFromStrapi).filter((p) => p.price >= 0);
+    if (mapped.length) {
+      PRODUCTS.splice(0, PRODUCTS.length, ...mapped);
+      syncCartItemsWithProducts();
+    }
+  } catch (error) {
+    console.warn('Catálogo dinâmico indisponível, a usar fallback estático.', error?.message || error);
+  }
+}
 
 export async function refreshUserProfile() {
   if (!authState.token) return;
@@ -259,3 +304,5 @@ export function resetCart() {
 
 export function useOrderStore() { return store; }
 export default store;
+
+void fetchCatalogProducts();

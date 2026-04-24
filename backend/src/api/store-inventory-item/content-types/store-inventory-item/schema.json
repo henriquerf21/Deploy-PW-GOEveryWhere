@@ -1,0 +1,32 @@
+{
+  "kind": "collectionType",
+  "collectionName": "store_inventory_items",
+  "info": {
+    "singularName": "store-inventory-item",
+    "pluralName": "store-inventory-items",
+    "displayName": "Store Inventory Item"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "sku": { "type": "string", "required": true },
+    "name": { "type": "string", "required": true },
+    "brand": { "type": "string" },
+    "category": { "type": "string" },
+    "unit": { "type": "enumeration", "enum": ["un", "kg", "lt", "pack"], "default": "un" },
+    "stock": { "type": "integer", "default": 0, "min": 0 },
+    "reservedStock": { "type": "integer", "default": 0, "min": 0 },
+    "reorderLevel": { "type": "integer", "default": 0, "min": 0 },
+    "price": { "type": "decimal", "default": 0 },
+    "isActive": { "type": "boolean", "default": true },
+    "lastCountedAt": { "type": "datetime" },
+    "store": {
+      "type": "relation",
+      "relation": "manyToOne",
+      "target": "api::continent-store.continent-store",
+      "inversedBy": "inventoryItems"
+    }
+  }
+}

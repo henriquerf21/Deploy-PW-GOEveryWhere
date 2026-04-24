@@ -20,6 +20,19 @@ export default {
     { method: 'PATCH', path: '/bo/couriers/:id', handler: 'back-office.updateCourier', config: { auth: false } },
     { method: 'POST', path: '/bo/couriers/:id/action', handler: 'back-office.courierAction', config: { auth: false } },
 
+
+    { method: 'GET', path: '/bo/stores', handler: 'back-office.stores', config: { auth: false } },
+    { method: 'POST', path: '/bo/stores', handler: 'back-office.createStore', config: { auth: false } },
+    { method: 'PATCH', path: '/bo/stores/:id', handler: 'back-office.updateStore', config: { auth: false } },
+    { method: 'DELETE', path: '/bo/stores/:id', handler: 'back-office.deleteStore', config: { auth: false } },
+    { method: 'GET', path: '/bo/stores/:id/inventory', handler: 'back-office.storeInventory', config: { auth: false } },
+    { method: 'POST', path: '/bo/stores/:id/inventory', handler: 'back-office.upsertStoreInventory', config: { auth: false } },
+    { method: 'DELETE', path: '/bo/stores/:id/inventory/:itemId', handler: 'back-office.deleteStoreInventory', config: { auth: false } },
+    { method: 'GET', path: '/bo/products', handler: 'back-office.products', config: { auth: false } },
+    { method: 'GET', path: '/bo/public-products', handler: 'back-office.publicProducts', config: { auth: false } },
+    { method: 'POST', path: '/bo/products', handler: 'back-office.upsertProduct', config: { auth: false } },
+    { method: 'DELETE', path: '/bo/products/:id', handler: 'back-office.deleteProduct', config: { auth: false } },
+
     { method: 'GET', path: '/bo/map', handler: 'back-office.operationsMap', config: { auth: false } },
     { method: 'GET', path: '/bo/dashboard', handler: 'back-office.dashboard', config: { auth: false } },
     { method: 'GET', path: '/bo/reports', handler: 'back-office.reports', config: { auth: false } },

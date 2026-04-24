@@ -87,6 +87,7 @@ import {
   ORDER_STATUS,
   getStoreById,
   getCourierById,
+  refreshStores,
 } from '../stores/logisticsStore.js';
 import { courierStateLabels, COURIER_STATE, orderStatusLabels } from '../constants/logistics.js';
 import { fetchDeliveryLegs, deliveryLegsStraightLine } from '../utils/osrmRouting.js';
@@ -505,6 +506,7 @@ onMounted(() => {
     maxZoom: 19,
   }).addTo(map);
   routesGroup = L.layerGroup().addTo(map);
+  void refreshStores();
   void refreshRoutes();
   setTimeout(() => map?.invalidateSize(), 250);
 });

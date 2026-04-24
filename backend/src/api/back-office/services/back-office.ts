@@ -5,11 +5,20 @@ import {
   validatePtPhone,
   validatePtPlate,
 } from '../utils/back-office-validation';
+import { CONTINENTE_STORES_SEED } from '../data/continent-stores-seed';
 
-const STORE_CATALOG = [
-  { id: 'CT-GAIA', name: 'Continente Gaia', lat: 41.1235, lng: -8.612, zone: 'Vila Nova de Gaia' },
-  { id: 'CT-MAT', name: 'Continente Matosinhos', lat: 41.185, lng: -8.69, zone: 'Matosinhos' },
-  { id: 'CT-POR', name: 'Continente Boavista', lat: 41.162, lng: -8.645, zone: 'Porto Centro' },
+const STORE_CATALOG = CONTINENTE_STORES_SEED.slice(0, 3).map((s) => ({
+  id: s.code,
+  name: s.name,
+  lat: s.lat,
+  lng: s.lng,
+  zone: s.city,
+}));
+
+const DEFAULT_CATALOG_PRODUCTS = [
+  { sku: 'FRASCO-1', name: '1 Frasco', desc: '30 gomas proteicas', price: 14.99, gomas: 30, popular: false, discountLabel: '', sortOrder: 10 },
+  { sku: 'PACK-2', name: 'Pack 2 Frascos', desc: 'Poupa 10% - 60 gomas', price: 26.99, gomas: 60, popular: true, discountLabel: '-10%', sortOrder: 20 },
+  { sku: 'PACK-3', name: 'Pack 3 Frascos', desc: 'Poupa 15% - 90 gomas', price: 38.24, gomas: 90, popular: false, discountLabel: '-15%', sortOrder: 30 },
 ];
 
 const ORDER_STATE = {
@@ -262,19 +271,6 @@ type BoCtx = {
   request?: { ip?: string; header?: Record<string, string | string[] | undefined> };
 };
 
-function actorFromCtx(ctx?: BoCtx) {
-  const u = ctx?.state?.user;
-  return { id: u?.id ?? null, email: u?.email ?? null };
-}
-
-function extractClientIp(ctx?: BoCtx) {
-  const h = ctx?.request?.header || {};
-  const xf = h['x-forwarded-for'];
-  if (typeof xf === 'string' && xf.trim()) return xf.split(',')[0].trim();
-  if (Array.isArray(xf) && xf[0]) return String(xf[0]).split(',')[0].trim();
-  return ctx?.request?.ip || '';
-}
-
 function haversineKm(a: { lat: number; lng: number }, b: { lat: number; lng: number }) {
   const R = 6371;
   const dLat = ((b.lat - a.lat) * Math.PI) / 180;
@@ -304,8 +300,9 @@ function scoreCourierForOrder(order: any, courier: any) {
   const load = toNum(courier.activeAssignments, 0) / cap;
   score += Math.round((1 - Math.min(1, load)) * 20);
   reasons.push(`carga_${Math.round(load * 100)}%`);
-  const store = STORE_CATALOG.find((s) => s.id === order.storeId) || STORE_CATALOG[0];
-  const dist = haversineKm({ lat: courier.lat, lng: courier.lng }, { lat: store.lat, lng: store.lng });
+  const pickupLat = toNum(order.pickupLat, STORE_CATALOG[0].lat);
+  const pickupLng = toNum(order.pickupLng, STORE_CATALOG[0].lng);
+  const dist = haversineKm({ lat: courier.lat, lng: courier.lng }, { lat: pickupLat, lng: pickupLng });
   const distScore = Math.max(0, 10 - Math.min(10, dist));
   score += distScore;
   reasons.push(`dist_${dist.toFixed(1)}km`);
@@ -372,6 +369,70 @@ function auditSnapshotCourier(c: any) {
   return c;
 }
 
+function mapContinentStore(entry: any) {
+  if (!entry) return null;
+  return {
+    id: idToPublic('CT', entry.documentId || entry.id),
+    _documentId: entry.documentId,
+    code: entry.code,
+    name: entry.name,
+    city: entry.city,
+    district: entry.district,
+    address: entry.address,
+    postalCode: entry.postalCode,
+    lat: toNum(entry.lat, 0),
+    lng: toNum(entry.lng, 0),
+    openingHours: entry.openingHours || '',
+    phone: entry.phone || '',
+    format: entry.format || 'Hiper',
+    isActive: entry.isActive !== false,
+  };
+}
+
+function mapInventoryItem(entry: any) {
+  if (!entry) return null;
+  return {
+    id: idToPublic('SI', entry.documentId || entry.id),
+    _documentId: entry.documentId,
+    storeId: entry.store?.documentId ? idToPublic('CT', entry.store.documentId) : null,
+    sku: entry.sku,
+    name: entry.name,
+    brand: entry.brand || '',
+    category: entry.category || '',
+    unit: entry.unit || 'un',
+    stock: toNum(entry.stock, 0),
+    reservedStock: toNum(entry.reservedStock, 0),
+    availableStock: Math.max(0, toNum(entry.stock, 0) - toNum(entry.reservedStock, 0)),
+    reorderLevel: toNum(entry.reorderLevel, 0),
+    price: toNum(entry.price, 0),
+    isActive: entry.isActive !== false,
+    lastCountedAt: entry.lastCountedAt || null,
+  };
+}
+
+function mapCatalogProduct(entry: any) {
+  if (!entry) return null;
+  return {
+    id: idToPublic('PR', entry.documentId || entry.id),
+    _documentId: entry.documentId,
+    sku: String(entry.sku || '').trim().toUpperCase(),
+    name: entry.name || '',
+    desc: entry.desc || '',
+    price: toNum(entry.price, 0),
+    gomas: Math.max(0, toNum(entry.gomas, 0)),
+    popular: !!entry.popular,
+    discount: entry.discountLabel || '',
+    discountLabel: entry.discountLabel || '',
+    imageUrl: entry.imageUrl || '',
+    active: entry.active !== false,
+    sortOrder: toNum(entry.sortOrder, 0),
+    brand: entry.brand || 'GoGummies',
+    category: entry.category || 'Geral',
+    lowStockThreshold: Math.max(0, toNum(entry.lowStockThreshold, 0)),
+    stock: Math.max(0, toNum(entry.stock, 0)),
+  };
+}
+
 function buildOperationalAdminAlerts(
   orders: any[],
   couriers: any[],
@@ -424,37 +485,6 @@ function buildOperationalAdminAlerts(
 }
 
 export default ({ strapi }: any) => ({
-  async writeAdminAudit(
-    ctx: BoCtx | undefined,
-    params: {
-      action: string;
-      entityType: string;
-      entityId: string;
-      before?: any;
-      after?: any;
-      metadata?: any;
-    }
-  ) {
-    try {
-      const actor = actorFromCtx(ctx);
-      await strapi.documents('api::bo-admin-audit.bo-admin-audit').create({
-        data: {
-          actorId: actor.id,
-          actorEmail: actor.email,
-          ip: extractClientIp(ctx),
-          action: params.action,
-          entityType: params.entityType,
-          entityId: params.entityId,
-          before: params.before ?? null,
-          after: params.after ?? null,
-          metadata: params.metadata ?? null,
-        },
-        status: 'published',
-      });
-    } catch {
-      /* audit must never block primary flow */
-    }
-  },
   async issueAdminJwt(user: any) {
     const jwt = strapi.plugin('users-permissions').service('jwt').issue({ id: user.id });
     return jwt;
@@ -573,6 +603,303 @@ export default ({ strapi }: any) => ({
     return entries.map((e: any) => buildPublicCourier(e, activeByCourier[idToPublic('ST', e.documentId || e.id)] || 0));
   },
 
+  async ensureCatalogProductsSeeded() {
+    const existing = await strapi.db.query('api::catalog-product.catalog-product').count();
+    if (existing > 0) return;
+    for (const row of DEFAULT_CATALOG_PRODUCTS) {
+      await strapi.documents('api::catalog-product.catalog-product').create({
+        data: {
+          sku: row.sku,
+          name: row.name,
+          desc: row.desc,
+          price: row.price,
+          gomas: row.gomas,
+          popular: row.popular,
+          discountLabel: row.discountLabel,
+          active: true,
+          sortOrder: row.sortOrder,
+          brand: 'GoGummies',
+          category: 'Geral',
+          lowStockThreshold: 0,
+          stock: 0,
+        },
+        status: 'published',
+      });
+    }
+  },
+
+  async getCatalogProducts() {
+    await this.ensureCatalogProductsSeeded();
+    const rows = await strapi.db.query('api::catalog-product.catalog-product').findMany({
+      orderBy: [{ sortOrder: 'asc' }, { name: 'asc' }],
+    });
+    return rows.map((r: any) => mapCatalogProduct(r)).filter((r: any) => !!r);
+  },
+
+  async upsertCatalogProduct(payload: any) {
+    const sku = String(payload.sku || '').trim().toUpperCase();
+    const name = String(payload.name || '').trim();
+    if (!sku || !name) return { ok: false, error: 'SKU e nome são obrigatórios.' };
+
+    const existing = await strapi.db.query('api::catalog-product.catalog-product').findOne({ where: { sku } });
+    const data = {
+      sku,
+      name,
+      desc: String(payload.desc || '').trim(),
+      price: Math.max(0, toNum(payload.price, 0)),
+      gomas: Math.max(0, toNum(payload.gomas, 0)),
+      popular: !!payload.popular,
+      discountLabel: String(payload.discountLabel ?? payload.discount ?? '').trim(),
+      imageUrl: String(payload.imageUrl || '').trim(),
+      active: payload.active !== false,
+      sortOrder: Math.max(0, toNum(payload.sortOrder, 0)),
+      brand: String(payload.brand || 'GoGummies').trim(),
+      category: String(payload.category || 'Geral').trim(),
+      lowStockThreshold: Math.max(0, toNum(payload.lowStockThreshold, 0)),
+      stock: Math.max(0, toNum(payload.stock, 0)),
+    };
+
+    const saved = existing
+      ? await strapi.documents('api::catalog-product.catalog-product').update({
+          documentId: existing.documentId,
+          data,
+          status: 'published',
+        })
+      : await strapi.documents('api::catalog-product.catalog-product').create({
+          data,
+          status: 'published',
+        });
+
+    return { ok: true, data: mapCatalogProduct(saved) };
+  },
+
+  async deleteCatalogProduct(publicIdOrSku: string) {
+    const token = parsePublicToken(publicIdOrSku, 'PR');
+    const numeric = Number(token);
+    let target = await strapi.db.query('api::catalog-product.catalog-product').findOne({ where: { documentId: token } });
+    if (!target && Number.isFinite(numeric)) target = await strapi.db.query('api::catalog-product.catalog-product').findOne({ where: { id: numeric } });
+    if (!target) {
+      target = await strapi.db.query('api::catalog-product.catalog-product').findOne({ where: { sku: String(publicIdOrSku || '').trim().toUpperCase() } });
+    }
+    if (!target) return { ok: false, error: 'Produto não encontrado.' };
+    await strapi.db.query('api::catalog-product.catalog-product').delete({ where: { id: target.id } });
+    return { ok: true, data: { id: publicIdOrSku } };
+  },
+
+  async ensureContinentStoresSeeded() {
+    const existing = await strapi.db.query('api::continent-store.continent-store').count();
+    if (existing > 0) return;
+    for (const row of CONTINENTE_STORES_SEED) {
+      await strapi.documents('api::continent-store.continent-store').create({
+        data: {
+          code: row.code,
+          name: row.name,
+          city: row.city,
+          district: row.district,
+          address: row.address,
+          postalCode: row.postalCode,
+          lat: row.lat,
+          lng: row.lng,
+          openingHours: row.openingHours,
+          phone: row.phone || '',
+          format: row.format,
+          isActive: true,
+        },
+        status: 'published',
+      });
+    }
+  },
+
+  async getContinentStores() {
+    await this.ensureContinentStoresSeeded();
+    const rows = await strapi.db.query('api::continent-store.continent-store').findMany({
+      orderBy: [{ district: 'asc' }, { city: 'asc' }, { name: 'asc' }],
+    });
+    return rows.map((r: any) => mapContinentStore(r)).filter(Boolean);
+  },
+
+  async createContinentStore(ctx: BoCtx | undefined, payload: any) {
+    const code = String(payload.code || '').trim().toUpperCase();
+    const name = String(payload.name || '').trim();
+    if (!code || !name) return { ok: false, error: 'Código e nome da loja são obrigatórios.' };
+    const existing = await strapi.db.query('api::continent-store.continent-store').findOne({ where: { code } });
+    if (existing) return { ok: false, error: 'Já existe uma loja com esse código.' };
+    const created = await strapi.documents('api::continent-store.continent-store').create({
+      data: {
+        code,
+        name,
+        city: String(payload.city || '').trim(),
+        district: String(payload.district || '').trim(),
+        address: String(payload.address || '').trim(),
+        postalCode: String(payload.postalCode || '').trim(),
+        lat: toNum(payload.lat, 0),
+        lng: toNum(payload.lng, 0),
+        openingHours: String(payload.openingHours || '').trim(),
+        phone: String(payload.phone || '').trim(),
+        format: payload.format || 'Hiper',
+        isActive: payload.isActive !== false,
+      },
+      status: 'published',
+    });
+    const mapped = mapContinentStore(created);
+
+    return { ok: true, data: mapped };
+  },
+
+  async updateContinentStore(ctx: BoCtx | undefined, publicId: string, payload: any) {
+    const token = parsePublicToken(publicId, 'CT');
+    const numeric = Number(token);
+    let target = await strapi.db.query('api::continent-store.continent-store').findOne({ where: { documentId: token } });
+    if (!target && Number.isFinite(numeric)) target = await strapi.db.query('api::continent-store.continent-store').findOne({ where: { id: numeric } });
+    if (!target) return { ok: false, error: 'Loja não encontrada.' };
+
+    const before = mapContinentStore(target);
+    const nextCode = payload.code != null ? String(payload.code).trim().toUpperCase() : target.code;
+    if (!nextCode) return { ok: false, error: 'Código da loja obrigatório.' };
+    if (nextCode !== target.code) {
+      const codeTaken = await strapi.db.query('api::continent-store.continent-store').findOne({ where: { code: nextCode } });
+      if (codeTaken && codeTaken.id !== target.id) return { ok: false, error: 'Código já em uso por outra loja.' };
+    }
+
+    const updated = await strapi.documents('api::continent-store.continent-store').update({
+      documentId: target.documentId,
+      data: {
+        code: nextCode,
+        name: payload.name ?? target.name,
+        city: payload.city ?? target.city,
+        district: payload.district ?? target.district,
+        address: payload.address ?? target.address,
+        postalCode: payload.postalCode ?? target.postalCode,
+        lat: payload.lat != null ? toNum(payload.lat, 0) : target.lat,
+        lng: payload.lng != null ? toNum(payload.lng, 0) : target.lng,
+        openingHours: payload.openingHours ?? target.openingHours,
+        phone: payload.phone ?? target.phone,
+        format: payload.format ?? target.format,
+        isActive: payload.isActive != null ? !!payload.isActive : target.isActive,
+      },
+      status: 'published',
+    });
+
+    const after = mapContinentStore(updated);
+
+    return { ok: true, data: after };
+  },
+
+  async deleteContinentStore(ctx: BoCtx | undefined, publicId: string) {
+    const token = parsePublicToken(publicId, 'CT');
+    const numeric = Number(token);
+    let target = await strapi.db.query('api::continent-store.continent-store').findOne({ where: { documentId: token } });
+    if (!target && Number.isFinite(numeric)) target = await strapi.db.query('api::continent-store.continent-store').findOne({ where: { id: numeric } });
+    if (!target) return { ok: false, error: 'Loja não encontrada.' };
+
+    const linkedInventory = await strapi.db.query('api::store-inventory-item.store-inventory-item').findOne({
+      where: { store: { id: target.id } },
+      select: ['id'],
+    });
+    if (linkedInventory) return { ok: false, error: 'Loja com stock associado. Remove os itens antes de eliminar.' };
+
+    const before = mapContinentStore(target);
+    await strapi.db.query('api::continent-store.continent-store').delete({ where: { id: target.id } });
+
+    return { ok: true, data: { id: publicId } };
+  },
+
+  async getStoreInventory(publicStoreId: string, filters: any) {
+    const token = parsePublicToken(publicStoreId, 'CT');
+    const numeric = Number(token);
+    let store = await strapi.db.query('api::continent-store.continent-store').findOne({ where: { documentId: token } });
+    if (!store && Number.isFinite(numeric)) store = await strapi.db.query('api::continent-store.continent-store').findOne({ where: { id: numeric } });
+    if (!store) return { ok: false, error: 'Loja não encontrada.' };
+
+    const rows = await strapi.db.query('api::store-inventory-item.store-inventory-item').findMany({
+      where: { store: { id: store.id } },
+      populate: { store: true },
+      orderBy: [{ category: 'asc' }, { name: 'asc' }],
+    });
+    let mapped = rows.map((r: any) => mapInventoryItem(r));
+    const q = String(filters?.q || '').trim().toLowerCase();
+    if (q) {
+      mapped = mapped.filter((r: any) => `${r.sku} ${r.name} ${r.brand} ${r.category}`.toLowerCase().includes(q));
+    }
+    return { ok: true, data: mapped };
+  },
+
+  async upsertInventoryItem(ctx: BoCtx | undefined, publicStoreId: string, payload: any) {
+    const token = parsePublicToken(publicStoreId, 'CT');
+    const numeric = Number(token);
+    let store = await strapi.db.query('api::continent-store.continent-store').findOne({ where: { documentId: token } });
+    if (!store && Number.isFinite(numeric)) store = await strapi.db.query('api::continent-store.continent-store').findOne({ where: { id: numeric } });
+    if (!store) return { ok: false, error: 'Loja não encontrada.' };
+
+    const sku = String(payload.sku || '').trim().toUpperCase();
+    const name = String(payload.name || '').trim();
+    if (!sku || !name) return { ok: false, error: 'SKU e nome do item são obrigatórios.' };
+
+    const existing = await strapi.db.query('api::store-inventory-item.store-inventory-item').findOne({
+      where: { store: { id: store.id }, sku },
+      populate: { store: true },
+    });
+
+    const data = {
+      sku,
+      name,
+      brand: String(payload.brand || '').trim(),
+      category: String(payload.category || '').trim(),
+      unit: payload.unit || 'un',
+      stock: Math.max(0, toNum(payload.stock, 0)),
+      reservedStock: Math.max(0, toNum(payload.reservedStock, 0)),
+      reorderLevel: Math.max(0, toNum(payload.reorderLevel, 0)),
+      price: Math.max(0, toNum(payload.price, 0)),
+      isActive: payload.isActive !== false,
+      lastCountedAt: payload.lastCountedAt || null,
+      store: store.id,
+    };
+
+    const before = existing ? mapInventoryItem(existing) : null;
+    const saved = existing
+      ? await strapi.documents('api::store-inventory-item.store-inventory-item').update({
+          documentId: existing.documentId,
+          data,
+          status: 'published',
+          populate: { store: true },
+        })
+      : await strapi.documents('api::store-inventory-item.store-inventory-item').create({
+          data,
+          status: 'published',
+          populate: { store: true },
+        });
+
+    const after = mapInventoryItem(saved);
+
+    return { ok: true, data: after };
+  },
+
+  async deleteInventoryItem(ctx: BoCtx | undefined, publicStoreId: string, publicItemId: string) {
+    const itemToken = parsePublicToken(publicItemId, 'SI');
+    const itemNumeric = Number(itemToken);
+    let target = await strapi.db.query('api::store-inventory-item.store-inventory-item').findOne({
+      where: { documentId: itemToken },
+      populate: { store: true },
+    });
+    if (!target && Number.isFinite(itemNumeric)) {
+      target = await strapi.db.query('api::store-inventory-item.store-inventory-item').findOne({
+        where: { id: itemNumeric },
+        populate: { store: true },
+      });
+    }
+    if (!target) return { ok: false, error: 'Item de stock não encontrado.' };
+
+    const storeToken = parsePublicToken(publicStoreId, 'CT');
+    if (String(target.store?.documentId) !== storeToken && String(target.store?.id) !== storeToken) {
+      return { ok: false, error: 'Item não pertence à loja indicada.' };
+    }
+
+    const before = mapInventoryItem(target);
+    await strapi.db.query('api::store-inventory-item.store-inventory-item').delete({ where: { id: target.id } });
+
+    return { ok: true, data: { id: publicItemId } };
+  },
+
   async listOrders(filters: any) {
     const rows = await this.getOrdersMapped();
     const allowedBoStatuses = new Set(['PENDING', 'INFO_REQUESTED', 'REJECTED', 'APPROVED', 'ASSIGNED', 'IN_TRANSIT', 'DELIVERED']);
@@ -671,7 +998,8 @@ export default ({ strapi }: any) => ({
       return { ok: false, error: 'Estado não permite aprovação.' };
     }
 
-    const store = STORE_CATALOG.find((s) => s.id === payload.storeId);
+    const stores = await this.getContinentStores();
+    const store = stores.find((s: any) => s.id === payload.storeId || s.code === payload.storeId);
     const updated = await this.patchOrder(publicId, {
       data: {
         order_status: ORDER_STATE.APPROVED,
@@ -683,7 +1011,7 @@ export default ({ strapi }: any) => ({
         priority: clampPriority(payload.priority ?? order.priority),
         items: {
           boMeta: {
-            storeId: payload.storeId || null,
+            storeId: (store?.id || payload.storeId || null),
             resources: payload.resources || '',
             type: order.type,
             zone: order.zone,
@@ -694,14 +1022,7 @@ export default ({ strapi }: any) => ({
     });
     if (!updated) return { ok: false, error: 'Falha ao atualizar pedido.' };
     const after = buildPublicOrder(updated);
-    await this.writeAdminAudit(ctx, {
-      action: 'order.approve',
-      entityType: 'order',
-      entityId: publicId,
-      before,
-      after,
-      metadata: { storeId: payload.storeId, costEuro: payload.costEuro, etaMinutes: payload.etaMinutes },
-    });
+
     return { ok: true, data: after };
   },
 
@@ -731,14 +1052,7 @@ export default ({ strapi }: any) => ({
     await this.notify('order_rejected', `Pedido ${order.id} rejeitado: ${reason}`, parsePublicId(order.clientId, 'CU'));
     await this.trySendEmail(order.clientEmail, `Pedido ${order.id} rejeitado`, `Motivo: ${reason}`);
     const after = buildPublicOrder(updated);
-    await this.writeAdminAudit(ctx, {
-      action: 'order.reject',
-      entityType: 'order',
-      entityId: publicId,
-      before,
-      after,
-      metadata: { reason },
-    });
+
     return { ok: true, data: after };
   },
 
@@ -766,14 +1080,7 @@ export default ({ strapi }: any) => ({
     await this.notify('order_info_requested', `Pedido ${order.id}: informação adicional solicitada.`, parsePublicId(order.clientId, 'CU'));
     await this.trySendEmail(order.clientEmail, `Pedido ${order.id} - informação adicional`, message);
     const after = buildPublicOrder(updated);
-    await this.writeAdminAudit(ctx, {
-      action: 'order.request_info',
-      entityType: 'order',
-      entityId: publicId,
-      before,
-      after,
-      metadata: { message },
-    });
+
     return { ok: true, data: after };
   },
 
@@ -812,14 +1119,7 @@ export default ({ strapi }: any) => ({
     if (!updated) return { ok: false, error: 'Falha ao atribuir estafeta.' };
     await this.notify('order_assigned', `Pedido ${order.id} atribuído ao estafeta ${courier.name}.`);
     const after = buildPublicOrder(updated);
-    await this.writeAdminAudit(ctx, {
-      action: 'order.assign_courier',
-      entityType: 'order',
-      entityId: publicId,
-      before,
-      after,
-      metadata: { courierId: payload.courierId },
-    });
+
     return { ok: true, data: after };
   },
 
@@ -836,14 +1136,7 @@ export default ({ strapi }: any) => ({
       await this.notify('priority_urgent', `ALERTA IMEDIATO: ${order.id} definido com prioridade 5.`);
     }
     const after = buildPublicOrder(updated);
-    await this.writeAdminAudit(ctx, {
-      action: 'order.set_priority',
-      entityType: 'order',
-      entityId: publicId,
-      before,
-      after,
-      metadata: { priority },
-    });
+
     return { ok: true, data: after };
   },
 
@@ -855,13 +1148,7 @@ export default ({ strapi }: any) => ({
     const updated = await this.patchOrder(publicId, { data: { order_status: ORDER_STATE.IN_TRANSIT } });
     if (!updated) return { ok: false, error: 'Falha ao iniciar trânsito.' };
     const after = buildPublicOrder(updated);
-    await this.writeAdminAudit(ctx, {
-      action: 'order.start_transit',
-      entityType: 'order',
-      entityId: publicId,
-      before,
-      after,
-    });
+
     return { ok: true, data: after };
   },
 
@@ -873,13 +1160,7 @@ export default ({ strapi }: any) => ({
     const updated = await this.patchOrder(publicId, { data: { order_status: ORDER_STATE.DELIVERED } });
     if (!updated) return { ok: false, error: 'Falha ao concluir pedido.' };
     const after = buildPublicOrder(updated);
-    await this.writeAdminAudit(ctx, {
-      action: 'order.complete',
-      entityType: 'order',
-      entityId: publicId,
-      before,
-      after,
-    });
+
     return { ok: true, data: after };
   },
 
@@ -934,13 +1215,7 @@ export default ({ strapi }: any) => ({
     });
     strapi.log.info(`[BO] createCourier ST-${created.id}`);
     const pub = buildPublicCourier(created);
-    await this.writeAdminAudit(ctx, {
-      action: 'courier.create',
-      entityType: 'courier',
-      entityId: pub.id,
-      before: null,
-      after: auditSnapshotCourier(pub),
-    });
+
     return { ok: true, data: pub };
   },
 
@@ -1001,13 +1276,7 @@ export default ({ strapi }: any) => ({
     });
     strapi.log.info(`[BO] updateCourier ${publicId}`);
     const after = buildPublicCourier(updated);
-    await this.writeAdminAudit(ctx, {
-      action: 'courier.update',
-      entityType: 'courier',
-      entityId: publicId,
-      before,
-      after: auditSnapshotCourier(after),
-    });
+
     return { ok: true, data: after };
   },
 
@@ -1058,14 +1327,7 @@ export default ({ strapi }: any) => ({
       : target;
     strapi.log.info(`[BO] courierAction ${publicId} => ${action}`);
     const after = buildPublicCourier(updated);
-    await this.writeAdminAudit(ctx, {
-      action: `courier.action.${action}`,
-      entityType: 'courier',
-      entityId: publicId,
-      before,
-      after: auditSnapshotCourier(after),
-      metadata: { action, patch },
-    });
+
     return { ok: true, data: after };
   },
 
@@ -1073,8 +1335,9 @@ export default ({ strapi }: any) => ({
     const orders = await this.getOrdersMapped();
     const couriers = await this.getCouriersMapped();
     const activeOrders = orders.filter((o: any) => ['APPROVED', 'ASSIGNED', 'IN_TRANSIT'].includes(o.status));
+    const stores = await this.getContinentStores();
     return {
-      stores: STORE_CATALOG,
+      stores: stores.filter((s: any) => s.isActive),
       couriers: couriers.filter((c: any) => c.online || c.state === 'E-06'),
       activeOrders,
     };
@@ -1161,13 +1424,7 @@ export default ({ strapi }: any) => ({
     });
     const rows = await this.getCustomers();
     const mapped = rows.find((r: any) => r.id === idToPublic('CU', created.id));
-    await this.writeAdminAudit(ctx, {
-      action: 'customer.create',
-      entityType: 'customer',
-      entityId: idToPublic('CU', created.id),
-      before: null,
-      after: mapped,
-    });
+
     return { ok: true, data: mapped || null };
   },
 
@@ -1238,13 +1495,7 @@ export default ({ strapi }: any) => ({
 
     const rows = await this.getCustomers();
     const mapped = rows.find((r: any) => r.id === idToPublic('CU', userId));
-    await this.writeAdminAudit(ctx, {
-      action: 'customer.update',
-      entityType: 'customer',
-      entityId: idToPublic('CU', userId),
-      before,
-      after: mapped,
-    });
+
     return { ok: true, data: mapped || null };
   },
 
@@ -1264,15 +1515,7 @@ export default ({ strapi }: any) => ({
     await strapi.db.query('plugin::users-permissions.user').delete({
       where: { id: userId },
     });
-    await this.writeAdminAudit(ctx, {
-      action: 'customer.delete',
-      entityType: 'customer',
-      entityId: idToPublic('CU', userId),
-      before: target
-        ? { id: idToPublic('CU', target.id), name: getUserName(target), email: target.email }
-        : { id: idToPublic('CU', userId) },
-      after: null,
-    });
+
     return { ok: true, data: { id: idToPublic('CU', userId) } };
   },
 
@@ -1365,7 +1608,9 @@ export default ({ strapi }: any) => ({
   },
 
   async getBootstrapData() {
-    const [orders, couriers, customers, rawOrders, reports, map] = await Promise.all([
+    const [stores, products, orders, couriers, customers, rawOrders, reports, map] = await Promise.all([
+      this.getContinentStores(),
+      this.getCatalogProducts(),
       this.getOrdersMapped(),
       this.getCouriersMapped(),
       this.getCustomers(),
@@ -1405,7 +1650,7 @@ export default ({ strapi }: any) => ({
     }
 
     return {
-      continentStores: STORE_CATALOG,
+      continentStores: stores,
       orders,
       couriers,
       customers,
@@ -1417,7 +1662,8 @@ export default ({ strapi }: any) => ({
       deliveriesByZone: reports.deliveriesByZone,
       hourlyVolume: dashboard.hourlyVolume,
       recentReviews: dashboard.recentReviews,
-      products: [],
+      products,
+      stores,
       analytics: {
         kpiSummary: dashboard.kpiSummary,
         monthlyRevenueFromOrders: reports.monthlyRevenueFromOrders,

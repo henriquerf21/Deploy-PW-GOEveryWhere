@@ -14,6 +14,16 @@ import {
   boCreateCustomer,
   boUpdateCustomer,
   boDeleteCustomer,
+  boStores,
+  boCreateStore,
+  boUpdateStore,
+  boDeleteStore,
+  boStoreInventory,
+  boUpsertStoreInventory,
+  boDeleteStoreInventory,
+  boProducts,
+  boUpsertProduct,
+  boDeleteProduct,
 } from '../api/backofficeApi.js';
 
 let _seq = 24090;
@@ -50,6 +60,9 @@ export const logistics = reactive({
   /** Catálogo back-office (demo) */
   products: [],
   slaMetrics: null,
+  stores: [],
+  selectedStoreId: '',
+  storeInventory: [],
 });
 
 function adjustBusy(delta) {
@@ -66,7 +79,8 @@ async function withBusy(fn) {
 }
 
 function applyBootstrap(data) {
-  logistics.continentStores = data.continentStores || logistics.continentStores;
+  const storesFromApi = data.stores || data.continentStores || [];
+  logistics.continentStores = storesFromApi.length ? storesFromApi : logistics.continentStores;
   logistics.orders = data.orders || [];
   logistics.couriers = data.couriers || [];
   logistics.customers = data.customers || [];
@@ -79,6 +93,9 @@ function applyBootstrap(data) {
   logistics.recentReviews = data.recentReviews || [];
   logistics.products = data.products || logistics.products;
   logistics.slaMetrics = data.slaMetrics ?? logistics.slaMetrics;
+  logistics.stores = storesFromApi;
+  logistics.selectedStoreId = logistics.selectedStoreId || logistics.stores[0]?.id || '';
+  logistics.storeInventory = Array.isArray(data.storeInventory) ? data.storeInventory : logistics.storeInventory;
   logistics.initialized = true;
 }
 
@@ -105,6 +122,9 @@ export async function initLogistics({ force = false } = {}) {
     logistics.recentReviews = [];
     logistics.products = [];
     logistics.slaMetrics = null;
+    logistics.stores = [];
+    logistics.selectedStoreId = '';
+    logistics.storeInventory = [];
     return { ok: false, error: err?.message || 'Falha ao carregar dados do Strapi.' };
   } finally {
     logistics.loading = false;
@@ -117,6 +137,98 @@ export async function refreshOrderFromServer(orderId) {
     const order = await boGetOrder(orderId);
     upsertOrder(order);
     return order;
+  });
+}
+
+
+export function setSelectedStore(storeId) {
+  logistics.selectedStoreId = storeId || '';
+}
+
+export async function refreshStores() {
+  return withBusy(async () => {
+    const rows = await boStores();
+    logistics.stores = Array.isArray(rows) ? rows : [];
+    logistics.continentStores = logistics.stores;
+    if (!logistics.selectedStoreId || !logistics.stores.some((s) => s.id === logistics.selectedStoreId)) {
+      logistics.selectedStoreId = logistics.stores[0]?.id || '';
+    }
+    return logistics.stores;
+  });
+}
+
+export async function createStore(payload) {
+  return withBusy(async () => {
+    const created = await boCreateStore(payload);
+    const idx = logistics.stores.findIndex((s) => s.id === created.id);
+    if (idx >= 0) logistics.stores[idx] = created;
+    else logistics.stores.push(created);
+    logistics.stores.sort((a, b) => `${a.district} ${a.city} ${a.name}`.localeCompare(`${b.district} ${b.city} ${b.name}`));
+    logistics.continentStores = logistics.stores;
+    logistics.selectedStoreId = created.id;
+    logAct(`Loja ${created.name} criada.`);
+    return created;
+  });
+}
+
+export async function updateStore(storeId, payload) {
+  return withBusy(async () => {
+    const updated = await boUpdateStore(storeId, payload);
+    const idx = logistics.stores.findIndex((s) => s.id === storeId || s.id === updated.id);
+    if (idx >= 0) logistics.stores[idx] = updated;
+    else logistics.stores.push(updated);
+    logistics.continentStores = logistics.stores;
+    logAct(`Loja ${updated.name} atualizada.`);
+    return updated;
+  });
+}
+
+export async function deleteStore(storeId) {
+  return withBusy(async () => {
+    await boDeleteStore(storeId);
+    const idx = logistics.stores.findIndex((s) => s.id === storeId);
+    if (idx >= 0) logistics.stores.splice(idx, 1);
+    logistics.continentStores = logistics.stores;
+    if (logistics.selectedStoreId === storeId) {
+      logistics.selectedStoreId = logistics.stores[0]?.id || '';
+      logistics.storeInventory = [];
+    }
+    logAct(`Loja ${storeId} removida.`);
+    return true;
+  });
+}
+
+export async function refreshStoreInventory(storeId, filters = {}) {
+  if (!storeId) {
+    logistics.storeInventory = [];
+    return [];
+  }
+  return withBusy(async () => {
+    const rows = await boStoreInventory(storeId, filters);
+    logistics.storeInventory = Array.isArray(rows) ? rows : [];
+    return logistics.storeInventory;
+  });
+}
+
+export async function upsertStoreInventoryItem(storeId, payload) {
+  return withBusy(async () => {
+    const saved = await boUpsertStoreInventory(storeId, payload);
+    const idx = logistics.storeInventory.findIndex((i) => i.id === saved.id || i.sku === saved.sku);
+    if (idx >= 0) logistics.storeInventory[idx] = saved;
+    else logistics.storeInventory.push(saved);
+    logistics.storeInventory.sort((a, b) => `${a.category} ${a.name}`.localeCompare(`${b.category} ${b.name}`));
+    logAct(`Stock ${saved.sku} atualizado em ${storeId}.`);
+    return saved;
+  });
+}
+
+export async function deleteStoreInventoryItem(storeId, itemId) {
+  return withBusy(async () => {
+    await boDeleteStoreInventory(storeId, itemId);
+    const idx = logistics.storeInventory.findIndex((i) => i.id === itemId);
+    if (idx >= 0) logistics.storeInventory.splice(idx, 1);
+    logAct(`Item ${itemId} removido do stock da loja ${storeId}.`);
+    return true;
   });
 }
 
@@ -379,68 +491,39 @@ export async function completeDelivery(orderId) {
   }
 }
 
-export function addProduct({ name, sku, stock, price, category, imageUrl, brand, description, ean, lowStockThreshold }) {
-  const s = (sku || '').trim();
-  if (!s) return { ok: false, error: 'SKU obrigatório' };
-  if (logistics.products.some((p) => p.sku === s)) return { ok: false, error: 'SKU já existe' };
-  const st = Number(stock);
-  const pr = Number(price);
-  const img = imageUrl != null ? String(imageUrl).trim() : '';
-  const lst = Number(lowStockThreshold);
-  logistics.products.push({
-    name: (name || '').trim() || 'Sem nome',
-    sku: s,
-    stock: Number.isFinite(st) ? Math.max(0, st) : 0,
-    price: Number.isFinite(pr) ? Math.max(0, pr) : 0,
-    active: true,
-    category: (category || '').trim() || 'Geral',
-    brand: (brand || '').trim() || 'GoGummies',
-    description: (description || '').trim(),
-    ean: (ean || '').trim(),
-    lowStockThreshold: Number.isFinite(lst) && lst >= 0 ? lst : 0,
-    ...(img ? { imageUrl: img } : {}),
+export async function refreshProducts() {
+  return withBusy(async () => {
+    const rows = await boProducts();
+    logistics.products = Array.isArray(rows) ? rows : [];
+    return logistics.products;
   });
-  logAct(`Produto ${s} adicionado.`);
-  return { ok: true };
 }
 
-export function updateProduct(sku, patch) {
-  const p = logistics.products.find((x) => x.sku === sku);
-  if (!p) return { ok: false, error: 'Produto não encontrado' };
-  if (patch.name != null) p.name = String(patch.name).trim() || p.name;
-  if (patch.stock != null) {
-    const n = Number(patch.stock);
-    if (Number.isFinite(n)) p.stock = Math.max(0, n);
-  }
-  if (patch.price != null) {
-    const n = Number(patch.price);
-    if (Number.isFinite(n)) p.price = Math.max(0, n);
-  }
-  if (patch.active != null) p.active = !!patch.active;
-  if (patch.category != null) p.category = String(patch.category).trim() || p.category;
-  if (patch.imageUrl !== undefined) {
-    const img = String(patch.imageUrl || '').trim();
-    if (img) p.imageUrl = img;
-    else delete p.imageUrl;
-  }
-  if (patch.brand != null) p.brand = String(patch.brand).trim() || p.brand;
-  if (patch.description != null) p.description = String(patch.description).trim();
-  if (patch.ean != null) p.ean = String(patch.ean).trim();
-  if (patch.lowStockThreshold != null) {
-    const lst = Number(patch.lowStockThreshold);
-    if (Number.isFinite(lst) && lst >= 0) p.lowStockThreshold = lst;
-  }
-  logAct(`Produto ${sku} atualizado.`);
-  return { ok: true };
+export async function addProduct(payload) {
+  return withBusy(async () => {
+    const saved = await boUpsertProduct(payload);
+    const idx = logistics.products.findIndex((p) => p.id === saved.id || p.sku === saved.sku);
+    if (idx >= 0) logistics.products[idx] = saved;
+    else logistics.products.push(saved);
+    logistics.products.sort((a, b) => (Number(a.sortOrder) || 0) - (Number(b.sortOrder) || 0));
+    logAct(`Produto ${saved.sku} guardado no Strapi.`);
+    return { ok: true, data: saved };
+  });
 }
 
-export function deleteProduct(sku) {
-  const s = (sku || '').trim();
-  const i = logistics.products.findIndex((p) => p.sku === s);
-  if (i < 0) return { ok: false, error: 'Produto não encontrado' };
-  logistics.products.splice(i, 1);
-  logAct(`Produto ${s} eliminado.`);
-  return { ok: true };
+export async function updateProduct(sku, patch) {
+  return addProduct({ ...patch, sku });
+}
+
+export async function deleteProduct(idOrSku) {
+  return withBusy(async () => {
+    await boDeleteProduct(idOrSku);
+    const key = String(idOrSku || '').trim();
+    const idx = logistics.products.findIndex((p) => p.id === key || p.sku === key);
+    if (idx >= 0) logistics.products.splice(idx, 1);
+    logAct(`Produto ${key} removido do Strapi.`);
+    return { ok: true };
+  });
 }
 
 export function availableCouriersForOrder(orderId) {

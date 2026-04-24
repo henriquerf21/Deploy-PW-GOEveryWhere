@@ -46,9 +46,15 @@
         </div>
       </div>
       <div v-if="urgentAlerts.length" class="bo-urgent-bar" role="alert">
-        <div v-for="a in urgentAlerts" :key="a.id" class="bo-urgent-item">
+        <div class="bo-urgent-head">
+          <strong>Alertas operacionais</strong>
+          <span v-if="hiddenAlertsCount > 0" class="bo-urgent-more">+{{ hiddenAlertsCount }} por ver</span>
+        </div>
+        <div class="bo-urgent-list">
+        <div v-for="a in visibleUrgentAlerts" :key="a.id" class="bo-urgent-item">
           <span>{{ a.message }}</span>
           <button type="button" class="bo-urgent-x" @click="dismissAdminAlert(a.id)" aria-label="Dispensar alerta">×</button>
+        </div>
         </div>
       </div>
       <header class="bo-topbar">
@@ -241,6 +247,8 @@ const userInitials = computed(() => {
 });
 
 const urgentAlerts = computed(() => logistics.adminAlerts);
+const visibleUrgentAlerts = computed(() => urgentAlerts.value.slice(0, 4));
+const hiddenAlertsCount = computed(() => Math.max(0, urgentAlerts.value.length - visibleUrgentAlerts.value.length));
 
 const shellBusy = computed(() => !!logistics.loading || (logistics.busyCount || 0) > 0);
 
@@ -540,6 +548,35 @@ onMounted(() => {
   background: linear-gradient(90deg, #fef3c7, #fff7ed);
   border-bottom: 1px solid #fcd34d;
   padding: 10px 28px;
+  max-height: 170px;
+  overflow: hidden;
+}
+
+.bo-urgent-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: #7c2d12;
+}
+
+.bo-urgent-more {
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(146, 64, 14, 0.1);
+  font-weight: 700;
+  font-size: 11px;
+}
+
+.bo-urgent-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 118px;
+  overflow-y: auto;
+  padding-right: 2px;
 }
 
 .bo-urgent-item {
@@ -551,6 +588,11 @@ onMounted(() => {
   font-weight: 600;
   color: #92400e;
   padding: 4px 0;
+  border-bottom: 1px dashed rgba(146, 64, 14, 0.18);
+}
+
+.bo-urgent-item:last-child {
+  border-bottom: none;
 }
 
 .bo-urgent-x {

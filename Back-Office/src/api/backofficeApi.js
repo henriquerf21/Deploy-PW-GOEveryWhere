@@ -118,3 +118,67 @@ export async function boDeleteCustomer(id) {
     method: 'DELETE',
   });
 }
+
+
+export async function boStores() {
+  return request('/bo/stores');
+}
+
+export async function boCreateStore(payload) {
+  return request('/bo/stores', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function boUpdateStore(id, payload) {
+  return request(`/bo/stores/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function boDeleteStore(id) {
+  return request(`/bo/stores/${encodeURIComponent(id)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function boStoreInventory(storeId, filters = {}) {
+  const q = new URLSearchParams();
+  Object.entries(filters).forEach(([k, v]) => {
+    if (v != null && v !== '') q.set(k, String(v));
+  });
+  const suffix = q.toString() ? `?${q.toString()}` : '';
+  return request(`/bo/stores/${encodeURIComponent(storeId)}/inventory${suffix}`);
+}
+
+export async function boUpsertStoreInventory(storeId, payload) {
+  return request(`/bo/stores/${encodeURIComponent(storeId)}/inventory`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function boDeleteStoreInventory(storeId, itemId) {
+  return request(`/bo/stores/${encodeURIComponent(storeId)}/inventory/${encodeURIComponent(itemId)}`, {
+    method: 'DELETE',
+  });
+}
+
+export async function boProducts() {
+  return request('/bo/products');
+}
+
+export async function boUpsertProduct(payload) {
+  return request('/bo/products', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function boDeleteProduct(idOrSku) {
+  return request(`/bo/products/${encodeURIComponent(idOrSku)}`, {
+    method: 'DELETE',
+  });
+}

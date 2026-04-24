@@ -1,0 +1,29 @@
+{
+  "kind": "collectionType",
+  "collectionName": "catalog_products",
+  "info": {
+    "singularName": "catalog-product",
+    "pluralName": "catalog-products",
+    "displayName": "Catalog Product"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "sku": { "type": "string", "required": true, "unique": true },
+    "name": { "type": "string", "required": true },
+    "desc": { "type": "text" },
+    "price": { "type": "decimal", "required": true, "default": 0 },
+    "gomas": { "type": "integer", "default": 0 },
+    "popular": { "type": "boolean", "default": false },
+    "discountLabel": { "type": "string" },
+    "imageUrl": { "type": "string" },
+    "active": { "type": "boolean", "default": true },
+    "sortOrder": { "type": "integer", "default": 0 },
+    "brand": { "type": "string" },
+    "category": { "type": "string" },
+    "lowStockThreshold": { "type": "integer", "default": 0 },
+    "stock": { "type": "integer", "default": 0 }
+  }
+}

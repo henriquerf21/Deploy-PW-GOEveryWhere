@@ -170,6 +170,88 @@ export default {
     return ctx.send({ data: result.data });
   },
 
+
+  async stores(ctx: Ctx) {
+    if (!(await ensureAdminSession(ctx, strapi))) return ctx.unauthorized();
+    const service = getService(strapi);
+    return ctx.send({ data: await service.getContinentStores() });
+  },
+
+  async createStore(ctx: Ctx) {
+    if (!(await ensureAdminSession(ctx, strapi))) return ctx.unauthorized();
+    const service = getService(strapi);
+    const result = await service.createContinentStore(ctx, ctx.request.body ?? {});
+    if (!result.ok) return ctx.badRequest(result.error);
+    return ctx.send({ data: result.data });
+  },
+
+  async updateStore(ctx: Ctx) {
+    if (!(await ensureAdminSession(ctx, strapi))) return ctx.unauthorized();
+    const service = getService(strapi);
+    const result = await service.updateContinentStore(ctx, ctx.params.id, ctx.request.body ?? {});
+    if (!result.ok) return ctx.badRequest(result.error);
+    return ctx.send({ data: result.data });
+  },
+
+  async deleteStore(ctx: Ctx) {
+    if (!(await ensureAdminSession(ctx, strapi))) return ctx.unauthorized();
+    const service = getService(strapi);
+    const result = await service.deleteContinentStore(ctx, ctx.params.id);
+    if (!result.ok) return ctx.badRequest(result.error);
+    return ctx.send({ data: result.data });
+  },
+
+  async storeInventory(ctx: Ctx) {
+    if (!(await ensureAdminSession(ctx, strapi))) return ctx.unauthorized();
+    const service = getService(strapi);
+    const result = await service.getStoreInventory(ctx.params.id, ctx.query ?? {});
+    if (!result.ok) return ctx.badRequest(result.error);
+    return ctx.send({ data: result.data });
+  },
+
+  async upsertStoreInventory(ctx: Ctx) {
+    if (!(await ensureAdminSession(ctx, strapi))) return ctx.unauthorized();
+    const service = getService(strapi);
+    const result = await service.upsertInventoryItem(ctx, ctx.params.id, ctx.request.body ?? {});
+    if (!result.ok) return ctx.badRequest(result.error);
+    return ctx.send({ data: result.data });
+  },
+
+  async deleteStoreInventory(ctx: Ctx) {
+    if (!(await ensureAdminSession(ctx, strapi))) return ctx.unauthorized();
+    const service = getService(strapi);
+    const result = await service.deleteInventoryItem(ctx, ctx.params.id, ctx.params.itemId);
+    if (!result.ok) return ctx.badRequest(result.error);
+    return ctx.send({ data: result.data });
+  },
+
+  async products(ctx: Ctx) {
+    if (!(await ensureAdminSession(ctx, strapi))) return ctx.unauthorized();
+    const service = getService(strapi);
+    return ctx.send({ data: await service.getCatalogProducts() });
+  },
+
+  async publicProducts(ctx: Ctx) {
+    const service = getService(strapi);
+    return ctx.send({ data: await service.getCatalogProducts() });
+  },
+
+  async upsertProduct(ctx: Ctx) {
+    if (!(await ensureAdminSession(ctx, strapi))) return ctx.unauthorized();
+    const service = getService(strapi);
+    const result = await service.upsertCatalogProduct(ctx.request.body ?? {});
+    if (!result.ok) return ctx.badRequest(result.error);
+    return ctx.send({ data: result.data });
+  },
+
+  async deleteProduct(ctx: Ctx) {
+    if (!(await ensureAdminSession(ctx, strapi))) return ctx.unauthorized();
+    const service = getService(strapi);
+    const result = await service.deleteCatalogProduct(ctx.params.id);
+    if (!result.ok) return ctx.badRequest(result.error);
+    return ctx.send({ data: result.data });
+  },
+
   async operationsMap(ctx: Ctx) {
     if (!(await ensureAdminSession(ctx, strapi))) return ctx.unauthorized();
     const service = getService(strapi);

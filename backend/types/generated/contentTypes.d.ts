@@ -107,43 +107,6 @@ export interface AdminApiTokenPermission extends Struct.CollectionTypeSchema {
   };
 }
 
-export interface AdminAuditLog extends Struct.CollectionTypeSchema {
-  collectionName: 'strapi_audit_logs';
-  info: {
-    displayName: 'Audit Log';
-    pluralName: 'audit-logs';
-    singularName: 'audit-log';
-  };
-  options: {
-    draftAndPublish: false;
-    timestamps: false;
-  };
-  pluginOptions: {
-    'content-manager': {
-      visible: false;
-    };
-    'content-type-builder': {
-      visible: false;
-    };
-  };
-  attributes: {
-    action: Schema.Attribute.String & Schema.Attribute.Required;
-    createdAt: Schema.Attribute.DateTime;
-    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
-      Schema.Attribute.Private;
-    date: Schema.Attribute.DateTime & Schema.Attribute.Required;
-    locale: Schema.Attribute.String & Schema.Attribute.Private;
-    localizations: Schema.Attribute.Relation<'oneToMany', 'admin::audit-log'> &
-      Schema.Attribute.Private;
-    payload: Schema.Attribute.JSON;
-    publishedAt: Schema.Attribute.DateTime;
-    updatedAt: Schema.Attribute.DateTime;
-    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
-      Schema.Attribute.Private;
-    user: Schema.Attribute.Relation<'oneToOne', 'admin::user'>;
-  };
-}
-
 export interface AdminPermission extends Struct.CollectionTypeSchema {
   collectionName: 'admin_permissions';
   info: {
@@ -467,36 +430,92 @@ export interface AdminUser extends Struct.CollectionTypeSchema {
   };
 }
 
-export interface ApiBoAdminAuditBoAdminAudit
+export interface ApiCatalogProductCatalogProduct
   extends Struct.CollectionTypeSchema {
-  collectionName: 'bo_admin_audits';
+  collectionName: 'catalog_products';
   info: {
-    displayName: 'BO Admin Audit';
-    pluralName: 'bo-admin-audits';
-    singularName: 'bo-admin-audit';
+    displayName: 'Catalog Product';
+    pluralName: 'catalog-products';
+    singularName: 'catalog-product';
   };
   options: {
     draftAndPublish: false;
   };
   attributes: {
-    action: Schema.Attribute.String & Schema.Attribute.Required;
-    actorEmail: Schema.Attribute.String;
-    actorId: Schema.Attribute.Integer;
-    after: Schema.Attribute.JSON;
-    before: Schema.Attribute.JSON;
+    active: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    brand: Schema.Attribute.String;
+    category: Schema.Attribute.String;
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
-    entityId: Schema.Attribute.String & Schema.Attribute.Required;
-    entityType: Schema.Attribute.String & Schema.Attribute.Required;
-    ip: Schema.Attribute.String;
+    desc: Schema.Attribute.Text;
+    discountLabel: Schema.Attribute.String;
+    gomas: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    imageUrl: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
-      'api::bo-admin-audit.bo-admin-audit'
+      'api::catalog-product.catalog-product'
     > &
       Schema.Attribute.Private;
-    metadata: Schema.Attribute.JSON;
+    lowStockThreshold: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    popular: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<false>;
+    price: Schema.Attribute.Decimal &
+      Schema.Attribute.Required &
+      Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    sku: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    sortOrder: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    stock: Schema.Attribute.Integer & Schema.Attribute.DefaultTo<0>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+  };
+}
+
+export interface ApiContinentStoreContinentStore
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'continent_stores';
+  info: {
+    displayName: 'Continent Store';
+    pluralName: 'continent-stores';
+    singularName: 'continent-store';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    address: Schema.Attribute.String & Schema.Attribute.Required;
+    city: Schema.Attribute.String & Schema.Attribute.Required;
+    code: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    district: Schema.Attribute.String & Schema.Attribute.Required;
+    format: Schema.Attribute.Enumeration<['Hiper', 'Modelo', 'Bom Dia']> &
+      Schema.Attribute.Required;
+    inventoryItems: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::store-inventory-item.store-inventory-item'
+    >;
+    isActive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    lat: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    lng: Schema.Attribute.Decimal & Schema.Attribute.Required;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::continent-store.continent-store'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    openingHours: Schema.Attribute.String;
+    phone: Schema.Attribute.String;
+    postalCode: Schema.Attribute.String & Schema.Attribute.Required;
     publishedAt: Schema.Attribute.DateTime;
     updatedAt: Schema.Attribute.DateTime;
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
@@ -809,6 +828,71 @@ export interface ApiReviewReview extends Struct.CollectionTypeSchema {
       'manyToOne',
       'plugin::users-permissions.user'
     >;
+  };
+}
+
+export interface ApiStoreInventoryItemStoreInventoryItem
+  extends Struct.CollectionTypeSchema {
+  collectionName: 'store_inventory_items';
+  info: {
+    displayName: 'Store Inventory Item';
+    pluralName: 'store-inventory-items';
+    singularName: 'store-inventory-item';
+  };
+  options: {
+    draftAndPublish: false;
+  };
+  attributes: {
+    brand: Schema.Attribute.String;
+    category: Schema.Attribute.String;
+    createdAt: Schema.Attribute.DateTime;
+    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
+    isActive: Schema.Attribute.Boolean & Schema.Attribute.DefaultTo<true>;
+    lastCountedAt: Schema.Attribute.DateTime;
+    locale: Schema.Attribute.String & Schema.Attribute.Private;
+    localizations: Schema.Attribute.Relation<
+      'oneToMany',
+      'api::store-inventory-item.store-inventory-item'
+    > &
+      Schema.Attribute.Private;
+    name: Schema.Attribute.String & Schema.Attribute.Required;
+    price: Schema.Attribute.Decimal & Schema.Attribute.DefaultTo<0>;
+    publishedAt: Schema.Attribute.DateTime;
+    reorderLevel: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    reservedStock: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    sku: Schema.Attribute.String & Schema.Attribute.Required;
+    stock: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          min: 0;
+        },
+        number
+      > &
+      Schema.Attribute.DefaultTo<0>;
+    store: Schema.Attribute.Relation<
+      'manyToOne',
+      'api::continent-store.continent-store'
+    >;
+    unit: Schema.Attribute.Enumeration<['un', 'kg', 'lt', 'pack']> &
+      Schema.Attribute.DefaultTo<'un'>;
+    updatedAt: Schema.Attribute.DateTime;
+    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
+      Schema.Attribute.Private;
   };
 }
 
@@ -1334,20 +1418,21 @@ declare module '@strapi/strapi' {
     export interface ContentTypeSchemas {
       'admin::api-token': AdminApiToken;
       'admin::api-token-permission': AdminApiTokenPermission;
-      'admin::audit-log': AdminAuditLog;
       'admin::permission': AdminPermission;
       'admin::role': AdminRole;
       'admin::session': AdminSession;
       'admin::transfer-token': AdminTransferToken;
       'admin::transfer-token-permission': AdminTransferTokenPermission;
       'admin::user': AdminUser;
-      'api::bo-admin-audit.bo-admin-audit': ApiBoAdminAuditBoAdminAudit;
+      'api::catalog-product.catalog-product': ApiCatalogProductCatalogProduct;
+      'api::continent-store.continent-store': ApiContinentStoreContinentStore;
       'api::courier-estafeta.courier-estafeta': ApiCourierEstafetaCourierEstafeta;
       'api::delivery.delivery': ApiDeliveryDelivery;
       'api::go-points.go-points': ApiGoPointsGoPoints;
       'api::notification.notification': ApiNotificationNotification;
       'api::order.order': ApiOrderOrder;
       'api::review.review': ApiReviewReview;
+      'api::store-inventory-item.store-inventory-item': ApiStoreInventoryItemStoreInventoryItem;
       'plugin::content-releases.release': PluginContentReleasesRelease;
       'plugin::content-releases.release-action': PluginContentReleasesReleaseAction;
       'plugin::i18n.locale': PluginI18NLocale;
