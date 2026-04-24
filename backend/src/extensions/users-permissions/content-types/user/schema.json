@@ -93,6 +93,15 @@
     "nif": {
       "type": "string"
     },
+    "defaultAddress": {
+      "type": "string"
+    },
+    "defaultPostalCode": {
+      "type": "string"
+    },
+    "defaultCity": {
+      "type": "string"
+    },
     "notes": {
       "type": "text"
     },
