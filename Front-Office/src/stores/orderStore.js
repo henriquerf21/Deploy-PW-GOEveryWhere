@@ -143,11 +143,35 @@ export function isDeliveryValid() {
   return !!(store.delivery.name?.trim().length >= 3 && store.delivery.address?.trim().length >= 5 && store.delivery.postalCode && store.delivery.city);
 }
 
-export function rateOrder(orderId, rating) {
+export async function rateOrder(orderId, rating) {
   const order = store.orderHistory.find(o => o.id === orderId);
   if (order) {
+    // Atualização otimista local
     order.rating = rating;
     order.status = 'S-15';
+    
+    // Persistência na API (RF33)
+    try {
+      const docId = order.documentId || order.id;
+      const response = await fetch(`${API_URL}/orders/${docId}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${authState.token}`
+        },
+        body: JSON.stringify({
+          data: {
+            rating: rating,
+            order_status: 'S-15 (Avaliada)'
+          }
+        })
+      });
+      if (!response.ok) {
+        console.error('Falha ao guardar avaliação no Strapi.');
+      }
+    } catch (err) {
+      console.error('Erro de rede ao gravar avaliação:', err);
+    }
   }
 }
 
