@@ -364,6 +364,7 @@ onMounted(() => {
     if (u.defaultAddress)    setDeliveryField('address',    u.defaultAddress);
     if (u.defaultPostalCode) setDeliveryField('postalCode', u.defaultPostalCode);
     if (u.defaultCity)       setDeliveryField('city',       u.defaultCity);
+    if (u.nif)               store.delivery.nif = u.nif;
   }
 
   // Fallback para telefone se não tiver no perfil
