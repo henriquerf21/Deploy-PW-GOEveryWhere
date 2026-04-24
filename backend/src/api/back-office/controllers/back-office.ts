@@ -236,6 +236,11 @@ export default {
     return ctx.send({ data: await service.getCatalogProducts() });
   },
 
+  async publicMetrics(ctx: Ctx) {
+    const service = getService(strapi);
+    return ctx.send({ data: await service.getPublicMetrics() });
+  },
+
   async upsertProduct(ctx: Ctx) {
     if (!(await ensureAdminSession(ctx, strapi))) return ctx.unauthorized();
     const service = getService(strapi);

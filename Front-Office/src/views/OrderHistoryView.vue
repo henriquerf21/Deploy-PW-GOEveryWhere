@@ -49,10 +49,16 @@
           </div>
 
           <div class="order-items">
-            <span v-for="p in order.products" :key="p.name" class="order-product">
-              <svg width="10" height="10" viewBox="0 0 24 24" fill="#00c853"><circle cx="12" cy="12" r="8"/></svg>
-              {{ p.name }}
-            </span>
+            <div class="order-products-wrapper">
+              <span v-for="p in order.products" :key="p.name" class="order-product">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="#00c853"><circle cx="12" cy="12" r="8"/></svg>
+                {{ p.qty ? p.qty + 'x ' : '' }}{{ p.name }}
+              </span>
+              <span v-if="!order.products || order.products.length === 0" class="order-product text-muted">
+                <svg width="10" height="10" viewBox="0 0 24 24" fill="#9ca3af"><circle cx="12" cy="12" r="8"/></svg>
+                Detalhes indisponíveis
+              </span>
+            </div>
             <span class="order-total">€{{ order.total?.toFixed(2) }}</span>
           </div>
 
@@ -431,10 +437,21 @@ function repeatOrder(order) {
   font-size: 0.875rem;
 }
 
+.order-products-wrapper {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
 .order-product {
   display: flex;
   align-items: center;
   gap: 6px;
+}
+
+.text-muted {
+  color: var(--cf-muted);
+  font-style: italic;
 }
 
 .order-total {

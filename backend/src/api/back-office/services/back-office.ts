@@ -1520,6 +1520,35 @@ export default ({ strapi }: any) => ({
     return { ok: true, data: { id: idToPublic('CU', userId) } };
   },
 
+  async getPublicMetrics() {
+    const [orders, rawOrders, couriers] = await Promise.all([
+      this.getOrdersMapped(),
+      this.getOrdersRaw(),
+      this.getCouriersMapped()
+    ]);
+    const delivered = orders.filter((o: any) => o.status === 'DELIVERED').length;
+    
+    const slaMetrics = computeSlaMetrics(rawOrders);
+    const etaTotal = (slaMetrics?.avgMinutesInPending || 0) + 
+                     (slaMetrics?.avgMinutesInApproved || 0) + 
+                     (slaMetrics?.avgMinutesInAssigned || 0);
+    const avgEta = etaTotal > 0 ? Math.round(etaTotal) : 30;
+    
+    const ratedOrders = rawOrders.filter((r: any) => r.rating && r.rating > 0);
+    const avgRating = ratedOrders.length > 0 
+      ? (ratedOrders.reduce((acc: number, r: any) => acc + r.rating, 0) / ratedOrders.length).toFixed(1)
+      : '4.9';
+      
+    const activeCouriers = couriers.length;
+
+    return {
+      deliveries: delivered > 1000 ? `${(delivered / 1000).toFixed(1)}k+` : `${delivered}`,
+      eta: avgEta,
+      rating: `${avgRating}/5`,
+      couriers: `${activeCouriers}+`
+    };
+  },
+
   async getDashboard() {
     const [orders, rawOrders, couriers, customers] = await Promise.all([
       this.getOrdersMapped(),

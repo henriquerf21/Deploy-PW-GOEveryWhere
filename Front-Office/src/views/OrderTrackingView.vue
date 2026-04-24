@@ -260,7 +260,7 @@ onMounted(async () => {
         showStateToast(order.value.status);
       }
     }
-  }, 5000);
+  }, 10000); // RNF02: Atualização a cada 10 segundos
 });
 
 onUnmounted(() => {

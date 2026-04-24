@@ -153,12 +153,22 @@ export function rateOrder(orderId, rating) {
 
 export function reOrder(oldOrder) {
   Object.keys(store.cart.items).forEach(id => store.cart.items[id] = 0);
-  if (oldOrder.products) {
-    oldOrder.products.forEach(p => {
-      const prod = PRODUCTS.find(item => item.name === p.name);
-      if (prod) store.cart.items[prod.id] = p.qty;
-    });
+  
+  let productsList = [];
+  if (Array.isArray(oldOrder.products)) {
+    productsList = oldOrder.products;
+  } else if (oldOrder.products && typeof oldOrder.products === 'object') {
+    if (Array.isArray(oldOrder.products.list)) {
+      productsList = oldOrder.products.list;
+    } else {
+      productsList = Object.values(oldOrder.products).filter(p => p && p.name && p.qty !== undefined);
+    }
   }
+
+  productsList.forEach(p => {
+    const prod = PRODUCTS.find(item => item.name === p.name);
+    if (prod) store.cart.items[prod.id] = p.qty;
+  });
 }
 
 // ── STRAPI INTEGRATION ───────────────────────────────────────────
@@ -226,12 +236,23 @@ export async function fetchUserOrders() {
         console.log('[S-03] adminMessage:', adminMsg);
       }
 
+      let productList = [];
+      if (Array.isArray(attr.items)) {
+        productList = attr.items;
+      } else if (attr.items && typeof attr.items === 'object') {
+        if (Array.isArray(attr.items.list)) {
+          productList = attr.items.list;
+        } else {
+          productList = Object.values(attr.items).filter(p => p && p.name && p.qty !== undefined);
+        }
+      }
+
       return {
         id: Number(order.id),
         documentId: order.documentId,
         date: new Date(attr.createdAt).toLocaleDateString('pt-PT'),
         createdAt: attr.createdAt,
-        products: attr.items || [],
+        products: productList,
         total: attr.total_price,
         status: statusCode,
         rating: attr.rating,

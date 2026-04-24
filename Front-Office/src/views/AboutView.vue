@@ -229,12 +229,19 @@ const slides = [
   { tag: 'Escala', title: 'Preparados para escalar', text: 'Modelo replicável para novas zonas urbanas sem perder qualidade. Dashboards com indicadores por área, volume e estafetas disponíveis.' },
 ];
 
-const highlights = [
-  { value: '12.4k+', label: 'Entregas concluídas' },
-  { value: '30 min', label: 'Tempo médio de entrega' },
-  { value: '4.9/5', label: 'Satisfação dos clientes' },
-  { value: '50+', label: 'Estafetas ativos' },
-];
+const publicMetrics = ref({
+  deliveries: '12.4k+',
+  eta: 30,
+  rating: '4.9/5',
+  couriers: '50+'
+});
+
+const highlights = computed(() => [
+  { value: publicMetrics.value.deliveries, label: 'Entregas concluídas' },
+  { value: `${publicMetrics.value.eta} min`, label: 'Tempo médio de entrega' },
+  { value: publicMetrics.value.rating, label: 'Satisfação dos clientes' },
+  { value: publicMetrics.value.couriers, label: 'Estafetas ativos' },
+]);
 
 /* ── Second cinematic data ── */
 
@@ -291,9 +298,9 @@ const currentFrameSrc = computed(() => MEDIA.aboutScrollFrame(currentFrame.value
 const activeSlide = computed(() => Math.min(slides.length - 1, Math.max(0, Math.floor(scrollProgress.value * slides.length))));
 const sceneClass = computed(() => { const p = scrollProgress.value; if (p < 0.34) return 'scene-gate'; if (p < 0.68) return 'scene-city'; return 'scene-night'; });
 const animatedKpis = computed(() => ({
-  deliveries: `${Math.round(8900 + scrollProgress.value * 3600).toLocaleString('pt-PT')}+`,
-  eta: Math.max(18, Math.round(34 - scrollProgress.value * 11)),
-  rating: (4.62 + scrollProgress.value * 0.33).toFixed(2),
+  deliveries: publicMetrics.value.deliveries,
+  eta: publicMetrics.value.eta,
+  rating: publicMetrics.value.rating,
 }));
 
 /* ── Carousel scroll logic ── */
@@ -402,7 +409,16 @@ const vObserveVisibility = {
   unmounted(el) { if (el._observer) el._observer.disconnect(); },
 };
 
-onMounted(() => {
+onMounted(async () => {
+  try {
+    const res = await fetch('http://localhost:1337/api/bo/public-metrics');
+    if (res.ok) {
+      const json = await res.json();
+      if (json.data) publicMetrics.value = json.data;
+    }
+  } catch (error) {
+    console.error('Erro ao buscar métricas:', error);
+  }
   preloadAllFrames();
   onScroll();
   window.addEventListener('scroll', onScroll, { passive: true });
