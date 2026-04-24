@@ -21,11 +21,11 @@
           </div>
         </div>
         <div class="gp-tiers">
-          <span class="tier" :class="{ available: userPointsBalance >= 500 }">
+          <span class="tier" :class="{ available: userPointsBalance >= 500, 'locked-cursor': userPointsBalance < 500 }">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="1" y="3" width="15" height="13"/><polygon points="16 8 20 8 23 11 23 16 16 16 16 8"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
             500 pts = Entrega grátis
           </span>
-          <span class="tier" :class="{ available: userPointsBalance >= 1000 }">
+          <span class="tier" :class="{ available: userPointsBalance >= 1000, 'locked-cursor': userPointsBalance < 1000 }">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M20.59 13.41l-7.17 7.17a2 2 0 0 1-2.83 0L2 12V2h10l8.59 8.59a2 2 0 0 1 0 2.82z"/><line x1="7" y1="7" x2="7.01" y2="7"/></svg>
             1000 pts = Desconto de 10€
           </span>
@@ -47,6 +47,7 @@
               {{ statusLabel(order.status) }}
             </span>
           </div>
+
           <div class="order-items">
             <span v-for="p in order.products" :key="p.name" class="order-product">
               <svg width="10" height="10" viewBox="0 0 24 24" fill="#00c853"><circle cx="12" cy="12" r="8"/></svg>
@@ -92,8 +93,8 @@
 
     <SiteFooter />
 
-    <div v-if="showRatingModal" class="rating-modal-overlay">
-      <div class="rating-modal">
+    <div v-if="showRatingModal" class="modal-overlay">
+      <div class="modal-card">
         <h3>Avaliar Encomenda</h3>
         <div class="stars">
           <button v-for="i in 5" :key="i" @click="ratingValue = i" :class="{ active: i <= ratingValue }">★</button>
@@ -120,6 +121,7 @@ import {
   rateOrder,
   fetchUserOrders,
   refreshUserProfile,
+  cancelActiveOrder,
   userPointsBalance
 } from '../stores/orderStore.js';
 
@@ -130,6 +132,34 @@ const showRatingModal = ref(false);
 const ratingOrder = ref(null);
 const ratingValue = ref(0);
 const ratingLabels = ['Mau', 'Medíocre', 'Razoável', 'Bom', 'Excelente'];
+
+// --- Lógica para o Cancelamento (Requisito S-13) ---
+const showCancelModal = ref(false);
+const orderToCancel = ref(null);
+const cancelReasonInput = ref('');
+const cancelling = ref(false);
+
+function openCancelModal(order) {
+  orderToCancel.value = order;
+  cancelReasonInput.value = '';
+  showCancelModal.value = true;
+}
+
+async function confirmOrderCancellation() {
+  if (!orderToCancel.value || cancelReasonInput.value.trim().length < 5) return;
+  
+  cancelling.value = true;
+  // Chama a função que criaste na store
+  const result = await cancelActiveOrder(orderToCancel.value.id, cancelReasonInput.value);
+  
+  if (result.success) {
+    showCancelModal.value = false;
+    cancelReasonInput.value = '';
+  } else {
+    alert(`Erro: ${result.error}`);
+  }
+  cancelling.value = false;
+}
 
 // ── LÓGICA DE ORDENAÇÃO (APENAS UMA DECLARAÇÃO AQUI) ──
 const sortedOrders = computed(() => {
@@ -192,7 +222,56 @@ function repeatOrder(order) {
 </script>
 
 
+
 <style scoped>
+.modal-btns {
+  display: flex;
+  gap: 0.75rem;
+  justify-content: center;
+  margin-top: 0.5rem;
+}
+
+.modal-btns button {
+  padding: 0.5rem 1.25rem;
+  border-radius: var(--cf-radius);
+  font-family: var(--cf-font);
+  font-weight: 600;
+  cursor: pointer;
+  border: 1px solid var(--cf-line);
+  background: var(--cf-card);
+}
+
+
+.stars {
+  display: flex;
+  justify-content: center;
+  gap: 8px;
+  margin-bottom: 0.75rem;
+}
+
+.stars button {
+  background: none;
+  border: none;
+  font-size: 2rem;
+  cursor: pointer;
+  color: #d1d5db;
+  transition: color 0.15s ease;
+  line-height: 1;
+}
+
+.stars button.active {
+  color: #f59e0b;
+}
+
+
+
+.locked-cursor {
+  cursor: not-allowed !important;
+  opacity: 0.7;
+}
+
+
+
 .loading-history {
   text-align: center;
   padding: 3rem;

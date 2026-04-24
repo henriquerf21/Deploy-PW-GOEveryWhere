@@ -13,11 +13,22 @@ export const CONTINENTE_STORES = [
 ];
 
 export const ORDER_STATES = {
-  'S-01': { label: 'Submetido', color: '#6b7280', icon: '📩' },
-  'S-02': { label: 'Em Análise', color: '#f59e0b', icon: '🔍' },
-  'S-09': { label: 'Em Trânsito', color: '#00c853', icon: '🚀' },
-  'S-11': { label: 'Entregue', color: '#059669', icon: '✅', terminal: true },
-  'S-15': { label: 'Concluído e Avaliado', color: '#059669', icon: '⭐', terminal: true },
+  'S-01': { label: 'Submetido',                  color: '#6b7280', icon: '📩' },
+  'S-02': { label: 'Em Análise',                 color: '#f59e0b', icon: '🔍' },
+  'S-03': { label: 'Info Adicional Solicitada',  color: '#f97316', icon: '❓' },
+  'S-04': { label: 'Rejeitado',                  color: '#ef4444', icon: '❌', terminal: true },
+  'S-05': { label: 'Aprovado',                   color: '#3b82f6', icon: '✔️' },
+  'S-06': { label: 'Aguardando Aceitação',       color: '#8b5cf6', icon: '⏳' },
+  'S-07': { label: 'Aceite pelo Estafeta',       color: '#06b6d4', icon: '🧑‍🦺' },
+  'S-08': { label: 'Em Recolha',                 color: '#0ea5e9', icon: '🏪' },
+  'S-09': { label: 'Em Trânsito',                color: '#00c853', icon: '🚀' },
+  'S-10': { label: 'No Destino',                 color: '#10b981', icon: '📍' },
+  'S-11': { label: 'Entregue',                   color: '#059669', icon: '✅', terminal: true },
+  'S-12': { label: 'Não Foi Possível Entregar',  color: '#dc2626', icon: '⚠️', terminal: true },
+  'S-13': { label: 'Cancelado pelo Cliente',     color: '#ef4444', icon: '🚫', terminal: true },
+  'S-14': { label: 'Cancelado pelo Admin',       color: '#ef4444', icon: '🚫', terminal: true },
+  'S-15': { label: 'Concluído e Avaliado',       color: '#059669', icon: '⭐', terminal: true },
+  'S-16': { label: 'Concluído Sem Avaliação',    color: '#6b7280', icon: '📋', terminal: true },
 };
 
 export const PRODUCTS = [
@@ -159,10 +170,12 @@ export async function fetchUserOrders() {
 
     const allOrders = (res.data || []).map(order => {
       const attr = order.attributes || order;
+      console.log('order raw:', order.id, order.documentId, order);
       const statusCode = attr.order_status ? attr.order_status.substring(0, 4) : 'S-01';
 
       return {
         id: Number(order.id),
+        documentId: order.documentId,
         date: new Date(attr.createdAt).toLocaleDateString('pt-PT'),
         createdAt: attr.createdAt,
         products: attr.items || [],
@@ -255,6 +268,36 @@ export function resetCart() {
     useGoPoints: false,
     goPointsRedemption: null,
   };
+}
+
+
+export async function cancelActiveOrder(orderId, reason) {
+  try {
+    const response = await fetch(`${API_URL}/orders/${orderId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authState.token}`
+      },
+      body: JSON.stringify({
+        data: {
+          order_status: 'S-13 Cancelado pelo Cliente',
+          cancelReason: reason
+        }
+      })
+    });
+
+    if (response.ok) {
+      await fetchUserOrders();
+      return { success: true };
+    }
+
+    const err = await response.json();
+    return { success: false, error: err?.error?.message || 'Erro ao cancelar no servidor' };
+  } catch (err) {
+    console.error(err);
+    return { success: false, error: err.message };
+  }
 }
 
 export function useOrderStore() { return store; }

@@ -26,6 +26,7 @@ const routes = [
   { path: '/order/tracking', name: 'order-tracking', component: OrderTrackingView, meta: { requiresAuth: true } },
   { path: '/order/history', name: 'order-history', component: OrderHistoryView, meta: { requiresAuth: true } },
   { path: '/about', name: 'about', component: AboutView },
+  { path: '/settings', component: () => import('../views/SettingsView.vue'), meta: { requiresAuth: true } },
 ];
 
 const router = createRouter({
