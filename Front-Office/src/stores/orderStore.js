@@ -162,7 +162,7 @@ export async function rateOrder(orderId, rating) {
         body: JSON.stringify({
           data: {
             rating: rating,
-            order_status: 'S-15 (Avaliada)'
+            order_status: 'S-15 Concluído e Avaliado'
           }
         })
       });

@@ -5,12 +5,14 @@
         <component :is="Component" :key="route.path" />
       </Transition>
     </router-view>
+    <GummyBot />
   </div>
 </template>
 
 <script setup>
 import { computed, onMounted } from 'vue';
 import { useRoute } from 'vue-router';
+import GummyBot from './components/GummyBot.vue';
 
 const route = useRoute();
 const transitionName = computed(() => 'page-slide');

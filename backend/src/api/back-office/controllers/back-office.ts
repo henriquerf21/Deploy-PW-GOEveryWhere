@@ -241,6 +241,11 @@ export default {
     return ctx.send({ data: await service.getPublicMetrics() });
   },
 
+  async chatbot(ctx: Ctx) {
+    const service = getService(strapi);
+    return ctx.send(await service.chatWithBot(ctx.request.body));
+  },
+
   async upsertProduct(ctx: Ctx) {
     if (!(await ensureAdminSession(ctx, strapi))) return ctx.unauthorized();
     const service = getService(strapi);

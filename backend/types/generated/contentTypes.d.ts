@@ -815,6 +815,14 @@ export interface ApiOrderOrder extends Struct.CollectionTypeSchema {
         number
       >;
     publishedAt: Schema.Attribute.DateTime;
+    rating: Schema.Attribute.Integer &
+      Schema.Attribute.SetMinMax<
+        {
+          max: 5;
+          min: 1;
+        },
+        number
+      >;
     rejectionReason: Schema.Attribute.String;
     review: Schema.Attribute.Relation<'oneToOne', 'api::review.review'>;
     store_name: Schema.Attribute.String;

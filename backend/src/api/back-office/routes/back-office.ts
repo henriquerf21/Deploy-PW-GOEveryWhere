@@ -31,6 +31,7 @@ export default {
     { method: 'GET', path: '/bo/products', handler: 'back-office.products', config: { auth: false } },
     { method: 'GET', path: '/bo/public-products', handler: 'back-office.publicProducts', config: { auth: false } },
     { method: 'GET', path: '/bo/public-metrics', handler: 'back-office.publicMetrics', config: { auth: false } },
+    { method: 'POST', path: '/bo/chatbot', handler: 'back-office.chatbot', config: { auth: false } },
     { method: 'POST', path: '/bo/products', handler: 'back-office.upsertProduct', config: { auth: false } },
     { method: 'DELETE', path: '/bo/products/:id', handler: 'back-office.deleteProduct', config: { auth: false } },
 
