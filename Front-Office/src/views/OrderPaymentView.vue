@@ -196,12 +196,7 @@
 
           <hr class="cf-divider" />
 
-          <!-- ── GoPoints Redemption ─────────────────────────────── -->
-          <section
-            v-if="canRedeemDelivery || canRedeemProduct"
-            class="pay-section gopoints-section"
-            aria-labelledby="gopoints-h"
-          >
+          <section class="pay-section gopoints-section" aria-labelledby="gopoints-h">
             <h2 id="gopoints-h" class="side-title gopoints-title">
               <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#f57f17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
                 <circle cx="12" cy="8" r="6"/><path d="M15.477 12.89 17 22l-5-3-5 3 1.523-9.11"/>
@@ -211,20 +206,19 @@
             </h2>
 
             <div class="gopoints-options">
-              <!-- 500 pts — Entrega grátis -->
               <button
                 type="button"
                 class="gopoints-option"
                 :class="{
                   active: store.payment.goPointsRedemption === 'delivery',
-                  unavailable: !canRedeemDelivery
+                  'locked': currentBalance < 500
                 }"
-                :disabled="!canRedeemDelivery"
+                :disabled="currentBalance < 500"
                 @click="handleToggleRedemption('delivery')"
               >
                 <div class="gopoints-option-top">
                   <span class="gopoints-option-cost">500 pts</span>
-                  <span v-if="store.payment.goPointsRedemption === 'delivery'" class="gopoints-check" aria-label="Selecionado">✓</span>
+                  <span v-if="store.payment.goPointsRedemption === 'delivery'" class="gopoints-check">✓</span>
                 </div>
                 <span class="gopoints-option-label">Entrega grátis</span>
                 <span class="gopoints-option-saving">
@@ -232,36 +226,34 @@
                 </span>
               </button>
 
-              <!-- 1000 pts — Produto grátis -->
               <button
                 type="button"
                 class="gopoints-option"
                 :class="{
                   active: store.payment.goPointsRedemption === 'product',
-                  unavailable: !canRedeemProduct
+                  'locked': currentBalance < 1000
                 }"
-                :disabled="!canRedeemProduct"
+                :disabled="currentBalance < 1000"
                 @click="handleToggleRedemption('product')"
               >
                 <div class="gopoints-option-top">
                   <span class="gopoints-option-cost">1000 pts</span>
-                  <span v-if="store.payment.goPointsRedemption === 'product'" class="gopoints-check" aria-label="Selecionado">✓</span>
+                  <span v-if="store.payment.goPointsRedemption === 'product'" class="gopoints-check">✓</span>
                 </div>
                 <span class="gopoints-option-label">Desconto de 10€</span>
-                <span class="gopoints-option-saving">−€{{ goPointsDiscount.toFixed(2) }}</span>
+                <span class="gopoints-option-saving">−€{{ Math.min(subTotal, 10).toFixed(2) }}</span>
               </button>
             </div>
 
             <p v-if="store.payment.goPointsRedemption" class="gopoints-hint gopoints-hint--active">
               <template v-if="store.payment.goPointsRedemption === 'delivery'">
-                500 pts serão descontados do teu saldo ao confirmar.
+                500 pts serão descontados. Portes de entrega serão gratuitos.
               </template>
               <template v-else>
-                1000 pts serão descontados do teu saldo ao confirmar. A entrega é paga na mesma.
+                1000 pts serão descontados. Recebes 10€ de desconto no subtotal.
               </template>
             </p>
           </section>
-          <!-- ── /GoPoints Redemption ────────────────────────────── -->
 
           <button
             type="button"
@@ -274,6 +266,27 @@
             <span v-else>Pagar €{{ total.toFixed(2) }}</span>
           </button>
         </div>
+
+        <Transition name="fade">
+          <div v-if="showRestrictionModal" class="restriction-overlay">
+            <div class="restriction-card">
+              <div class="restriction-icon">
+                <AlertCircle :size="48" stroke="#f59e0b" />
+              </div>
+              <h2>Encomenda em curso</h2>
+              <p>
+                Já tens um pedido ativo. Acompanha o estado da tua entrega
+                ou efetua o cancelamento antes de uma nova compra.
+              </p>
+              
+              <div class="restriction-actions">
+                <button @click="router.push('/order/tracking')" class="btn-primary-small full-width">
+                  Ver Encomenda Ativa
+                </button>
+              </div>
+            </div>
+          </div>
+        </Transition>
       </div>
     </main>
 
@@ -320,13 +333,19 @@ import {
 
 const router = useRouter();
 const store = useOrderStore();
-
+const showRestrictionModal = ref(false);
 const processing    = ref(false);
 const showToast     = ref(false);
 const orderSubmitted = ref(false);
 const mbwayLogoSrc  = `${import.meta.env.BASE_URL}payment/mbway-logo.png`;
 
 onMounted(() => {
+  // Verifica primeiro se já existe uma encomenda ativa
+  if (store.activeOrder) {
+    showRestrictionModal.value = true;
+    return; // Bloqueia o resto da lógica da página
+  }
+
   if (!orderSubmitted.value) {
     if (!isCartValid()) {
       router.replace('/order/select');
@@ -426,6 +445,111 @@ async function handleConfirmOrder() {
 
 
 <style scoped>
+/* --- Overlay e Layout do Modal --- */
+.restriction-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.75); 
+  backdrop-filter: blur(8px); 
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+  padding: 24px;
+}
+
+.restriction-card {
+  background: white;
+  padding: 3rem;
+  border-radius: 2rem;
+  max-width: 420px;
+  width: 100%;
+  text-align: center;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.3);
+  
+  /* Animação de entrada suave */
+  animation: cardEntry 0.5s cubic-bezier(0.34, 1.56, 0.64, 1);
+}
+
+@keyframes cardEntry {
+  from { opacity: 0; transform: translateY(20px) scale(0.95); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* --- Elementos Internos --- */
+.restriction-icon {
+  margin-bottom: 24px;
+  display: flex;
+  justify-content: center;
+}
+
+.restriction-card h2 {
+  font-size: 1.6rem;
+  color: #0f172a;
+  margin-bottom: 12px;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.restriction-card p {
+  color: #64748b;
+  line-height: 1.6;
+  margin-bottom: 32px;
+  font-size: 0.95rem;
+}
+
+/* --- Contentor do Botão --- */
+/* Corrigido: Usamos flex para garantir que o botão filho 100% ocupe o card todo */
+.restriction-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+/* --- O Botão "Smooth" --- */
+.btn-primary-small.full-width {
+  width: 100%; /* Ocupa a largura total do card (menos o padding) */
+  padding: 1.1rem;
+  background: #00c853;
+  color: white;
+  border-radius: 16px;
+  font-weight: 700;
+  font-size: 1rem;
+  border: none;
+  cursor: pointer;
+  
+  /* Transição de alta qualidade */
+  transition: all 0.4s cubic-bezier(0.23, 1, 0.32, 1);
+  box-shadow: 0 8px 15px -3px rgba(0, 200, 83, 0.3);
+  outline: none;
+}
+
+/* Efeito Hover (Smooth Lift) */
+.btn-primary-small.full-width:hover {
+  background: #00ad48;
+  transform: translateY(-4px) scale(1.02);
+  box-shadow: 0 15px 25px -5px rgba(0, 200, 83, 0.4);
+}
+
+/* Efeito ao Clicar (Feedback tátil) */
+.btn-primary-small.full-width:active {
+  transform: translateY(-1px) scale(0.98);
+  filter: brightness(0.9);
+}
+
+.gopoints-option:disabled {
+  cursor: not-allowed; /* O "símbolo proibido" */
+  opacity: 0.6;
+  filter: grayscale(0.8);
+  background: #f8fafc;
+  pointer-events: auto !important; /* Essencial para o cursor aparecer mesmo disabled */
+}
+
+.gopoints-option:disabled:hover {
+  border-color: var(--cf-line); /* Impede que a borda mude de cor se estiver bloqueado */
+}
+
 .page-wrapper {
   min-height: 100vh;
   display: flex;
