@@ -41,7 +41,7 @@ export const PRODUCTS = reactive([
 const store = reactive({
   cart: { items: { 'frasco-1': 0, 'pack-2': 0, 'pack-3': 0 }, urgentDelivery: false },
   delivery: {
-    name: '', phone: '', address: '', postalCode: '', city: '',
+    name: '', phone: '', nif: '', address: '', postalCode: '', city: '', floor: '',
     assignedStore: null, estimatedDistance: null,
   },
   payment: {

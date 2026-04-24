@@ -33,6 +33,19 @@
             </div>
           </div>
           <div class="field-row">
+            <label>NIF</label>
+            <input
+              v-model="form.nif"
+              type="text"
+              inputmode="numeric"
+              maxlength="9"
+              placeholder="9 dígitos (opcional)"
+              class="cf-input"
+              @input="formatNif"
+            />
+            <span class="field-hint">Para faturação nas entregas.</span>
+          </div>
+          <div class="field-row">
             <label>Email</label>
             <input :value="user?.email" type="email" disabled class="cf-input disabled" />
             <span class="field-hint">O email não pode ser alterado.</span>
@@ -130,6 +143,7 @@ const toastMessage = ref('');
 const form = reactive({
   fullName: '',
   phone: '',
+  nif: '',
   currentPassword: '',
   newPassword: '',
   confirmPassword: '',
@@ -147,6 +161,7 @@ onMounted(() => {
     // Une o firstName e lastName para o campo de Nome Completo 
     form.fullName = `${user.value.firstName || ''} ${user.value.lastName || ''}`.trim();
     form.phone             = user.value.phone             || '';
+    form.nif               = user.value.nif               || '';
     form.defaultAddress    = user.value.defaultAddress    || '';
     form.defaultPostalCode = user.value.defaultPostalCode || '';
     form.defaultCity       = user.value.defaultCity       || '';
@@ -177,6 +192,7 @@ async function saveSettings() {
         firstName: firstName,
         lastName: lastName,
         phone:             form.phone,
+        nif:               form.nif,
         defaultAddress:    form.defaultAddress,
         defaultPostalCode: form.defaultPostalCode,
         defaultCity:       form.defaultCity,
@@ -231,6 +247,10 @@ async function saveSettings() {
 function formatPhone(e) {
   // Mantém apenas números e limita a 9 dígitos para o perfil
   form.phone = e.target.value.replace(/\D/g, '').slice(0, 9);
+}
+
+function formatNif(e) {
+  form.nif = e.target.value.replace(/\D/g, '').slice(0, 9);
 }
 
 function formatPostalCode(e) {
