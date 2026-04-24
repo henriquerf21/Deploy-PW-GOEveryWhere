@@ -80,6 +80,31 @@
         </fieldset>
       </section>
 
+      <!-- S-03: Resposta do Cliente ao Pedido de Info -->
+      <section v-if="order.clientReply || order.infoRequestMessage" class="card block wide s03-admin-card">
+        <h3 class="s03-admin-title">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
+          </svg>
+          Esclarecimento S-03
+        </h3>
+
+        <div v-if="order.infoRequestMessage" class="s03-admin-sent">
+          <span class="s03-label">Mensagem enviada ao cliente:</span>
+          <p class="s03-text">{{ order.infoRequestMessage }}</p>
+        </div>
+
+        <div v-if="order.clientReply" class="s03-admin-reply">
+          <span class="s03-label s03-label--reply">Resposta do Cliente:</span>
+          <p class="s03-text s03-text--reply">{{ order.clientReply }}</p>
+        </div>
+
+        <div v-else-if="order.status === ORDER_STATUS.INFO_REQUESTED" class="s03-admin-waiting">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+          <span>Aguardando resposta do cliente…</span>
+        </div>
+      </section>
+
       <section class="card block wide">
         <h3>Atribuir estafeta</h3>
         <p class="hint">Apenas estafetas online na zona do pedido, dentro do limite de entregas simultâneas.</p>
@@ -570,5 +595,74 @@ label {
 .fieldset:disabled .btn {
   opacity: 0.55;
   cursor: not-allowed;
+}
+
+/* S-03: Esclarecimento — Admin View */
+.s03-admin-card {
+  border-left: 4px solid #f59e0b;
+  background: #fffdf5;
+}
+
+.s03-admin-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0 0 14px;
+  font-size: 15px;
+  color: #92400e;
+}
+
+.s03-admin-sent {
+  margin-bottom: 14px;
+  padding: 12px 14px;
+  background: var(--bo-page);
+  border: 1px solid var(--bo-border);
+  border-radius: var(--bo-radius-sm);
+}
+
+.s03-label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--bo-text-secondary);
+  margin-bottom: 4px;
+}
+
+.s03-label--reply {
+  color: #065f46;
+}
+
+.s03-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.5;
+  color: var(--bo-text);
+}
+
+.s03-admin-reply {
+  padding: 14px 16px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: var(--bo-radius-sm);
+}
+
+.s03-text--reply {
+  font-weight: 600;
+  color: #065f46;
+}
+
+.s03-admin-waiting {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  background: #fffbeb;
+  border: 1px solid #fde68a;
+  border-radius: var(--bo-radius-sm);
+  font-size: 13px;
+  font-weight: 600;
+  color: #92400e;
 }
 </style>

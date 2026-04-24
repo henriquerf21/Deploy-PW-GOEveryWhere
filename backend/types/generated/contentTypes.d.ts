@@ -764,7 +764,9 @@ export interface ApiOrderOrder extends Struct.CollectionTypeSchema {
     draftAndPublish: true;
   };
   attributes: {
+    adminMessage: Schema.Attribute.Text;
     cancelReason: Schema.Attribute.String;
+    clientReply: Schema.Attribute.Text;
     courier: Schema.Attribute.Relation<
       'manyToOne',
       'api::courier-estafeta.courier-estafeta'

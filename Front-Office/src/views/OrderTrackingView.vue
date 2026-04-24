@@ -57,6 +57,56 @@
             </div>
           </div>
 
+          <!-- S-03: Info Adicional Solicitada — Alerta + Resposta -->
+          <div v-if="order.status === 'S-03'" class="s03-card">
+            <div class="s03-header">
+              <div class="s03-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f97316" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="12" y1="8" x2="12" y2="12"/>
+                  <line x1="12" y1="16" x2="12.01" y2="16"/>
+                </svg>
+              </div>
+              <div>
+                <h4 class="s03-title">Informação Adicional Solicitada</h4>
+                <p class="s03-subtitle">O administrador precisa de esclarecimentos sobre o teu pedido.</p>
+              </div>
+            </div>
+
+            <div v-if="order.adminMessage" class="s03-message">
+              <span class="s03-message-label">Mensagem do Admin:</span>
+              <p class="s03-message-text">{{ order.adminMessage }}</p>
+            </div>
+
+            <div v-if="s03Sent" class="s03-success">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+              <span>Resposta enviada com sucesso! O pedido voltou para análise.</span>
+            </div>
+
+            <div v-else class="s03-reply-form">
+              <label for="s03-reply" class="s03-reply-label">A tua resposta</label>
+              <textarea
+                id="s03-reply"
+                v-model="s03ReplyText"
+                class="s03-textarea"
+                placeholder="Explica o que o admin pediu (ex: confirmar morada, nº de porta, etc.)"
+                rows="3"
+              ></textarea>
+              <div class="s03-reply-actions">
+                <span class="s03-char-count" :class="{ 'min-reached': s03ReplyText.trim().length >= 10 }">
+                  {{ s03ReplyText.trim().length }} / mín. 10 caracteres
+                </span>
+                <button
+                  class="s03-btn-send"
+                  :disabled="s03ReplyText.trim().length < 10 || s03Sending"
+                  @click="submitS03Reply"
+                >
+                  {{ s03Sending ? 'A enviar...' : 'Enviar Resposta' }}
+                </button>
+              </div>
+            </div>
+          </div>
+
           <!-- Botão de cancelamento — só aparece nos estados S-01 a S-06 -->
           <div v-if="['S-01', 'S-02', 'S-03', 'S-05', 'S-06'].includes(order.status)" class="cancel-zone">
             <button class="btn-cancel-active" @click="openCancelModal(order)">
@@ -134,7 +184,7 @@ import DeliveryRouteMap from '../components/DeliveryRouteMap.vue';
 import { getDestinationLatLng } from '../utils/mapCoords.js';
 import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
-import { useOrderStore, ORDER_STATES, fetchUserOrders, cancelActiveOrder } from '../stores/orderStore.js';
+import { useOrderStore, ORDER_STATES, fetchUserOrders, cancelActiveOrder, replyToInfoRequest } from '../stores/orderStore.js';
 
 const router = useRouter();
 const store = useOrderStore();
@@ -149,6 +199,25 @@ const orderToCancel = ref(null);
 const cancelReasonInput = ref('');
 const cancelling = ref(false);
 const showSuccessModal = ref(false);
+
+// --- S-03: Info Adicional Solicitada ---
+const s03ReplyText = ref('');
+const s03Sending = ref(false);
+const s03Sent = ref(false);
+
+async function submitS03Reply() {
+  if (!order.value || s03ReplyText.value.trim().length < 10) return;
+  s03Sending.value = true;
+  const result = await replyToInfoRequest(order.value.documentId, s03ReplyText.value.trim());
+  if (result.success) {
+    s03Sent.value = true;
+    s03ReplyText.value = '';
+    showStateToast('S-02');
+  } else {
+    alert(`Erro: ${result.error}`);
+  }
+  s03Sending.value = false;
+}
 
 function openCancelModal(o) {
   orderToCancel.value = o;
@@ -222,12 +291,13 @@ const timelineSteps = computed(() => {
   const flow = [
     { state: 'S-01', label: 'Pedido Recebido' },
     { state: 'S-02', label: 'Em Análise' },
+    { state: 'S-03', label: 'Info Solicitada' },
     { state: 'S-05', label: 'Aprovada' },
     { state: 'S-07', label: 'Preparação' },
     { state: 'S-09', label: 'Em Trânsito' },
     { state: 'S-11', label: 'Entregue' },
   ];
-  const currentFlow = ['S-01','S-02','S-05','S-06','S-07','S-08','S-09','S-10','S-11'];
+  const currentFlow = ['S-01','S-02','S-03','S-05','S-06','S-07','S-08','S-09','S-10','S-11'];
   const currentIdx = currentFlow.indexOf(order.value.status);
   return flow.map((step) => {
     const stepIdx = currentFlow.indexOf(step.state);
@@ -1003,5 +1073,172 @@ function showStateToast(newState) {
   .tracking-layout {
     grid-template-columns: 1fr;
   }
+}
+
+/* ══════════════════════════════════════════
+   S-03: INFO ADICIONAL SOLICITADA
+   ══════════════════════════════════════════ */
+.s03-card {
+  margin-top: 1.5rem;
+  background: #fffbeb;
+  border: 1px solid #fcd34d;
+  border-radius: var(--cf-radius-lg);
+  padding: 1.5rem;
+  animation: s03FadeIn 0.4s ease;
+}
+
+@keyframes s03FadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.s03-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.s03-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(249, 115, 22, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.s03-title {
+  margin: 0;
+  font-family: var(--cf-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: #92400e;
+}
+
+.s03-subtitle {
+  margin: 0.2rem 0 0;
+  font-size: 0.8125rem;
+  color: #b45309;
+  line-height: 1.4;
+}
+
+.s03-message {
+  background: #fef3c7;
+  border: 1px solid #fde68a;
+  border-radius: var(--cf-radius);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.s03-message-label {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #92400e;
+  margin-bottom: 0.4rem;
+}
+
+.s03-message-text {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: #78350f;
+  font-weight: 500;
+}
+
+.s03-success {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  padding: 1rem;
+  background: rgba(16, 185, 129, 0.1);
+  border: 1px solid rgba(16, 185, 129, 0.28);
+  border-radius: var(--cf-radius);
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #059669;
+}
+
+.s03-reply-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.s03-reply-label {
+  font-size: 0.8125rem;
+  font-weight: 700;
+  color: #92400e;
+}
+
+.s03-textarea {
+  width: 100%;
+  min-height: 80px;
+  padding: 0.75rem 1rem;
+  border: 1px solid #fde68a;
+  border-radius: var(--cf-radius);
+  background: #fff;
+  font-family: var(--cf-font);
+  font-size: 0.875rem;
+  color: var(--cf-ink);
+  resize: vertical;
+  transition: border-color 0.2s ease;
+}
+
+.s03-textarea:focus {
+  outline: none;
+  border-color: #f59e0b;
+  box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.12);
+}
+
+.s03-textarea::placeholder {
+  color: #d97706;
+  opacity: 0.6;
+}
+
+.s03-reply-actions {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.25rem;
+}
+
+.s03-char-count {
+  font-size: 0.75rem;
+  color: #d97706;
+  font-weight: 500;
+}
+
+.s03-char-count.min-reached {
+  color: #059669;
+}
+
+.s03-btn-send {
+  background: var(--cf-cta);
+  color: #fff;
+  border: none;
+  padding: 0.65rem 1.5rem;
+  border-radius: var(--cf-radius);
+  font-family: var(--cf-font);
+  font-weight: 700;
+  font-size: 0.875rem;
+  cursor: pointer;
+  box-shadow: 0 2px 10px rgba(16, 185, 129, 0.25);
+  transition: background 0.2s ease, opacity 0.2s ease;
+}
+
+.s03-btn-send:hover:not(:disabled) {
+  background: var(--cf-cta-hover);
+}
+
+.s03-btn-send:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }
 </style>
