@@ -1,0 +1,33 @@
+{
+  "kind": "collectionType",
+  "collectionName": "continent_stores",
+  "info": {
+    "singularName": "continent-store",
+    "pluralName": "continent-stores",
+    "displayName": "Continent Store"
+  },
+  "options": {
+    "draftAndPublish": false
+  },
+  "pluginOptions": {},
+  "attributes": {
+    "code": { "type": "string", "required": true, "unique": true },
+    "name": { "type": "string", "required": true },
+    "city": { "type": "string", "required": true },
+    "district": { "type": "string", "required": true },
+    "address": { "type": "string", "required": true },
+    "postalCode": { "type": "string", "required": true },
+    "lat": { "type": "decimal", "required": true },
+    "lng": { "type": "decimal", "required": true },
+    "openingHours": { "type": "string" },
+    "phone": { "type": "string" },
+    "format": { "type": "enumeration", "enum": ["Hiper", "Modelo", "Bom Dia"], "required": true },
+    "isActive": { "type": "boolean", "default": true },
+    "inventoryItems": {
+      "type": "relation",
+      "relation": "oneToMany",
+      "target": "api::store-inventory-item.store-inventory-item",
+      "mappedBy": "store"
+    }
+  }
+}

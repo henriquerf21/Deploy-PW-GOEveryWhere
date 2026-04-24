@@ -144,6 +144,7 @@
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import {
+  logistics,
   getOrderById,
   approveOrder,
   rejectOrder,
