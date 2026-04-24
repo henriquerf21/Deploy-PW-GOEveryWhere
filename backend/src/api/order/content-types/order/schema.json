@@ -109,6 +109,11 @@
     },
     "clientReply": {
       "type": "text"
+    },
+    "rating": {
+      "type": "integer",
+      "min": 1,
+      "max": 5
     }
   }
 }

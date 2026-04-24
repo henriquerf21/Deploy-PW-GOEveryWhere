@@ -1549,6 +1549,56 @@ export default ({ strapi }: any) => ({
     };
   },
 
+  async chatWithBot(body: any) {
+    const userMessage = body?.message || '';
+    const history = body?.history || [];
+    if (!userMessage) return { error: 'A mensagem está vazia.' };
+    
+    const apiKey = process.env.GEMINI_API_KEY;
+    if (!apiKey) return { error: 'O assistente encontra-se temporariamente indisponível.' };
+
+    let conversation = history.map((m: any) => `${m.role === 'user' ? 'Cliente' : 'Assistente'}: ${m.text}`).join('\n');
+    if (!conversation) conversation = `Cliente: ${userMessage}`;
+
+    const prompt = `
+És o Gummy Bot, o assistente virtual da plataforma GoEverywhere (startup portuguesa de logística).
+Tens de ser prestativo, profissional mas amigável (trata o cliente por "tu", português de Portugal).
+
+A tua função é guiar os clientes a utilizarem a nossa App. Aqui estão as informações e respostas úteis que deves dar:
+1. SALDO DE PONTOS: Se perguntarem pelos seus pontos, responde: "Para veres o teu saldo de GoPoints, basta clicares no botão com as iniciais do teu nome no canto superior direito do ecrã!"
+2. GANHAR PONTOS: "Sempre que fazes uma encomenda connosco ganhas pontos! Por cada 1€ que gastas recebes 10 GoPoints."
+3. OFERTAS DOS GOPOINTS: "Podes trocar os teus pontos na hora do checkout: 500 GoPoints dão-te Entrega Grátis, e 1000 GoPoints dão-te um Desconto de 10€ na encomenda."
+4. MODO URGENTE: "A entrega urgente custa apenas +1.50€. A tua encomenda entra com prioridade máxima na atribuição ao estafeta (tempo indicativo ~15 min, conforme zona e tráfego)."
+5. ENTREGAS: "As recolhas são feitas de forma totalmente automatizada numa loja Continente perto de ti e entregues no teu destino."
+6. PROBLEMAS NA ENCOMENDA: "Se tiveres algum problema com a encomenda, vai ao separador 'Histórico' no menu superior, seleciona a encomenda e envia uma mensagem na caixa de 'Contacto' (que será lida pelos nossos administradores)."
+7. ASSISTENTE HUMANO: "Neste momento a nossa linha principal de apoio aos clientes faz-se diretamente pela área de Histórico, onde podes enviar mensagens ao administrador sobre qualquer encomenda!"
+
+Sê conciso (máx. 2 a 3 frases por resposta), prático e ajuda ativamente o utilizador a navegar no site. Nunca digas "não tenho acesso a isso", diz antes "Para veres isso, vai ao menu X".
+
+Histórico da conversa:
+${conversation}
+
+Responde apenas com a tua próxima fala.
+    `;
+
+    try {
+      const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          contents: [{ parts: [{ text: prompt }] }]
+        })
+      });
+      const data = await res.json() as any;
+      let reply = data?.candidates?.[0]?.content?.parts?.[0]?.text || 'Ocorreu um erro a processar o seu pedido.';
+      reply = reply.replace(/^Assistente:\s*/i, '').trim();
+      return { reply };
+    } catch (err) {
+      console.error('Gemini API Error:', err);
+      return { error: 'Erro de comunicação com a IA.' };
+    }
+  },
+
   async getDashboard() {
     const [orders, rawOrders, couriers, customers] = await Promise.all([
       this.getOrdersMapped(),
