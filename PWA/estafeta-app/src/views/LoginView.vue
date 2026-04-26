@@ -31,7 +31,6 @@
 
       <!-- Form -->
       <form class="login-form" @submit.prevent="handleLogin">
-        <p v-if="registeredNotice" class="success-msg">{{ registeredNotice }}</p>
 
         <!-- Telemóvel -->
         <div class="field-group">
@@ -126,9 +125,6 @@ const password = ref('');
 const showPassword = ref(false);
 const remember = ref(true);
 const error = ref('');
-const registeredNotice = computed(() =>
-  route.query.registered === '1' ? 'Registo submetido. Aguarda validação no Back-Office.' : ''
-);
 
 function handlePhoneInput(e) {
   let val = e.target.value.replace(/\D/g, ''); // Apenas dígitos

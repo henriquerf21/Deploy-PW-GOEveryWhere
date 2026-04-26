@@ -7,7 +7,7 @@
     </div>
 
     <!-- Back + Progress -->
-    <div class="reg-nav">
+    <div class="reg-nav" v-if="step < 5">
       <button class="back-link" @click="step > 1 ? step-- : $router.push('/login')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
         Voltar
@@ -15,7 +15,7 @@
     </div>
 
     <!-- Step indicators -->
-    <div class="step-tabs">
+    <div class="step-tabs" v-if="step < 5">
       <div class="step-tab" :class="{ active: step >= 1, current: step === 1 }">
         <span class="step-dot" :class="{ done: step > 1 }">
           <svg v-if="step > 1" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
@@ -185,14 +185,28 @@
           </div>
         </div>
 
-        <p v-if="error" class="error-msg">{{ error }}</p>
+        <!-- Step 5: Success / Waiting -->
+        <div v-show="step === 5" class="success-step">
+          <div class="success-icon-wrapper">
+            <svg class="spinner" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--ge-brand)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+          </div>
+          <h2 class="step-title" style="text-align: center; margin-top: 0;">Candidatura Submetida!</h2>
+          <p class="success-msg">A aguardar confirmação da equipa de suporte GoEverywhere.</p>
+          
+          <div class="waiting-alert">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+            <p><strong>Não saias desta página</strong> até a confirmação estar validada. Pode demorar no máx 20 minutos.</p>
+          </div>
+        </div>
+
+        <p v-if="error && step < 5" class="error-msg">{{ error }}</p>
 
         <!-- Bottom button -->
-        <button type="submit" class="continue-btn">
+        <button type="submit" class="continue-btn" v-if="step < 5">
           <span>{{ step === 4 ? 'Submeter candidatura' : 'Continuar' }}</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
         </button>
-        <p class="step-counter">Passo {{ step }} de 4</p>
+        <p class="step-counter" v-if="step < 5">Passo {{ step }} de 4</p>
       </form>
     </div>
 
@@ -208,9 +222,9 @@
 </template>
 
 <script setup>
-import { ref, reactive } from 'vue';
+import { computed, ref, reactive } from 'vue';
 import { useRouter } from 'vue-router';
-import { ZONES } from '../constants.js';
+import { ZONES, VEHICLES } from '../constants.js';
 
 const router = useRouter();
 const step = ref(1);
@@ -267,6 +281,98 @@ function handlePostalCode(e) {
   }
   form.postalCode = val;
   e.target.value = val;
+}
+
+const isSubmitting = ref(false);
+
+async function submitRegistration() {
+  error.value = '';
+  isSubmitting.value = true;
+  step.value = 5; // Mostrar o spinner visualmente
+  
+  try {
+    // 1. Função auxiliar para carregar ficheiros para o Strapi
+    const uploadFile = async (file) => {
+      if (!file) return null;
+      const formData = new FormData();
+      formData.append('files', file);
+      
+      const res = await fetch('http://localhost:1337/api/upload', {
+        method: 'POST',
+        body: formData,
+      });
+      if (!res.ok) throw new Error('Falha no upload do ficheiro.');
+      const data = await res.json();
+      return data[0]?.id;
+    };
+
+    // 2. Fazer upload de todos os ficheiros em simultâneo
+    const [ccId, selfieId, ibanId, licenseId, insuranceId] = await Promise.all([
+      uploadFile(form.docCc),
+      uploadFile(form.docSelfie),
+      uploadFile(form.docIban),
+      uploadFile(form.docLicense),
+      uploadFile(form.docInsurance)
+    ]);
+
+    // Preparar Nomes
+    const nameParts = form.fullName.trim().split(' ');
+    const firstName = nameParts[0];
+    const lastName = nameParts.slice(1).join(' ') || '';
+
+    // Preparar Data (de DD/MM/AAAA para AAAA-MM-DD)
+    const dateParts = form.birthDate.split('/');
+    const birthDateISO = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
+
+    // Obter Labels em vez de IDs
+    const zoneLabel = ZONES.find(z => z.id === form.zone)?.label || form.zone;
+    const vehicleLabel = VEHICLES.find(v => v.id === form.vehicleType)?.label || form.vehicleType;
+
+    // 3. Payload principal do estafeta
+    const payload = {
+      data: {
+        firstName,
+        lastName,
+        email: form.email,
+        phone: form.countryCode + form.phone,
+        nif: form.nif,
+        cc: form.cc,
+        iban: 'PT50' + form.iban,
+        birthDate: birthDateISO,
+        address: form.address,
+        zone: zoneLabel,
+        vehicleType: vehicleLabel,
+        vehicleBrand: form.vehicleBrand,
+        vehicleModel: form.vehicleModel,
+        vehiclePlate: form.vehiclePlate,
+        courier_status: 'E-01 Pendente Verificação',
+        isOnline: false,
+        // IDs dos Media do Strapi
+        docCc: ccId,
+        docSelfie: selfieId,
+        docIban: ibanId,
+        drivingLicense: licenseId,
+        insurance: insuranceId,
+      }
+    };
+
+    // 4. Gravar estafeta no Backend
+    const res = await fetch('http://localhost:1337/api/courier-estafetas', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload)
+    });
+
+    if (!res.ok) throw new Error('Ocorreu um erro ao registar a candidatura.');
+    
+    // Sucesso garantido! A PWA fica a aguardar no Step 5
+  } catch (err) {
+    console.error(err);
+    error.value = 'Ocorreu um erro ao submeter. Tenta novamente.';
+    step.value = 4; // Voltar atrás para deixar o utilizador retentar
+  } finally {
+    isSubmitting.value = false;
+  }
 }
 
 function nextStep() {
@@ -345,8 +451,8 @@ function nextStep() {
       return;
     }
     
-    // Aqui podes eventualmente compor o IBAN final juntando 'PT50' + form.iban
-    router.push('/login?registered=1');
+    // Iniciar integração com o Backend Strapi
+    submitRegistration();
     return;
   }
   
@@ -511,6 +617,41 @@ function nextStep() {
   color: var(--ge-brand);
 }
 .vehicle-icon { display: flex; }
+
+/* Success Step 5 */
+.success-step {
+  display: flex; flex-direction: column;
+  align-items: center; justify-content: center;
+  text-align: center; 
+  padding: 60px 16px 40px;
+  min-height: 50vh;
+}
+.success-icon-wrapper {
+  display: flex; justify-content: center; align-items: center;
+  margin-bottom: 24px;
+}
+.spinner {
+  animation: spin 1s linear infinite;
+}
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+.success-msg {
+  color: #6b7280; font-size: 15px;
+  line-height: 1.5; margin-bottom: 32px;
+  max-width: 280px;
+}
+.waiting-alert {
+  display: flex; flex-direction: column; align-items: center; gap: 12px;
+  background: #fefce8; border: 1px solid #fef08a;
+  padding: 16px; border-radius: 12px;
+  max-width: 300px;
+}
+.waiting-alert p {
+  color: #854d0e; font-size: 13px; line-height: 1.5; margin: 0;
+}
+.waiting-alert strong { font-weight: 700; }
 
 /* Upload area */
 .upload-area {

@@ -13,6 +13,7 @@ const CourierDetailView = () => import('../views/CourierDetailView.vue');
 const OperationsMapView = () => import('../views/OperationsMapView.vue');
 const CustomersView = () => import('../views/CustomersView.vue');
 const ReportsView = () => import('../views/ReportsView.vue');
+const NotificationsView = () => import('../views/NotificationsView.vue');
 
 const routes = [
   { path: '/login', name: 'login', component: LoginView, meta: { public: true } },
@@ -32,6 +33,7 @@ const routes = [
       { path: 'map', name: 'map', component: OperationsMapView, meta: { title: 'Mapa de Operações' } },
       { path: 'customers', name: 'customers', component: CustomersView, meta: { title: 'Clientes' } },
       { path: 'reports', name: 'reports', component: ReportsView, meta: { title: 'Relatórios' } },
+      { path: 'notifications', name: 'notifications', component: NotificationsView, meta: { title: 'Notificações' } },
     ],
   },
   { path: '/:pathMatch(.*)*', redirect: '/' },

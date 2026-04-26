@@ -19,6 +19,9 @@
         >
           <component :is="item.icon" class="bo-nav-link__icon" :size="20" stroke-width="2" />
           {{ item.label }}
+          <span v-if="item.name === 'notifications' && (pendingOrdersCount > 0 || pendingCouriersCount > 0)" class="bo-nav-badge">
+            {{ pendingOrdersCount }} | {{ pendingCouriersCount }}
+          </span>
         </RouterLink>
       </nav>
       <div class="bo-sidebar__footer">
@@ -30,7 +33,7 @@
           </div>
           <ChevronDown class="bo-sidebar__chev" :size="18" />
         </div>
-        <a :href="frontOfficeUrl" class="bo-sidebar__back">← Voltar ao GoGummies</a>
+        <a :href="`${frontOfficeUrl}/product`" class="bo-sidebar__back" target="_blank" rel="noopener noreferrer">← Ver site GoGummies</a>
         <button type="button" class="bo-sidebar__logout" @click="logout">Sair do painel</button>
       </div>
     </aside>
@@ -45,98 +48,7 @@
           </div>
         </div>
       </div>
-      <div v-if="urgentAlerts.length" class="bo-urgent-bar" role="alert">
-        <div class="bo-urgent-head">
-          <strong>Alertas operacionais</strong>
-          <span v-if="hiddenAlertsCount > 0" class="bo-urgent-more">+{{ hiddenAlertsCount }} por ver</span>
-        </div>
-        <div class="bo-urgent-list">
-        <div v-for="a in visibleUrgentAlerts" :key="a.id" class="bo-urgent-item">
-          <span>{{ a.message }}</span>
-          <button type="button" class="bo-urgent-x" @click="dismissAdminAlert(a.id)" aria-label="Dispensar alerta">×</button>
-        </div>
-        </div>
-      </div>
-      <header class="bo-topbar">
-        <div class="bo-topbar__left">
-          <div class="bo-topbar__user">
-            <div class="bo-topbar__avatar">{{ userInitials }}</div>
-            <span class="bo-topbar__name">{{ displayName }}</span>
-            <ChevronDown :size="18" class="bo-topbar__chev" />
-          </div>
-          <div class="bo-pop">
-            <button
-              type="button"
-              class="bo-icon-btn"
-              :class="{ 'is-on': notifOpen }"
-              aria-label="Notificações"
-              :aria-expanded="notifOpen"
-              @click="toggleNotif"
-            >
-              <Bell :size="20" />
-            </button>
-            <div v-if="notifOpen" class="bo-pop__panel" role="region" aria-label="Alertas">
-              <p v-if="urgentAlerts.length" class="bo-pop__title">Alertas urgentes</p>
-              <ul v-if="urgentAlerts.length" class="bo-pop__list">
-                <li v-for="a in urgentAlerts" :key="a.id" class="bo-pop__li">{{ a.message }}</li>
-              </ul>
-              <p v-else class="bo-pop__muted">Sem alertas urgentes neste momento.</p>
-              <RouterLink class="bo-pop__link" :to="{ name: 'orders' }" @click="notifOpen = false">Ir para pedidos</RouterLink>
-            </div>
-          </div>
-          <div class="bo-pop">
-            <button
-              type="button"
-              class="bo-icon-btn"
-              :class="{ 'is-on': msgOpen }"
-              aria-label="Atividade recente"
-              :aria-expanded="msgOpen"
-              @click="toggleMsg"
-            >
-              <MessageSquare :size="20" />
-            </button>
-            <div v-if="msgOpen" class="bo-pop__panel bo-pop__panel--wide" role="region" aria-label="Atividade">
-              <p class="bo-pop__title">Registo de atividade</p>
-              <ul class="bo-pop__list bo-pop__list--scroll">
-                <li v-for="act in recentActivity" :key="act.id" class="bo-pop__li bo-pop__li--sm">
-                  <span class="bo-pop__time">{{ act.at.slice(11, 16) }}</span>
-                  {{ act.text }}
-                </li>
-              </ul>
-              <p v-if="!recentActivity.length" class="bo-pop__muted">Sem entradas.</p>
-            </div>
-          </div>
-        </div>
-        <div class="bo-topbar__search-wrap">
-          <Search class="bo-topbar__search-icon" :size="18" />
-          <input
-            v-model="globalSearch"
-            type="search"
-            class="bo-topbar__search"
-            placeholder="Pesquisar pedidos (Enter)…"
-            aria-label="Pesquisar pedidos"
-            @keydown.enter="runGlobalSearch"
-          />
-        </div>
-        <div class="bo-pop bo-pop--end">
-          <button
-            type="button"
-            class="bo-icon-btn"
-            :class="{ 'is-on': settingsOpen }"
-            aria-label="Definições"
-            :aria-expanded="settingsOpen"
-            @click="toggleSettings"
-          >
-            <Settings :size="20" />
-          </button>
-          <div v-if="settingsOpen" class="bo-pop__panel" role="dialog" aria-label="Definições rápidas">
-            <p class="bo-pop__title">Painel (demo)</p>
-            <p class="bo-pop__muted">Sessão: {{ displayEmail }}</p>
-            <RouterLink class="bo-pop__link" :to="{ name: 'reports' }" @click="settingsOpen = false">Relatórios e exportação</RouterLink>
-            <RouterLink class="bo-pop__link" :to="{ name: 'map' }" @click="settingsOpen = false">Mapa de operações</RouterLink>
-          </div>
-        </div>
-      </header>
+
 
       <div class="bo-breadcrumb-bar">
         <h1 class="bo-page-title">{{ pageTitle }}</h1>
@@ -167,6 +79,7 @@ import { computed, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { clearBoSession, getSessionUser } from '../auth/session.js';
 import { logistics, dismissAdminAlert, getOrderById, getCourierById, initLogistics } from '../stores/logisticsStore.js';
+import { ORDER_STATUS, COURIER_STATE } from '../constants/logistics.js';
 import {
   LayoutDashboard,
   Package,
@@ -256,6 +169,7 @@ const frontOfficeUrl = import.meta.env.VITE_FRONT_OFFICE_URL || 'http://localhos
 
 const nav = [
   { name: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { name: 'notifications', label: 'Notificações', icon: Bell },
   { name: 'products', label: 'Produtos', icon: Package },
   { name: 'orders', label: 'Pedidos', icon: ClipboardList },
   { name: 'couriers', label: 'Estafetas', icon: Bike },
@@ -300,8 +214,25 @@ function isActive(item) {
   return route.name === item.name;
 }
 
-onMounted(() => {
-  void initLogistics();
+const pendingOrdersCount = computed(() => {
+  return logistics.orders.filter(o => o.status === ORDER_STATUS.PENDING).length;
+});
+const pendingCouriersCount = computed(() => {
+  return logistics.couriers.filter(c => c.state === COURIER_STATE.E01 || c.courier_status === 'E-01 Pendente Verificação').length;
+});
+
+const knownOrderIds = new Set();
+const knownCourierIds = new Set();
+
+onMounted(async () => {
+  await initLogistics();
+
+  logistics.orders.forEach(o => knownOrderIds.add(o.id));
+  logistics.couriers.forEach(c => knownCourierIds.add(c.id));
+
+  setInterval(async () => {
+    await initLogistics({ force: true });
+  }, 10000);
 });
 </script>
 
@@ -408,6 +339,16 @@ onMounted(() => {
   color: #fff;
   background: rgba(27, 138, 74, 0.35);
   box-shadow: inset 0 0 0 1px rgba(110, 231, 183, 0.2);
+}
+
+.bo-nav-badge {
+  margin-left: auto;
+  background: var(--bo-brand);
+  color: #fff;
+  font-size: 11px;
+  font-weight: 700;
+  padding: 2px 8px;
+  border-radius: 12px;
 }
 
 .bo-nav-link__icon {

@@ -100,6 +100,21 @@
         "audios"
       ]
     },
+    "docCc": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images", "files"]
+    },
+    "docSelfie": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images"]
+    },
+    "docIban": {
+      "type": "media",
+      "multiple": false,
+      "allowedTypes": ["images", "files"]
+    },
     "rating": {
       "type": "decimal"
     },
