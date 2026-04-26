@@ -44,35 +44,31 @@
     <div class="reg-body">
       <form @submit.prevent="nextStep">
         <!-- Step 1: Dados pessoais -->
-        <template v-if="step === 1">
+        <div v-show="step === 1">
           <h2 class="step-title">Dados pessoais</h2>
-          <div class="form-row">
-            <div class="field-group"><label>Nome</label><input v-model="form.firstName" class="field-input" placeholder="Joao" required></div>
-            <div class="field-group"><label>Apelido</label><input v-model="form.lastName" class="field-input" placeholder="Silva" required></div>
-          </div>
-          <div class="field-group"><label>Email</label><input v-model="form.email" type="email" class="field-input" placeholder="joao@email.com" required></div>
+          <div class="field-group"><label>Nome Completo</label><input v-model="form.fullName" class="field-input" required></div>
+          <div class="field-group"><label>Email</label><input v-model="form.email" type="email" class="field-input" required></div>
           <div class="field-group">
-            <label>Telefone</label>
+            <label>Telemóvel</label>
             <div class="phone-row">
               <div class="country-code">
-                <span class="flag-emoji">🇵🇹</span>
                 <span>+351</span>
               </div>
-              <input v-model="form.phone" type="tel" class="field-input" placeholder="912 345 678" required>
+              <input v-model="form.phone" type="tel" class="field-input" @input="handleNumber(9, 'phone', $event)" required>
             </div>
           </div>
-          <div class="field-group"><label>Data de nascimento</label><input v-model="form.birthDate" type="date" class="field-input" required></div>
-          <div class="field-group"><label>NIF</label><input v-model="form.nif" class="field-input" placeholder="123 456 789"></div>
-          <div class="field-group"><label>N CC / BI</label><input v-model="form.cc" class="field-input" placeholder="12345678"></div>
-          <div class="field-group"><label>Morada</label><input v-model="form.address" class="field-input" placeholder="Rua Exemplo, n 10, 2 Esq"></div>
+          <div class="field-group"><label>Data de nascimento</label><input v-model="form.birthDate" type="tel" class="field-input" @input="handleDateMask" placeholder="DD/MM/AAAA" maxlength="10" required></div>
+          <div class="field-group"><label>NIF</label><input v-model="form.nif" type="tel" class="field-input" @input="handleNumber(9, 'nif', $event)"></div>
+          <div class="field-group"><label>Nº CC / BI</label><input v-model="form.cc" type="tel" class="field-input" @input="handleNumber(8, 'cc', $event)"></div>
+          <div class="field-group"><label>Morada</label><input v-model="form.address" class="field-input"></div>
           <div class="form-row">
-            <div class="field-group"><label>Codigo postal</label><input v-model="form.postalCode" class="field-input" placeholder="1000-001"></div>
-            <div class="field-group"><label>Cidade</label><input v-model="form.city" class="field-input" placeholder="Lisboa"></div>
+            <div class="field-group"><label>Código postal</label><input v-model="form.postalCode" type="tel" class="field-input" @input="handlePostalCode" placeholder="0000-000"></div>
+            <div class="field-group"><label>Cidade</label><input v-model="form.city" class="field-input"></div>
           </div>
-        </template>
+        </div>
 
         <!-- Step 2: Veiculo e zona -->
-        <template v-if="step === 2">
+        <div v-show="step === 2">
           <h2 class="step-title">Veiculo e zona</h2>
           <label class="step-label-sm">Tipo de veiculo</label>
           <div class="vehicle-grid">
@@ -86,54 +82,108 @@
           <template v-if="form.vehicleType">
             <h3 class="subsection-title">Detalhes do {{ vehicleTypes.find(v => v.id === form.vehicleType)?.label }}</h3>
             <div class="form-row">
-              <div class="field-group"><label>Marca</label><input v-model="form.vehicleBrand" class="field-input" placeholder="Ex: Renault"></div>
-              <div class="field-group"><label>Modelo</label><input v-model="form.vehicleModel" class="field-input" placeholder="Ex: Clio"></div>
+              <div class="field-group"><label>Marca</label><input v-model="form.vehicleBrand" class="field-input"></div>
+              <div class="field-group"><label>Modelo</label><input v-model="form.vehicleModel" class="field-input"></div>
             </div>
             <div class="form-row">
-              <div class="field-group"><label>Cor</label><input v-model="form.vehicleColor" class="field-input" placeholder="Ex: Preto"></div>
-              <div class="field-group"><label>Ano</label><input v-model="form.vehicleYear" class="field-input" placeholder="Ex: 2022"></div>
+              <div class="field-group"><label>Cor</label><input v-model="form.vehicleColor" class="field-input" @input="handleLettersOnly('vehicleColor', $event)"></div>
+              <div class="field-group"><label>Ano</label><input v-model="form.vehicleYear" type="tel" class="field-input" @input="handleNumber(4, 'vehicleYear', $event)" maxlength="4"></div>
             </div>
-            <div class="field-group"><label>Matricula</label><input v-model="form.vehiclePlate" class="field-input" placeholder="AA-00-BB"></div>
-            <div class="field-group"><label>Carta de conducao n</label><input v-model="form.licenseNo" class="field-input" placeholder="L-12345678"></div>
+            <div class="field-group" v-if="['carro', 'mota'].includes(form.vehicleType)"><label>Matrícula</label><input v-model="form.vehiclePlate" class="field-input"></div>
+            <div class="field-group" v-if="['carro', 'mota'].includes(form.vehicleType)"><label>Carta de condução nº</label><input v-model="form.licenseNo" class="field-input"></div>
           </template>
           <div class="field-group">
             <label>Zona de atuação</label>
-            <select v-model="form.zone" class="field-input" required>
+            <select v-model="form.zone" class="field-input">
               <option value="">Selecionar zona...</option>
               <option v-for="z in ZONES" :key="z" :value="z">{{ z }}</option>
             </select>
           </div>
-        </template>
+        </div>
 
         <!-- Step 3: Documentos -->
-        <template v-if="step === 3">
+        <div v-show="step === 3">
           <h2 class="step-title">Documentos</h2>
-          <div class="upload-area" @click="$refs.licenseInput.click()">
+          
+          <!-- Cartão de cidadão -->
+          <div class="upload-area" @click="$refs.ccInput.click()">
             <div class="upload-icon">
               <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
             </div>
             <p class="upload-hint">Toca para carregar</p>
-            <p class="upload-label">Carta de conducao</p>
+            <p class="upload-label">Cartão de Cidadão (Frente e Verso)</p>
+            <input ref="ccInput" type="file" accept="image/*,.pdf" class="sr-only" @change="form.docCc = $event.target.files[0]">
+          </div>
+          <p v-if="form.docCc" class="file-name">✓ {{ form.docCc.name }}</p>
+
+          <!-- Carta de Condução (Condicional) -->
+          <div class="upload-area" v-if="['carro', 'mota'].includes(form.vehicleType)" @click="$refs.licenseInput.click()">
+            <div class="upload-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            </div>
+            <p class="upload-hint">Toca para carregar</p>
+            <p class="upload-label">Carta de Condução</p>
             <input ref="licenseInput" type="file" accept="image/*,.pdf" class="sr-only" @change="form.docLicense = $event.target.files[0]">
           </div>
-          <p v-if="form.docLicense" class="file-name">✓ {{ form.docLicense.name }}</p>
-        </template>
+          <p v-if="form.docLicense && ['carro', 'mota'].includes(form.vehicleType)" class="file-name">✓ {{ form.docLicense.name }}</p>
+
+          <!-- Foto de Rosto -->
+          <div class="upload-area" @click="$refs.selfieInput.click()">
+            <div class="upload-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 00-16 0"/></svg>
+            </div>
+            <p class="upload-hint">Tira uma foto agora ou escolhe da galeria</p>
+            <p class="upload-label">Foto de Rosto (Sem acessórios)</p>
+            <input ref="selfieInput" type="file" accept="image/*" capture="user" class="sr-only" @change="form.docSelfie = $event.target.files[0]">
+          </div>
+          <p v-if="form.docSelfie" class="file-name">✓ {{ form.docSelfie.name }}</p>
+
+          <!-- Seguro do Veículo (Condicional) -->
+          <div class="upload-area" v-if="['carro', 'mota'].includes(form.vehicleType)" @click="$refs.insuranceInput.click()">
+            <div class="upload-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            </div>
+            <p class="upload-hint">Toca para carregar</p>
+            <p class="upload-label">Seguro do Veículo</p>
+            <input ref="insuranceInput" type="file" accept="image/*,.pdf" class="sr-only" @change="form.docInsurance = $event.target.files[0]">
+          </div>
+          <p v-if="form.docInsurance && ['carro', 'mota'].includes(form.vehicleType)" class="file-name">✓ {{ form.docInsurance.name }}</p>
+
+          <!-- Comprovativo de IBAN -->
+          <div class="upload-area" @click="$refs.ibanProofInput.click()">
+            <div class="upload-icon">
+              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><path d="M21 15v4a2 2 0 01-2 2H5a2 2 0 01-2-2v-4M17 8l-5-5-5 5M12 3v12"/></svg>
+            </div>
+            <p class="upload-hint">Toca para carregar</p>
+            <p class="upload-label">Comprovativo de IBAN</p>
+            <input ref="ibanProofInput" type="file" accept="image/*,.pdf" class="sr-only" @change="form.docIban = $event.target.files[0]">
+          </div>
+          <p v-if="form.docIban" class="file-name">✓ {{ form.docIban.name }}</p>
+        </div>
 
         <!-- Step 4: Pagamento e conta -->
-        <template v-if="step === 4">
+        <div v-show="step === 4">
           <h2 class="step-title">Pagamento e conta</h2>
-          <div class="field-group"><label>IBAN</label><input v-model="form.iban" class="field-input" placeholder="PT50 0000 0000 0000 0000 0000 0" required></div>
-          <div class="field-group"><label>Titular da conta</label><input v-model="form.accountHolder" class="field-input" :placeholder="form.firstName + ' ' + form.lastName"></div>
+          <div class="field-group">
+            <label>IBAN</label>
+            <div class="phone-row">
+              <div class="country-code">
+                <span>PT50</span>
+              </div>
+              <input v-model="form.iban" type="tel" class="field-input" @input="handleNumber(21, 'iban', $event)" placeholder="000000000000000000000">
+            </div>
+          </div>
+          <div class="field-group"><label>Titular da conta</label><input v-model="form.accountHolder" class="field-input" :placeholder="form.fullName"></div>
 
-          <div class="summary-card" v-if="form.firstName">
+          <div class="summary-card" v-if="form.fullName">
             <h3>Resumo da candidatura</h3>
-            <div class="summary-row"><span>Nome</span><strong>{{ form.firstName }} {{ form.lastName }}</strong></div>
+            <div class="summary-row"><span>Nome</span><strong>{{ form.fullName }}</strong></div>
             <div class="summary-row"><span>Email</span><strong>{{ form.email || '—' }}</strong></div>
             <div class="summary-row"><span>Telefone</span><strong>{{ form.phone || '—' }}</strong></div>
-            <div class="summary-row"><span>Veiculo</span><strong>{{ vehicleTypes.find(v => v.id === form.vehicleType)?.label || '—' }}</strong></div>
+            <div class="summary-row"><span>Veículo</span><strong>{{ vehicleTypes.find(v => v.id === form.vehicleType)?.label || '—' }}</strong></div>
             <div class="summary-row"><span>Zonas</span><strong>{{ form.zone || '—' }}</strong></div>
           </div>
-        </template>
+        </div>
 
         <p v-if="error" class="error-msg">{{ error }}</p>
 
@@ -174,27 +224,132 @@ const vehicleTypes = [
 ];
 
 const form = reactive({
-  firstName: '', lastName: '', email: '', phone: '', countryCode: '+351',
+  fullName: '', email: '', phone: '', countryCode: '+351',
   birthDate: '', nif: '', cc: '', address: '', postalCode: '', city: '',
   vehicleType: '', vehicleBrand: '', vehicleModel: '', vehicleColor: '',
   vehicleYear: '', vehiclePlate: '', licenseNo: '', zone: '',
-  docLicense: null,
+  docLicense: null, docCc: null, docSelfie: null, docInsurance: null, docIban: null,
   iban: '', accountHolder: '',
 });
 
+function handleNumber(max, field, e) {
+  let val = e.target.value.replace(/\D/g, ''); // apenas números
+  if (val.length > max) val = val.slice(0, max);
+  form[field] = val;
+  e.target.value = val;
+}
+
+function handleLettersOnly(field, e) {
+  let val = e.target.value.replace(/[0-9]/g, ''); // remove números
+  form[field] = val;
+  e.target.value = val;
+}
+
+function handleDateMask(e) {
+  let val = e.target.value.replace(/\D/g, ''); // apenas números
+  if (val.length > 8) val = val.slice(0, 8);
+  
+  if (val.length > 4) {
+    val = val.slice(0, 2) + '/' + val.slice(2, 4) + '/' + val.slice(4);
+  } else if (val.length > 2) {
+    val = val.slice(0, 2) + '/' + val.slice(2);
+  }
+  
+  form.birthDate = val;
+  e.target.value = val;
+}
+
+function handlePostalCode(e) {
+  let val = e.target.value.replace(/\D/g, ''); // apenas números
+  if (val.length > 7) val = val.slice(0, 7);
+  if (val.length > 4) {
+    val = val.slice(0, 4) + '-' + val.slice(4);
+  }
+  form.postalCode = val;
+  e.target.value = val;
+}
+
 function nextStep() {
   error.value = '';
+  
   if (step.value === 1) {
-    if (!form.firstName || !form.lastName || !form.email) { error.value = 'Preenche os campos obrigatórios.'; return; }
+    if (!form.fullName || !form.email || !form.phone || !form.birthDate || !form.nif || !form.cc || !form.address || !form.postalCode || !form.city) { 
+      error.value = 'Preenche todos os campos obrigatórios.'; 
+      return; 
+    }
+    
+    // Validação de Idade (18 anos) com formato DD/MM/AAAA
+    const dateParts = form.birthDate.split('/');
+    if (dateParts.length !== 3 || dateParts[2].length !== 4) {
+      error.value = 'Data de nascimento inválida. Usa o formato DD/MM/AAAA.';
+      return;
+    }
+    
+    const birthDate = new Date(`${dateParts[2]}-${dateParts[1]}-${dateParts[0]}T00:00:00`);
+    if (isNaN(birthDate.getTime())) {
+      error.value = 'Data de nascimento inválida.';
+      return;
+    }
+    
+    const today = new Date();
+    let age = today.getFullYear() - birthDate.getFullYear();
+    const monthDiff = today.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && today.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    
+    if (age < 18) {
+      error.value = 'Tens de ter pelo menos 18 anos para te candidatares.';
+      return;
+    }
   }
+  
   if (step.value === 2) {
-    if (!form.vehicleType) { error.value = 'Seleciona o tipo de veículo.'; return; }
+    if (!form.vehicleType || !form.zone || !form.vehicleBrand || !form.vehicleModel || !form.vehicleColor || !form.vehicleYear) { 
+      error.value = 'Preenche todos os dados do veículo e da zona de atuação.'; 
+      return; 
+    }
+    
+    if (form.vehicleYear.length !== 4) {
+      error.value = 'O ano do veículo deve ter exatamente 4 dígitos (ex: 2021).';
+      return;
+    }
+    
+    const isMotorized = ['carro', 'mota'].includes(form.vehicleType);
+    if (isMotorized && (!form.vehiclePlate || !form.licenseNo)) {
+      error.value = 'A matrícula e carta de condução são obrigatórias para veículos motorizados.';
+      return;
+    }
   }
+
+  if (step.value === 3) {
+    if (!form.docCc || !form.docSelfie || !form.docIban) {
+      error.value = 'Faltam documentos obrigatórios (CC, Selfie ou IBAN).';
+      return;
+    }
+    const isMotorized = ['carro', 'mota'].includes(form.vehicleType);
+    if (isMotorized && (!form.docLicense || !form.docInsurance)) {
+      error.value = 'A Carta de Condução e o Seguro são obrigatórios para este veículo.';
+      return;
+    }
+  }
+
   if (step.value === 4) {
-    if (!form.iban) { error.value = 'IBAN é obrigatório.'; return; }
+    if (!form.iban || !form.accountHolder) { 
+      error.value = 'Preenche os dados de pagamento.'; 
+      return; 
+    }
+    
+    if (form.iban.length !== 21) {
+      error.value = 'O IBAN (depois de PT50) tem de ter exatamente 21 algarismos.';
+      return;
+    }
+    
+    // Aqui podes eventualmente compor o IBAN final juntando 'PT50' + form.iban
     router.push('/login?registered=1');
     return;
   }
+  
   step.value++;
 }
 </script>

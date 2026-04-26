@@ -135,7 +135,6 @@ export const ZONES = [
     'Maia',
     'Gondomar',
     'Braga',
-    'Guimarães',
 ];
 
 /** Country codes for login */

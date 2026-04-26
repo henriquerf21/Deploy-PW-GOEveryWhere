@@ -26,23 +26,25 @@
       <!-- Heading -->
       <div class="login-heading">
         <h1>Entra na tua conta</h1>
-        <p>Usa o teu email e password de estafeta</p>
+        <p>Usa o teu telemóvel e password de estafeta</p>
       </div>
 
       <!-- Form -->
       <form class="login-form" @submit.prevent="handleLogin">
         <p v-if="registeredNotice" class="success-msg">{{ registeredNotice }}</p>
 
-        <!-- Email -->
+        <!-- Telemóvel -->
         <div class="field-group">
-          <label>Email</label>
-          <div class="field-input-wrap">
-            <svg class="field-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M22 7l-10 7L2 7"/></svg>
+          <label>Telemóvel</label>
+          <div class="phone-input-wrap">
+            <span class="country-prefix">+351</span>
             <input
-              v-model="email"
-              type="email"
-              class="field-input"
-              placeholder="o.teu@email.com"
+              v-model="phone"
+              type="tel"
+              class="field-input phone-input"
+              placeholder="9XXXXXXXX"
+              @input="handlePhoneInput"
+              maxlength="9"
               required
             >
           </div>
@@ -88,36 +90,17 @@
         </button>
       </form>
 
-      <!-- OR divider -->
-      <div class="or-divider">
-        <span class="or-line"></span>
-        <span class="or-text">ou</span>
-        <span class="or-line"></span>
-      </div>
 
-      <!-- Courier code -->
-      <div class="field-group">
-        <label>Codigo de estafeta</label>
-        <input
-          v-model="courierCode"
-          class="field-input field-input-plain"
-          placeholder="Ex: GE-0047"
-        >
-      </div>
-      <button class="code-btn" @click="handleCodeLogin">Entrar com codigo</button>
 
-      <!-- Register link -->
-      <p class="register-link">
-        <span>Queres ser estafeta?</span>
-        <router-link to="/register" class="register-action">Criar conta</router-link>
-      </p>
+      <!-- Register link (Emphasized) -->
+      <div class="register-promo">
+        <div class="rp-text">
+          <h3>Ainda não és estafeta?</h3>
+          <p>Junta-te à nossa frota e começa a ganhar dinheiro com entregas flexíveis.</p>
+        </div>
+        <router-link to="/register" class="rp-btn">Criar conta agora</router-link>
+      </div>
     </div>
-
-    <!-- Back button -->
-    <button class="back-link" @click="$router.back()">
-      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
-      Voltar
-    </button>
 
     <!-- Footer -->
     <footer class="login-footer">
@@ -137,9 +120,9 @@ import { login } from '../stores/courierStore.js';
 
 const router = useRouter();
 const route = useRoute();
-const email = ref('estafeta@goeverywhere.pt');
-const password = ref('demo1234');
-const courierCode = ref('');
+const phone = ref('');
+const countryCode = ref('+351');
+const password = ref('');
 const showPassword = ref(false);
 const remember = ref(true);
 const error = ref('');
@@ -147,18 +130,19 @@ const registeredNotice = computed(() =>
   route.query.registered === '1' ? 'Registo submetido. Aguarda validação no Back-Office.' : ''
 );
 
-function handleLogin() {
-  if (!email.value.trim()) { error.value = 'Introduz o email.'; return; }
-  if (!password.value) { error.value = 'Introduz a password.'; return; }
-  error.value = '';
-  login(email.value, '+351', password.value);
-  router.push('/deliveries');
+function handlePhoneInput(e) {
+  let val = e.target.value.replace(/\D/g, ''); // Apenas dígitos
+  if (val.length > 9) val = val.slice(0, 9);
+  phone.value = val;
+  // Atualiza também o input dom para refletir a restrição imediatamente
+  e.target.value = val;
 }
 
-function handleCodeLogin() {
-  if (!courierCode.value.trim()) { error.value = 'Introduz o código de estafeta.'; return; }
+function handleLogin() {
+  if (phone.value.length !== 9) { error.value = 'O número de telemóvel deve ter 9 dígitos.'; return; }
+  if (!password.value) { error.value = 'Introduz a password.'; return; }
   error.value = '';
-  login(courierCode.value, '+351', 'code');
+  login(phone.value, countryCode.value, password.value);
   router.push('/deliveries');
 }
 </script>
@@ -303,6 +287,43 @@ function handleCodeLogin() {
 .field-input::placeholder {
   color: #d1d5db;
 }
+
+/* Phone input styles */
+.phone-input-wrap {
+  display: flex;
+  align-items: stretch;
+  background: #f9fafb;
+  border: 0.72px solid #e5e7eb;
+  border-radius: 16px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  overflow: hidden;
+}
+.phone-input-wrap:focus-within {
+  border-color: var(--ge-brand);
+  box-shadow: 0 0 0 3px rgba(27,138,74,0.1);
+}
+.country-prefix {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border-right: 0.72px solid #e5e7eb;
+  padding: 0 12px 0 16px;
+  font-family: var(--ge-font);
+  font-size: 14px;
+  font-weight: 500;
+  color: #4b5563;
+  user-select: none;
+}
+.phone-input {
+  border: none;
+  background: transparent;
+  padding-left: 12px;
+  border-radius: 0;
+}
+.phone-input:focus {
+  box-shadow: none;
+}
 .field-toggle {
   position: absolute;
   right: 12px; top: 50%;
@@ -413,28 +434,50 @@ function handleCodeLogin() {
   padding: 10px 12px;
 }
 
-/* Register link */
-.register-link {
+/* Register Promo */
+.register-promo {
+  margin-top: 32px;
+  padding: 20px;
+  background: #f0fdf4;
+  border: 1px solid #dcfce7;
+  border-radius: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
   text-align: center;
-  font-size: 13px; color: #6b7280;
-  margin: 24px 0 0;
+  box-shadow: 0 4px 12px rgba(27,138,74,0.05);
 }
-.register-action {
+.rp-text h3 {
+  font-family: var(--ge-font-display);
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 4px;
+}
+.rp-text p {
+  font-size: 13px;
+  color: #4b5563;
+  margin: 0;
+  line-height: 1.4;
+}
+.rp-btn {
+  display: inline-block;
+  padding: 12px 16px;
+  background: #fff;
   color: #1b8a4a;
-  font-weight: 600;
-  margin-left: 4px;
+  border: 1.5px solid #1b8a4a;
+  border-radius: 12px;
+  font-family: var(--ge-font-display);
+  font-size: 13px;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 0.2s;
+}
+.rp-btn:hover {
+  background: #1b8a4a;
+  color: #fff;
 }
 
-/* Back link */
-.back-link {
-  position: relative; z-index: 2;
-  display: inline-flex; align-items: center; gap: 4px;
-  padding: 8px 28px;
-  font-size: 14px; font-weight: 500;
-  color: var(--ge-brand);
-  background: none; border: none;
-  cursor: pointer;
-}
 
 /* Footer */
 .login-footer {

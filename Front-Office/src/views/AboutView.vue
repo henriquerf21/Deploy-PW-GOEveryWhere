@@ -108,9 +108,11 @@
       <!-- ═══════ NORMAL FLOW — FAQ onwards ═══════ -->
 
       <!-- FAQ -->
+       <br><br><br><br><br><br>
       <section class="faq-section">
         <div class="faq-inner">
           <div class="section-header" v-observe-visibility>
+            
             <h2>Perguntas Frequentes</h2>
           </div>
           <div class="faq-list">
@@ -127,11 +129,22 @@
         </div>
       </section>
 
-      <!-- CTA -->
+      <!-- CTAs -->
       <section class="cta-section" v-observe-visibility>
-        <div class="cta-inner">
-          <h2>Pronto para experimentar?</h2>
-          <router-link to="/product" class="btn-cta btn-cta-lg">Encomendar Agora</router-link>
+        <div class="cta-grid">
+          <div class="cta-card cta-client">
+            <h2>Pronto para experimentar?</h2>
+            <p>Pede agora as tuas GoGummies e recebe-as em tempo recorde.</p>
+            <router-link to="/product" class="btn-cta btn-cta-lg">Encomendar Agora</router-link>
+          </div>
+          <div class="cta-card cta-courier">
+            <h2>Queres ser estafeta?</h2>
+            <p>Junta-te à frota GoEverywhere. Horários flexíveis e ganhos imediatos.</p>
+            <a href="http://localhost:5175/register" target="_blank" rel="noopener" class="btn-cta btn-cta-lg btn-career">
+              Criar Conta
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+            </a>
+          </div>
         </div>
       </section>
 
@@ -816,5 +829,70 @@ onUnmounted(() => {
   .carousel-right { height: 40vh; margin: 0; -webkit-mask-image: none; mask-image: none; border-radius: 12px; overflow: hidden; }
   .carousel-tab { padding: 6px 0; }
   .carousel-tab-label { font-size: 11px; }
+}
+
+/* --- Dual CTAs --- */
+.cta-section {
+  padding: 80px 24px 120px;
+  background: #fff;
+  position: relative;
+  z-index: 5;
+}
+.cta-grid {
+  max-width: 1100px;
+  margin: 0 auto;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+}
+.cta-card {
+  padding: 48px 32px;
+  border-radius: 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+.cta-client {
+  background: #f6f7f7;
+  border: 1px solid #e5e7eb;
+}
+.cta-courier {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff;
+  box-shadow: 0 16px 32px rgba(16, 185, 129, 0.2);
+}
+.cta-card h2 {
+  font-family: var(--go-font-display, 'Oswald', sans-serif);
+  font-size: clamp(24px, 3vw, 32px);
+  font-weight: 700;
+  margin-bottom: 12px;
+  letter-spacing: -0.02em;
+}
+.cta-client h2 { color: #111827; }
+.cta-courier h2 { color: #fff; }
+.cta-card p {
+  font-size: 15px;
+  line-height: 1.6;
+  margin-bottom: 28px;
+  max-width: 380px;
+}
+.cta-client p { color: #4b5563; }
+.cta-courier p { color: rgba(255, 255, 255, 0.9); }
+.btn-career {
+  background: #fff;
+  color: #059669;
+  box-shadow: 0 8px 16px rgba(0,0,0,0.1);
+}
+.btn-career:hover {
+  background: #f8fafc;
+  color: #047857;
+  box-shadow: 0 10px 24px rgba(0,0,0,0.15);
+}
+
+@media (max-width: 768px) {
+  .cta-grid { grid-template-columns: 1fr; }
+  .cta-card { padding: 40px 24px; }
 }
 </style>
