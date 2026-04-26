@@ -7,7 +7,7 @@
     </div>
 
     <!-- Back + Progress -->
-    <div class="reg-nav">
+    <div class="reg-nav" v-if="step < 5">
       <button class="back-link" @click="step > 1 ? step-- : $router.push('/login')">
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
         Voltar
@@ -15,7 +15,7 @@
     </div>
 
     <!-- Step indicators -->
-    <div class="step-tabs">
+    <div class="step-tabs" v-if="step < 5">
       <div class="step-tab" :class="{ active: step >= 1, current: step === 1 }">
         <span class="step-dot" :class="{ done: step > 1 }">
           <svg v-if="step > 1" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg>
@@ -185,14 +185,27 @@
           </div>
         </div>
 
-        <p v-if="error" class="error-msg">{{ error }}</p>
+        <!-- Step 5: Success / Waiting -->
+        <div v-show="step === 5" class="success-step">
+          <div class="success-icon-wrapper">
+            <svg class="spinner" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--ge-brand)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+          </div>
+          <h2 class="step-title" style="text-align: center; margin-top: 0;">Candidatura Submetida!</h2>
+          <p class="success-msg">A aguardar confirmação da equipa de suporte GoEverywhere.</p>
+          
+          <router-link to="/login" class="continue-btn btn-login-redirect">
+            Ir para o Login
+          </router-link>
+        </div>
+
+        <p v-if="error && step < 5" class="error-msg">{{ error }}</p>
 
         <!-- Bottom button -->
-        <button type="submit" class="continue-btn">
+        <button type="submit" class="continue-btn" v-if="step < 5">
           <span>{{ step === 4 ? 'Submeter candidatura' : 'Continuar' }}</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M5 12h14M12 5l7 7-7 7"/></svg>
         </button>
-        <p class="step-counter">Passo {{ step }} de 4</p>
+        <p class="step-counter" v-if="step < 5">Passo {{ step }} de 4</p>
       </form>
     </div>
 
@@ -346,7 +359,7 @@ function nextStep() {
     }
     
     // Aqui podes eventualmente compor o IBAN final juntando 'PT50' + form.iban
-    router.push('/login?registered=1');
+    step.value = 5;
     return;
   }
   
