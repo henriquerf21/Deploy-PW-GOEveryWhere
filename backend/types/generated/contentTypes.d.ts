@@ -592,9 +592,6 @@ export interface ApiCourierEstafetaCourierEstafeta
       'oneToMany',
       'api::delivery.delivery'
     >;
-    docCc: Schema.Attribute.Media<'images' | 'files'>;
-    docIban: Schema.Attribute.Media<'images' | 'files'>;
-    docSelfie: Schema.Attribute.Media<'images'>;
     drivingLicense: Schema.Attribute.Media<
       'images' | 'files' | 'videos' | 'audios'
     >;
