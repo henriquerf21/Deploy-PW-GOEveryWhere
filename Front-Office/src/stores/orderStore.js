@@ -90,9 +90,22 @@ function syncCartItemsWithProducts() {
 export const cartItemCount = computed(() => Object.values(store.cart.items).reduce((sum, qty) => sum + qty, 0));
 export const cartProducts = computed(() => PRODUCTS.filter(p => store.cart.items[p.id] > 0).map(p => ({ ...p, qty: store.cart.items[p.id], lineTotal: p.price * store.cart.items[p.id] })));
 export const subtotal = computed(() => PRODUCTS.reduce((sum, p) => sum + (p.price * store.cart.items[p.id]), 0));
-export const deliveryFee = computed(() => 2.99);
+// RF06 — Custo de entrega dinâmico por escalão de distância
+export const deliveryFee = computed(() => {
+  const dist = store.delivery.estimatedDistance;
+  if (dist == null) return 2.99;          // fallback antes de atribuir loja
+  if (dist <= 3)  return 1.99;            // até 3 km
+  if (dist <= 7)  return 2.99;            // 3–7 km
+  if (dist <= 12) return 3.99;            // 7–12 km
+  return 4.99;                            // > 12 km
+});
 export const urgentFee = computed(() => store.cart.urgentDelivery ? 1.50 : 0);
-export const estimatedETA = computed(() => 30);
+// RF06 — ETA dinâmico: base 15 min + ~2.5 min por km
+export const estimatedETA = computed(() => {
+  const dist = store.delivery.estimatedDistance;
+  if (dist == null) return 30;            // fallback
+  return Math.round(15 + dist * 2.5);
+});
 
 export const pointsToEarn = computed(() => Math.floor(subtotal.value * 10));
 export const userPointsBalance = computed(() => authState.user?.go_point?.points || 0);
@@ -271,6 +284,9 @@ export async function fetchUserOrders() {
         }
       }
 
+      // Extrair coordenadas de entrega guardadas na submissão
+      const deliveryCoords = (attr.items && !Array.isArray(attr.items)) ? attr.items.deliveryCoords : null;
+
       return {
         id: Number(order.id),
         documentId: order.documentId,
@@ -283,6 +299,7 @@ export async function fetchUserOrders() {
         store: attr.store_name,
         adminMessage: adminMsg,
         clientReply: clientRep,
+        deliveryCoords,
       };
     });
 
@@ -326,7 +343,17 @@ export async function submitOrder() {
         total_price: orderTotal.value,
         order_status: 'S-01 Submetido',
         store_name: store.delivery.assignedStore?.name || 'Continente Braga',
-        items: cartProducts.value.map(p => ({ name: p.name, qty: p.qty })),
+        items: {
+          list: cartProducts.value.map(p => ({ name: p.name, qty: p.qty })),
+          deliveryCoords: {
+            destLat: store.delivery.gpsLat ?? null,
+            destLng: store.delivery.gpsLng ?? null,
+            storeLat: store.delivery.assignedStore?.lat ?? null,
+            storeLng: store.delivery.assignedStore?.lng ?? null,
+            address: store.delivery.address || '',
+            city: store.delivery.city || '',
+          },
+        },
         is_urgent: store.cart.urgentDelivery,
         user: authState.user.id,
         go_points_redemption: store.payment.goPointsRedemption || null,
