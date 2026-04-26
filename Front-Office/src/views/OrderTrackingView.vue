@@ -23,7 +23,7 @@
               :store-lng="trackingMapCoords.storeLng"
               :dest-lat="trackingMapCoords.destLat"
               :dest-lng="trackingMapCoords.destLng"
-              :courier-progress="routeProgress"
+              :courier-progress="displayProgress"
               height="300px"
             />
           </div>
@@ -47,13 +47,16 @@
 
           <div class="timeline">
             <div v-for="step in timelineSteps" :key="step.state" 
-                 class="timeline-step" :class="{ done: step.done, active: step.active }">
+                 class="timeline-step" :class="{ done: step.done, active: step.active, skipped: step.skipped }">
               <div class="timeline-dot">
                 <svg v-if="step.done" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3">
                   <polyline points="20 6 9 17 4 12"/>
                 </svg>
+                <svg v-else-if="step.skipped" width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="#94a3b8" stroke-width="3">
+                  <line x1="5" y1="12" x2="19" y2="12"/>
+                </svg>
               </div>
-              <span class="timeline-label">{{ step.label }}</span>
+              <span class="timeline-label" :class="{ 'label-skipped': step.skipped }">{{ step.label }}</span>
             </div>
           </div>
 
@@ -182,9 +185,10 @@ import SiteHeader from '../components/SiteHeader.vue';
 import SiteFooter from '../components/SiteFooter.vue';
 import DeliveryRouteMap from '../components/DeliveryRouteMap.vue';
 import { getDestinationLatLng } from '../utils/mapCoords.js';
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useOrderStore, ORDER_STATES, fetchUserOrders, cancelActiveOrder, replyToInfoRequest } from '../stores/orderStore.js';
+import { requestNotificationPermission, notifyOrderStateChange } from '../utils/notifications.js';
 
 const router = useRouter();
 const store = useOrderStore();
@@ -251,6 +255,9 @@ function goToNewOrder() {
 
 // ── CICLO DE VIDA ──────────────────────────────────────────────────
 onMounted(async () => {
+  // RF13: Pedir permissão para notificações do browser
+  requestNotificationPermission();
+
   await fetchUserOrders();
   pollingTimer = setInterval(async () => {
     if (order.value && !ORDER_STATES[order.value.status]?.terminal) {
@@ -258,6 +265,8 @@ onMounted(async () => {
       await fetchUserOrders();
       if (order.value && order.value.status !== oldStatus) {
         showStateToast(order.value.status);
+        // RF13: Notificação nativa do browser em cada mudança de estado
+        notifyOrderStateChange(order.value.id, order.value.status, ORDER_STATES[order.value.status]);
       }
     }
   }, 10000); // RNF02: Atualização a cada 10 segundos
@@ -277,34 +286,95 @@ const routeProgress = computed(() => {
   return idx < 0 ? 0 : Math.min(100, (idx / (flow.length - 1)) * 100);
 });
 
+// --- Animação Fluida do Estafeta (RF08) ---
+const displayProgress = ref(0);
+let animationFrame = null;
+
+watch(routeProgress, (newVal) => {
+  const start = displayProgress.value;
+  const end = newVal;
+  
+  if (start === end) return;
+  
+  // Se for o primeiro carregamento ou voltar ao início, salta diretamente sem animar desde o 0 de forma visível
+  if (start === 0 && end > 0 && !animationFrame) {
+    displayProgress.value = end;
+    return;
+  }
+  
+  const startTime = performance.now();
+  const duration = 2500; // 2.5s de animação fluida para a nova posição
+  
+  if (animationFrame) cancelAnimationFrame(animationFrame);
+  
+  function animate(time) {
+    const elapsed = time - startTime;
+    const t = Math.min(elapsed / duration, 1);
+    // easeInOutQuad
+    const ease = t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2;
+    displayProgress.value = start + (end - start) * ease;
+    
+    if (t < 1) {
+      animationFrame = requestAnimationFrame(animate);
+    }
+  }
+  animationFrame = requestAnimationFrame(animate);
+}, { immediate: true });
+
 const trackingMapCoords = computed(() => {
   const o = order.value;
   if (!o) return null;
-  const storeLat = o.store?.lat || 41.5518;
-  const storeLng = o.store?.lng || -8.4229;
+
+  // Usar coordenadas reais guardadas na submissão da encomenda
+  const dc = o.deliveryCoords;
+  if (dc?.storeLat && dc?.storeLng && dc?.destLat && dc?.destLng) {
+    return {
+      storeLat: dc.storeLat,
+      storeLng: dc.storeLng,
+      destLat: dc.destLat,
+      destLng: dc.destLng,
+    };
+  }
+
+  // Fallback para encomendas antigas sem coordenadas guardadas
+  const storeLat = 41.5518;
+  const storeLng = -8.4229;
   const dest = getDestinationLatLng(o.delivery || {}, storeLat, storeLng);
   return { storeLat, storeLng, destLat: dest.lat, destLng: dest.lng };
 });
 
 const timelineSteps = computed(() => {
   if (!order.value) return [];
+
+  // S-03 só aparece como concluído se a encomenda realmente passou por Info Solicitada
+  const s03WasTriggered = !!order.value.adminMessage;
+
   const flow = [
-    { state: 'S-01', label: 'Pedido Recebido' },
-    { state: 'S-02', label: 'Em Análise' },
-    { state: 'S-03', label: 'Info Solicitada' },
-    { state: 'S-05', label: 'Aprovada' },
-    { state: 'S-07', label: 'Preparação' },
-    { state: 'S-09', label: 'Em Trânsito' },
-    { state: 'S-11', label: 'Entregue' },
+    { state: 'S-01', label: 'Pedido Recebido', optional: false },
+    { state: 'S-02', label: 'Em Análise', optional: false },
+    { state: 'S-03', label: 'Info Solicitada', optional: true, triggered: s03WasTriggered },
+    { state: 'S-05', label: 'Aprovada', optional: false },
+    { state: 'S-07', label: 'Preparação', optional: false },
+    { state: 'S-09', label: 'Em Trânsito', optional: false },
+    { state: 'S-11', label: 'Entregue', optional: false },
   ];
   const currentFlow = ['S-01','S-02','S-03','S-05','S-06','S-07','S-08','S-09','S-10','S-11'];
   const currentIdx = currentFlow.indexOf(order.value.status);
+
   return flow.map((step) => {
     const stepIdx = currentFlow.indexOf(step.state);
+    const isPast = stepIdx < currentIdx && stepIdx !== -1;
+
+    // Etapa opcional não acionada e já ultrapassada = skipped
+    if (step.optional && !step.triggered && isPast) {
+      return { ...step, done: false, active: false, skipped: true };
+    }
+
     return {
       ...step,
-      done: stepIdx < currentIdx && stepIdx !== -1,
-      active: step.state === order.value.status
+      done: isPast,
+      active: step.state === order.value.status,
+      skipped: false,
     };
   });
 });
@@ -658,6 +728,20 @@ function showStateToast(newState) {
 
 .timeline-dot.empty {
   background: #e2e8f0;
+}
+
+.timeline-step.skipped .timeline-dot {
+  background: #e2e8f0;
+  border: 1.5px dashed #cbd5e1;
+}
+
+.timeline-step.skipped {
+  color: #cbd5e1;
+}
+
+.label-skipped {
+  text-decoration: line-through;
+  color: #cbd5e1;
 }
 
 .timeline-content {

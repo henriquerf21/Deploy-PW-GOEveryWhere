@@ -60,7 +60,6 @@ html {
 html, body {
   margin: 0;
   padding: 0;
-  overflow-x: hidden;
   background: #ffffff;
   font-family: var(--go-font-body, 'Inter', system-ui, sans-serif);
   -webkit-font-smoothing: antialiased;

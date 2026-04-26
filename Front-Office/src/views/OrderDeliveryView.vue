@@ -375,14 +375,48 @@ onMounted(() => {
   if (!store.delivery.assignedStore) assignDefaultStore();
 });
 
-watch(() => store.delivery.city, (city) => {
-  if (!city) return;
-  if (city.toLowerCase().includes('guimarães')) {
-    findNearestStore(41.4425, -8.2918);
-  } else {
-    assignDefaultStore();
-  }
-});
+// RF05/RF06 — Geocoding automático da morada digitada (Nominatim)
+// Recalcula loja mais próxima, distância, ETA e portes em tempo real
+let geocodeTimer = null;
+
+function geocodeAddress() {
+  clearTimeout(geocodeTimer);
+  const address = store.delivery.address?.trim();
+  const city = store.delivery.city?.trim();
+  const postal = store.delivery.postalCode?.trim();
+
+  // Precisa de pelo menos cidade OU código postal para geocodificar
+  if (!city && !postal) return;
+
+  geocodeTimer = setTimeout(async () => {
+    const query = [address, postal, city, 'Portugal'].filter(Boolean).join(', ');
+    try {
+      const response = await fetch(
+        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=pt`,
+        { headers: { 'Accept-Language': 'pt-PT' } }
+      );
+      const results = await response.json();
+      if (results.length > 0) {
+        const lat = parseFloat(results[0].lat);
+        const lng = parseFloat(results[0].lon);
+        // Guardar coordenadas do destino para o mapa
+        store.delivery.gpsLat = lat;
+        store.delivery.gpsLng = lng;
+        // Recalcular loja mais próxima com coordenadas reais
+        findNearestStore(lat, lng);
+      }
+    } catch (err) {
+      console.warn('Geocoding falhou, a usar fallback:', err);
+    }
+  }, 800); // Debounce de 800ms para não sobrecarregar a API
+}
+
+// Observar mudanças na morada, cidade e código postal
+watch(
+  () => [store.delivery.address, store.delivery.city, store.delivery.postalCode],
+  () => geocodeAddress(),
+  { deep: true }
+);
 </script>
 
 <style scoped>
