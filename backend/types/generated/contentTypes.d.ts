@@ -572,9 +572,11 @@ export interface ApiCourierEstafetaCourierEstafeta
     draftAndPublish: true;
   };
   attributes: {
+    accountHolder: Schema.Attribute.String;
     address: Schema.Attribute.String;
     birthDate: Schema.Attribute.Date;
     cc: Schema.Attribute.String;
+    city: Schema.Attribute.String;
     courier_status: Schema.Attribute.Enumeration<
       [
         'E-01 Pendente Verifica\u00E7\u00E3o',
@@ -592,6 +594,9 @@ export interface ApiCourierEstafetaCourierEstafeta
       'oneToMany',
       'api::delivery.delivery'
     >;
+    docCc: Schema.Attribute.Media<'images' | 'files'>;
+    docIban: Schema.Attribute.Media<'images' | 'files'>;
+    docSelfie: Schema.Attribute.Media<'images'>;
     drivingLicense: Schema.Attribute.Media<
       'images' | 'files' | 'videos' | 'audios'
     >;
@@ -604,6 +609,7 @@ export interface ApiCourierEstafetaCourierEstafeta
     insurance: Schema.Attribute.Media<'images' | 'files' | 'videos' | 'audios'>;
     isOnline: Schema.Attribute.Boolean;
     lastName: Schema.Attribute.String;
+    licenseNo: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -614,6 +620,7 @@ export interface ApiCourierEstafetaCourierEstafeta
     nif: Schema.Attribute.String;
     orders: Schema.Attribute.Relation<'oneToMany', 'api::order.order'>;
     phone: Schema.Attribute.String;
+    postalCode: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     rating: Schema.Attribute.Decimal;
     reviews: Schema.Attribute.Relation<'oneToMany', 'api::review.review'>;
@@ -622,9 +629,11 @@ export interface ApiCourierEstafetaCourierEstafeta
     updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
     vehicleBrand: Schema.Attribute.String;
+    vehicleColor: Schema.Attribute.String;
     vehicleModel: Schema.Attribute.String;
     vehiclePlate: Schema.Attribute.String;
     vehicleType: Schema.Attribute.String;
+    vehicleYear: Schema.Attribute.String;
     zone: Schema.Attribute.String;
   };
 }

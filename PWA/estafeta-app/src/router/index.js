@@ -12,7 +12,6 @@ const routes = [
         path: '/register',
         name: 'Register',
         component: () => import('../views/RegisterView.vue'),
-        meta: { guest: true },
     },
     {
         path: '/',
@@ -74,6 +73,7 @@ router.beforeEach((to, _from, next) => {
     if (to.meta.auth && !store.auth.loggedIn) {
         return next('/login');
     }
+   
     if (to.meta.guest && store.auth.loggedIn) {
         return next('/deliveries');
     }

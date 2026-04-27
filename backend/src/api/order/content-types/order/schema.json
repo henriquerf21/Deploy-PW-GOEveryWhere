@@ -98,8 +98,8 @@
       "type": "string"
     },
     "go_points_used": {
-    "type": "integer",
-    "default": 0
+      "type": "integer",
+      "default": 0
     },
     "go_points_redemption": {
       "type": "string"

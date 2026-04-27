@@ -224,7 +224,7 @@
 <script setup>
 import { computed, ref, reactive } from 'vue';
 import { useRouter } from 'vue-router';
-import { ZONES, VEHICLES } from '../constants.js';
+import { ZONES } from '../constants.js';
 
 const router = useRouter();
 const step = ref(1);
@@ -326,7 +326,7 @@ async function submitRegistration() {
 
     // Obter Labels em vez de IDs
     const zoneLabel = ZONES.find(z => z.id === form.zone)?.label || form.zone;
-    const vehicleLabel = VEHICLES.find(v => v.id === form.vehicleType)?.label || form.vehicleType;
+    const vehicleLabel = form.vehicleType;
 
     // 3. Payload principal do estafeta
     const payload = {
@@ -340,19 +340,24 @@ async function submitRegistration() {
         iban: 'PT50' + form.iban,
         birthDate: birthDateISO,
         address: form.address,
-        zone: zoneLabel,
-        vehicleType: vehicleLabel,
+        city: form.city,
+        postalCode: form.postalCode,
+        zone: form.zone,
+        vehicleType: form.vehicleType,
         vehicleBrand: form.vehicleBrand,
         vehicleModel: form.vehicleModel,
+        vehicleColor: form.vehicleColor,
+        vehicleYear: form.vehicleYear,
         vehiclePlate: form.vehiclePlate,
+        licenseNo: form.licenseNo,
+        accountHolder: form.accountHolder,
         courier_status: 'E-01 Pendente Verificação',
         isOnline: false,
-        // IDs dos Media do Strapi
-        docCc: ccId,
-        docSelfie: selfieId,
-        docIban: ibanId,
-        drivingLicense: licenseId,
-        insurance: insuranceId,
+        docCc: ccId ?? null,
+        docSelfie: selfieId ?? null,
+        docIban: ibanId ?? null,
+        drivingLicense: licenseId ?? null,
+        insurance: insuranceId ?? null,
       }
     };
 

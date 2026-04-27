@@ -103,17 +103,25 @@
     "docCc": {
       "type": "media",
       "multiple": false,
-      "allowedTypes": ["images", "files"]
+      "allowedTypes": [
+        "images",
+        "files"
+      ]
     },
     "docSelfie": {
       "type": "media",
       "multiple": false,
-      "allowedTypes": ["images"]
+      "allowedTypes": [
+        "images"
+      ]
     },
     "docIban": {
       "type": "media",
       "multiple": false,
-      "allowedTypes": ["images", "files"]
+      "allowedTypes": [
+        "images",
+        "files"
+      ]
     },
     "rating": {
       "type": "decimal"
@@ -138,6 +146,24 @@
       "relation": "oneToMany",
       "target": "api::review.review",
       "mappedBy": "courier"
+    },
+    "vehicleColor": {
+      "type": "string"
+    },
+    "licenseNo": {
+      "type": "string"
+    },
+    "vehicleYear": {
+      "type": "string"
+    },
+    "city": {
+      "type": "string"
+    },
+    "postalCode": {
+      "type": "string"
+    },
+    "accountHolder": {
+      "type": "string"
     }
   }
 }
