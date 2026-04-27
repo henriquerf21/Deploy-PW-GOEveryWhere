@@ -4,7 +4,19 @@ const config: Core.Config.Middlewares = [
   'strapi::logger',
   'strapi::errors',
   'strapi::security',
-  'strapi::cors',
+  {
+    name: 'strapi::cors',
+    config: {
+      origin: [
+        'http://localhost:5173',
+        'http://localhost:5174',
+        'http://localhost:5175',
+      ],
+      methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
+      headers: ['Content-Type', 'Authorization'],
+      credentials: true,
+    },
+  },
   'strapi::poweredBy',
   'strapi::query',
   'strapi::body',

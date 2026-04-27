@@ -135,8 +135,14 @@ function handlePhoneInput(e) {
 }
 
 function handleLogin() {
-  if (phone.value.length !== 9) { error.value = 'O número de telemóvel deve ter 9 dígitos.'; return; }
-  if (!password.value) { error.value = 'Introduz a password.'; return; }
+  if (phone.value.length !== 9) {
+    error.value = 'O número de telemóvel deve ter 9 dígitos.';
+    return;
+  }
+  if (!password.value) {
+    error.value = 'Introduz a password.';
+    return;
+  }
   error.value = '';
   login(phone.value, countryCode.value, password.value);
   router.push('/deliveries');
