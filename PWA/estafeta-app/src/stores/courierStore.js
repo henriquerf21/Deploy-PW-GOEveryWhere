@@ -1,4 +1,4 @@
-import { reactive, computed, ref } from 'vue';
+import { reactive, computed, ref, watch } from 'vue';
 import { DELIVERY_STATE, COURIER_STATE, NEXT_STATE } from '../constants.js';
 
 // ── Config ───────────────────────────────────────────────────────
@@ -94,44 +94,53 @@ function mapDelivery(d) {
     const destLat = order.deliveryLatitude || 41.16;
     const destLng = order.deliveryLongitude || -8.62;
 
+    // Mapeamento extra para User/Cliente
+    const userData = order.user?.data?.attributes || order.user?.attributes || order.user || {};
+
     return {
         id: String(d.id),
         documentId: attrs.documentId || d.documentId,
-        orderId: order.documentId ? `#ORD-${d.id}` : `#ORD-${d.id}`,
+        orderId: order.publicId || `#ORD-${d.id}`,
         orderStrapiId: attrs.order?.data?.id || null,
         orderDocumentId: attrs.order?.data?.documentId || null,
-        type: order.is_urgent ? 'EXPRESS' : 'STANDARD',
+        type: order.priority >= 4 ? 'EXPRESS' : 'STANDARD',
         priority: order.priority || 3,
         state: strapiStatusToCode(attrs.delivery_status) || DELIVERY_STATE.E08,
         pickup: {
-            name: order.store_name || 'Continente',
-            address: order.deliveryAddress || '',
+            name: order.store_name || 'Continente Braga',
+            address: order.pickupAddress || 'Braga Parque',
             lat: parseFloat(pickupLat),
             lng: parseFloat(pickupLng),
-            distance: parseFloat((Math.random() * 10 + 1).toFixed(1)),
+            distance: parseFloat((Math.random() * 2 + 0.5).toFixed(1)),
         },
         destination: {
-            name: order.user?.data?.attributes?.firstName || order.user?.data?.attributes?.username || 'Cliente',
+            name: userData.fullName || userData.username || 'Cliente',
             address: order.deliveryAddress || '',
-            phone: '',
+            phone: userData.phone || '',
             lat: parseFloat(destLat),
             lng: parseFloat(destLng),
-            distance: parseFloat((Math.random() * 15 + 2).toFixed(1)),
+            distance: parseFloat((Math.random() * 5 + 1).toFixed(1)),
         },
-        items: Array.isArray(items) ? items : [{ name: 'GoGummies', qty: 1, unit: 'frasco' }],
-        weight: '0.3kg',
-        size: 'Médio',
-        instructions: '',
-        costEuro: parseFloat(order.total_price) || 4.90,
+        // Extrair items da estrutura JSON ou Array
+        items: order.items?.items || (Array.isArray(order.items) ? order.items : [{ name: 'GoGummies', qty: 1, unit: 'frasco' }]),
+        weight: order.items?.weight || '0.5kg',
+        size: order.items?.size || 'Médio',
+        instructions: order.notes || '',
+        costEuro: parseFloat(order.total_price) || 6.50,
         etaMinutes: order.estimatedTime || 30,
         timestamps: {
             'E-08': attrs.createdAt || null,
             'E-09': attrs.startTime || null,
+            'E-10': attrs.timestamps?.['E-10'] || null,
+            'E-11': attrs.timestamps?.['E-11'] || null,
+            'E-12': attrs.timestamps?.['E-12'] || null,
+            'E-13': attrs.endTime || null,
         },
         confirmation: null,
         notes: attrs.notes || '',
         photos: [],
         timerStart: attrs.createdAt || null,
+        chatHistory: order.chatHistory || [],
     };
 }
 
@@ -303,6 +312,17 @@ export async function login(phone, countryCode, password) {
         store.auth = { loggedIn: true, phone, countryCode, token: null };
         store.courierId = courier.id || courier.documentId;
 
+        // Build profile photo URL from docSelfie
+        let profilePhotoUrl = null;
+        const selfie = courierAttrs.docSelfie;
+        if (selfie) {
+            const selfieData = selfie.data?.attributes || selfie;
+            const photoPath = selfieData?.url || selfieData?.formats?.thumbnail?.url || null;
+            if (photoPath) {
+                profilePhotoUrl = photoPath.startsWith('http') ? photoPath : `http://localhost:1337${photoPath}`;
+            }
+        }
+
         store.profile = {
             name: courierAttrs.fullName || phone,
             phone: courierAttrs.phone || `${countryCode}${phone}`,
@@ -324,15 +344,21 @@ export async function login(phone, countryCode, password) {
                 license: !!courierAttrs.drivingLicense,
                 insurance: !!courierAttrs.insurance,
             },
-            rating: courierAttrs.rating || 4.5,
+            rating: (courierAttrs.totalDeliveries > 0) ? (courierAttrs.rating || 4.5) : 0,
             totalDeliveries: courierAttrs.totalDeliveries || 0,
-            onTimePct: 94,
+            onTimePct: (courierAttrs.totalDeliveries > 0) ? (courierAttrs.onTimePct || 94) : 0,
             documentId: courier.documentId || null,
+            profilePhotoUrl: profilePhotoUrl,
         };
 
         saveState();
 
         // 4. Load deliveries
+        // Se a entrega foi concluída ou cancelada, limpamos o ID ativo
+        if (['E-13', 'E-14'].includes(next)) {
+            store.activeDeliveryId = null;
+        }
+        
         await fetchDeliveries();
 
         return { success: true };
@@ -347,9 +373,19 @@ export async function login(phone, countryCode, password) {
 export function logout() {
     store.auth = { loggedIn: false, phone: '', countryCode: '+351', token: null };
     store.courierId = null;
+    store.profile = {
+        name: '', phone: '', email: '', birthDate: '', address: '',
+        iban: '', zone: '', state: 'E-05 Offline',
+        vehicle: { type: '', brand: '', model: '', color: '', plate: '' },
+        docs: { cc: false, license: false, insurance: false },
+        rating: 0, totalDeliveries: 0, onTimePct: 0,
+    };
     store.activeDeliveryId = null;
     store.deliveries = [];
     store.completedDeliveries = [];
+    store.shiftMetrics = {
+        revenue: 0, completed: 0, failed: 0, distanceKm: 0, ratingsReceived: [],
+    };
     saveState();
 }
 
@@ -372,22 +408,32 @@ export async function fetchDeliveries() {
             'E-12 No Destino',
         ];
 
-        const filters = activeStatuses
-            .map((s, i) => `filters[delivery_status][$in][${i}]=${encodeURIComponent(s)}`)
-            .join('&');
-
-        const res = await apiGet(`/deliveries?${filters}&filters[courier][documentId][$eq]=${store.profile.documentId || store.courierId}&populate[order][populate]=user&sort=createdAt:desc&status=published`);
+        const courierId = store.profile.documentId || store.courierId;
+        const idFilterKey = (typeof courierId === 'string' && courierId.length > 5) ? 'documentId' : 'id';
+        
+        // População simplificada para evitar erro 500 e trazer dados da Order + User
+        const res = await apiGet(`/deliveries?filters[courier][${idFilterKey}][$eq]=${courierId}&populate[order][populate]=user&sort=createdAt:desc&status=published`);
+        
+        console.log('[fetchDeliveries] Resposta do Servidor:', res);
 
         const apiDeliveries = (res.data || []).map(d => mapDelivery(d));
 
         if (apiDeliveries.length > 0) {
             store.deliveries = apiDeliveries;
-            // Set active delivery if any in progress
-            const inProgress = apiDeliveries.find(d => !['E-08', 'E-13', 'E-14'].includes(d.state));
-            if (inProgress) store.activeDeliveryId = inProgress.id;
+            
+            // Set active delivery if any is assigned (including E-08)
+            const inProgress = apiDeliveries.find(d => ['E-08', 'E-09', 'E-10', 'E-11', 'E-12'].includes(d.state));
+            if (inProgress) {
+                store.activeDeliveryId = inProgress.id;
+                console.log('[fetchDeliveries] Entrega ativa detetada:', inProgress.id);
+            }
         } else {
-            // Fallback to seeds when no API deliveries exist
-            store.deliveries = seedDeliveries();
+            // Only show seeds if NOT logged in (guest mode demo)
+            if (!store.auth.loggedIn) {
+                store.deliveries = seedDeliveries();
+            } else {
+                store.deliveries = [];
+            }
         }
     } catch (err) {
         console.warn('fetchDeliveries fallback to seeds:', err.message);
@@ -415,7 +461,7 @@ export async function fetchCompletedDeliveries() {
 // ── Actions: State transitions ───────────────────────────────────
 
 async function updateDeliveryOnStrapi(delivery, newState, extraData = {}) {
-    if (!delivery.documentId) return; // seed delivery, skip API
+    if (!delivery.documentId) return;
     try {
         const payload = {
             data: {
@@ -424,13 +470,7 @@ async function updateDeliveryOnStrapi(delivery, newState, extraData = {}) {
             }
         };
         await apiPut(`/deliveries/${delivery.documentId}`, payload);
-
-        // Also update order status
-        if (delivery.orderDocumentId && ORDER_STATUS_MAP[newState]) {
-            await apiPut(`/orders/${delivery.orderDocumentId}`, {
-                data: { order_status: ORDER_STATUS_MAP[newState] }
-            });
-        }
+        // O estado da Order é agora sincronizado automaticamente pelo backend (Lifecycle Hook)
     } catch (err) {
         console.error('Error syncing state to Strapi:', err.message);
     }
@@ -463,6 +503,12 @@ export async function advanceDeliveryState(deliveryId) {
     saveState();
 
     await updateDeliveryOnStrapi(d, next);
+
+    if (next === 'E-14') {
+        store.activeDeliveryId = null;
+    }
+    
+    await fetchDeliveries();
     return true;
 }
 
@@ -484,6 +530,7 @@ export async function confirmDelivery(deliveryId, confirmation) {
 
     store.completedDeliveries.push({ ...d });
     store.activeDeliveryId = null;
+    stopGpsTracking(); // Stop GPS when delivery completed
     saveState();
 
     // Sync to Strapi
@@ -495,8 +542,8 @@ export async function confirmDelivery(deliveryId, confirmation) {
                 notes: d.notes || '',
             };
 
-            // Upload photo if present
-            if (confirmation.photo && confirmation.method === 'photo') {
+            // Upload photo (always required)
+            if (confirmation.photo) {
                 try {
                     const blob = await fetch(confirmation.photo).then(r => r.blob());
                     const file = new File([blob], 'confirmation.jpg', { type: 'image/jpeg' });
@@ -505,14 +552,9 @@ export async function confirmDelivery(deliveryId, confirmation) {
                 } catch (e) { console.warn('Photo upload failed:', e); }
             }
 
-            // Save signature as base64 string
-            if (confirmation.signature && confirmation.method === 'signature') {
+            // Save signature as base64 string (always required)
+            if (confirmation.signature) {
                 extraData.confirmationSignature = confirmation.signature;
-            }
-
-            // Save QR Code
-            if (confirmation.qrCode && confirmation.method === 'qrcode') {
-                extraData.confirmationQrCode = confirmation.qrCode;
             }
 
             await updateDeliveryOnStrapi(d, 'E-13', extraData);
@@ -546,6 +588,7 @@ export async function markDeliveryImpossible(deliveryId, reason, photo) {
     store.shiftMetrics.failed++;
     store.completedDeliveries.push({ ...d });
     store.activeDeliveryId = null;
+    stopGpsTracking(); // Stop GPS when delivery marked impossible
     saveState();
 
     await updateDeliveryOnStrapi(d, 'E-14', { endTime: now, notes: reason });
@@ -581,56 +624,184 @@ export function endShift() {
     saveState();
 }
 
-// ── Actions: Profile ─────────────────────────────────────────────
+// ── Actions: Pause / Online Toggle (E-07 / E-06) ────────────────
 
-export async function updateProfile(patch) {
-    if (!patch || typeof patch !== 'object') return false;
-    const p = store.profile;
+export async function togglePause() {
+    const isPaused = store.profile.state === COURIER_STATE.E05 || store.profile.state === 'E-07';
+    const newState = isPaused ? COURIER_STATE.E06 : 'E-07';
+    const newStrapiStatus = isPaused ? 'E-06 Online' : 'E-05 Offline';
+    const newIsOnline = isPaused;
 
-    if (patch.name != null) p.name = String(patch.name).trim() || p.name;
-    if (patch.email != null) p.email = String(patch.email).trim() || p.email;
-    if (patch.phone != null) p.phone = String(patch.phone).trim() || p.phone;
-    if (patch.address != null) p.address = String(patch.address).trim() || p.address;
-    if (patch.birthDate != null) p.birthDate = String(patch.birthDate).trim() || p.birthDate;
-    if (patch.iban != null) p.iban = String(patch.iban).trim() || p.iban;
-    if (patch.zone != null) p.zone = String(patch.zone).trim() || p.zone;
-
-    if (patch.vehicle && typeof patch.vehicle === 'object') {
-        Object.assign(p.vehicle, patch.vehicle);
-    }
-
+    store.profile.state = newState;
     saveState();
 
     // Sync to Strapi
-    if (p.documentId) {
+    if (store.profile.documentId) {
         try {
-            await apiPut(`/courier-estafetas/${p.documentId}`, {
-                data: {
-                    fullName: p.name,
-                    email: p.email,
-                    phone: p.phone,
-                    address: p.address,
-                    iban: p.iban,
-                    zone: p.zone,
-                    vehicleType: p.vehicle.type,
-                    vehicleBrand: p.vehicle.brand,
-                    vehicleModel: p.vehicle.model,
-                    vehicleColor: p.vehicle.color,
-                    vehiclePlate: p.vehicle.plate,
-                }
+            await apiPut(`/courier-estafetas/${store.profile.documentId}`, {
+                data: { courier_status: newStrapiStatus, isOnline: newIsOnline }
             });
         } catch (err) {
-            console.error('Profile sync error:', err);
+            console.error('togglePause sync error:', err);
         }
+    }
+    return newState;
+}
+
+export function isPaused() {
+    return store.profile.state === 'E-07' || store.profile.state === COURIER_STATE.E05;
+}
+
+// ── Actions: GPS Tracking (RNF02 — every 10s) ───────────────────
+
+let gpsWatchId = null;
+let gpsIntervalId = null;
+let lastGpsCoords = null;
+
+export function startGpsTracking() {
+    if (gpsWatchId !== null) return; // already tracking
+    if (!('geolocation' in navigator)) {
+        console.warn('Geolocation not available');
+        return;
+    }
+
+    // Use watchPosition for continuous updates
+    gpsWatchId = navigator.geolocation.watchPosition(
+        (pos) => {
+            lastGpsCoords = {
+                lat: pos.coords.latitude,
+                lng: pos.coords.longitude,
+            };
+        },
+        (err) => console.warn('GPS error:', err.message),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+    );
+
+    // Send to Strapi every 10 seconds
+    gpsIntervalId = setInterval(() => {
+        if (lastGpsCoords && store.activeDeliveryId) {
+            const d = store.deliveries.find(x => x.id === store.activeDeliveryId);
+            if (d && d.documentId && ['E-09', 'E-10', 'E-11', 'E-12'].includes(d.state)) {
+                apiPut(`/deliveries/${d.documentId}`, {
+                    data: {
+                        courierLatitude: lastGpsCoords.lat,
+                        courierLongitude: lastGpsCoords.lng,
+                    }
+                }).catch(err => console.warn('GPS sync error:', err.message));
+            }
+        }
+    }, 10000);
+}
+
+export function stopGpsTracking() {
+    if (gpsWatchId !== null) {
+        navigator.geolocation.clearWatch(gpsWatchId);
+        gpsWatchId = null;
+    }
+    if (gpsIntervalId !== null) {
+        clearInterval(gpsIntervalId);
+        gpsIntervalId = null;
+    }
+    lastGpsCoords = null;
+}
+
+// ── Actions: Timer expiry (E-08 → decline) ──────────────────────
+
+export async function declineDeliveryTimeout(deliveryId) {
+    const d = store.deliveries.find(x => x.id === deliveryId);
+    if (!d || d.state !== DELIVERY_STATE.E08) return false;
+
+    // Remove from local list
+    store.deliveries = store.deliveries.filter(x => x.id !== deliveryId);
+    if (store.activeDeliveryId === deliveryId) store.activeDeliveryId = null;
+    saveState();
+
+    // Notify Strapi so admin can reassign
+    if (d.documentId) {
+        try {
+            await apiPut(`/deliveries/${d.documentId}`, {
+                data: {
+                    delivery_status: 'E-08 Pedido Recebido',
+                    notes: 'Expirou o tempo de aceitação pelo estafeta.',
+                }
+            });
+            // Also revert order to S-06 (Aguardando Aceitação) for reassignment
+            if (d.orderDocumentId) {
+                await apiPut(`/orders/${d.orderDocumentId}`, {
+                    data: { order_status: 'S-06 Aguardando Aceitação' }
+                });
+            }
+        } catch (err) {
+            console.error('declineDeliveryTimeout sync error:', err);
+        }
+    }
+    return true;
+}
+
+// ── Actions: Profile (Read-only — changes via request) ───────────
+
+export async function submitDataChangeRequest({ field, newValue, reason }) {
+    if (!store.profile.documentId) {
+        throw new Error('Perfil não encontrado. Faz login novamente.');
+    }
+
+    // Build the change request object
+    const changeRequest = {
+        field,
+        newValue,
+        reason,
+        courierName: store.profile.name,
+        courierPhone: store.profile.phone,
+        submittedAt: new Date().toISOString(),
+        status: 'pending',
+    };
+
+    // Save to Strapi as a JSON field on the courier
+    try {
+        await apiPut(`/courier-estafetas/${store.profile.documentId}`, {
+            data: {
+                dataChangeRequest: changeRequest,
+            }
+        });
+    } catch (err) {
+        console.error('Data change request error:', err);
+        throw new Error('Não foi possível enviar o pedido. Tenta novamente.');
     }
 
     return true;
 }
 
+export async function sendDeliveryChatMessage(orderDocumentId, text) {
+    if (!orderDocumentId) return false;
+    try {
+        const orderRes = await apiGet(`/orders/${orderDocumentId}`);
+        const order = orderRes.data?.attributes || orderRes.data || {};
+        const currentHistory = order.chatHistory || [];
+        
+        currentHistory.push({
+            sender: 'courier',
+            text,
+            time: new Date().toISOString()
+        });
+
+        await apiPut(`/orders/${orderDocumentId}`, {
+            data: { chatHistory: currentHistory }
+        });
+        
+        const active = store.deliveries.find(d => d.orderDocumentId === orderDocumentId);
+        if (active) active.chatHistory = currentHistory;
+
+        return true;
+    } catch (err) {
+        console.error('Chat error:', err);
+        return false;
+    }
+}
+
 // ── Getters ──────────────────────────────────────────────────────
 
 export function getDeliveryById(id) {
-    return store.deliveries.find(d => d.id === id)
+    return store.deliveries.find(d => d.id === id) 
         || store.completedDeliveries.find(d => d.id === id)
         || null;
 }

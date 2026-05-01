@@ -34,6 +34,17 @@
       <button type="button" class="btn btn--sec btn--sm" @click="saveAdminNotes">Guardar notas</button>
     </section>
 
+    <section v-if="c.dataChangeRequest" class="card block block--alert">
+      <h3>🚨 Pedido de Alteração de Dados</h3>
+      <div class="alert-content">
+        <p><strong>Campos a alterar:</strong> {{ c.dataChangeRequest.field || 'Não especificado' }}</p>
+        <p><strong>Motivo / Novos valores:</strong> {{ c.dataChangeRequest.reason }} (Novo: {{ c.dataChangeRequest.newValue }})</p>
+      </div>
+      <div class="alert-actions">
+        <button type="button" class="btn btn--sec btn--sm" @click="clearDataRequest">Marcar como tratado</button>
+      </div>
+    </section>
+
     <div class="stats card">
       <div v-for="s in statItems" :key="s.k" class="stat">
         <span class="stat__v">{{ s.v }}</span>
@@ -164,6 +175,7 @@ import {
   setCourierOnline,
   setCourierMaxConcurrent,
   setCourierAdminNotes,
+  clearCourierDataRequest,
 } from '../stores/logisticsStore.js';
 import { courierStateLabels, ZONES } from '../constants/logistics.js';
 import { toast } from '../utils/notify.js';
@@ -253,6 +265,11 @@ async function saveEdit() {
 function saveAdminNotes() {
   const r = setCourierAdminNotes(c.value.id, adminNotesDraft.value);
   toast(r.ok ? 'Notas guardadas.' : r.error || 'Erro', r.ok ? 'success' : 'error');
+}
+
+async function clearDataRequest() {
+  const r = await clearCourierDataRequest(c.value.id);
+  toast(r.ok ? 'Pedido de alteração marcado como tratado.' : r.error || 'Erro', r.ok ? 'success' : 'error');
 }
 
 async function onToggleOnline(e) {
@@ -429,6 +446,25 @@ async function doReactivate() {
   margin: 0 0 10px;
   font-size: 12px;
   color: var(--bo-text-secondary);
+}
+
+.block--alert {
+  border-color: #fcd34d;
+  background-color: #fffbeb;
+}
+
+.block--alert h3 {
+  color: #b45309;
+}
+
+.alert-content p {
+  margin: 0 0 8px;
+  font-size: 14px;
+  color: #92400e;
+}
+
+.alert-actions {
+  margin-top: 12px;
 }
 
 .ta-notes {

@@ -44,15 +44,15 @@
       <div class="confirm-section">
         <span class="confirm-title">CONFIRMAÇÃO</span>
         <div class="confirm-badges">
-          <span class="confirm-badge" v-if="delivery?.confirmData?.photo">
+          <span class="confirm-badge" v-if="delivery?.confirmation?.photo">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
             Foto
           </span>
-          <span class="confirm-badge" v-if="delivery?.confirmData?.location">
+          <span class="confirm-badge" v-if="delivery?.confirmation?.location || delivery?.confirmation?.gps">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
             GPS
           </span>
-          <span class="confirm-badge" v-if="delivery?.confirmData?.signature">
+          <span class="confirm-badge" v-if="delivery?.confirmation?.signature">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
             Assinatura
           </span>

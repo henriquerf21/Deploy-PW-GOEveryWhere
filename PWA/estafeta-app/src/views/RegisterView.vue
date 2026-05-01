@@ -127,16 +127,31 @@
           </div>
           <p v-if="form.docLicense && ['carro', 'mota'].includes(form.vehicleType)" class="file-name">✓ {{ form.docLicense.name }}</p>
 
-          <!-- Foto de Rosto -->
-          <div class="upload-area" @click="$refs.selfieInput.click()">
-            <div class="upload-icon">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 00-16 0"/></svg>
+          <!-- Foto de Rosto (câmera obrigatória — será usada como foto de perfil) -->
+          <div class="selfie-profile-notice">
+            <div class="selfie-notice-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1b8a4a" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             </div>
-            <p class="upload-hint">Tira uma foto agora ou escolhe da galeria</p>
-            <p class="upload-label">Foto de Rosto (Sem acessórios)</p>
-            <input ref="selfieInput" type="file" accept="image/*" capture="user" class="sr-only" @change="form.docSelfie = $event.target.files[0]">
+            <p class="selfie-notice-text">
+              <strong>Esta foto será usada como a tua foto de perfil</strong> na conta GoEverywhere.
+              Certifica-te que estás bem iluminado e sem acessórios (chapéus, óculos de sol, etc.).
+            </p>
           </div>
-          <p v-if="form.docSelfie" class="file-name">✓ {{ form.docSelfie.name }}</p>
+          <div class="upload-area selfie-upload" @click="$refs.selfieInput.click()">
+            <div v-if="selfiePreview" class="selfie-preview-wrap">
+              <img :src="selfiePreview" alt="Pré-visualização" class="selfie-preview-img" />
+              <span class="selfie-retake">Tirar outra foto</span>
+            </div>
+            <template v-else>
+              <div class="upload-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 00-16 0"/></svg>
+              </div>
+              <p class="upload-hint">Abre a câmera para tirar a foto</p>
+              <p class="upload-label">Foto de Rosto / Perfil (Câmera obrigatória)</p>
+            </template>
+            <input ref="selfieInput" type="file" accept="image/*" capture="user" class="sr-only" @change="handleSelfieCapture">
+          </div>
+          <p v-if="form.docSelfie" class="file-name">✓ Foto de perfil capturada</p>
 
           <!-- Seguro do Veículo (Condicional) -->
           <div class="upload-area" v-if="['carro', 'mota'].includes(form.vehicleType)" @click="$refs.insuranceInput.click()">
@@ -276,6 +291,18 @@ const form = reactive({
   docLicense: null, docCc: null, docSelfie: null, docInsurance: null, docIban: null,
   iban: '', accountHolder: '', password: ''
 });
+
+// Selfie preview for profile photo
+const selfiePreview = ref(null);
+
+function handleSelfieCapture(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  form.docSelfie = file;
+  const reader = new FileReader();
+  reader.onload = () => { selfiePreview.value = reader.result; };
+  reader.readAsDataURL(file);
+}
 
 function handleNumber(max, field, e) {
   let val = e.target.value.replace(/\D/g, ''); // apenas números
@@ -823,5 +850,40 @@ function nextStep() {
 }
 .footer-copy {
   font-size: 11px; color: #9ca3af; margin: 0;
+}
+
+/* Selfie profile notice */
+.selfie-profile-notice {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 14px 16px;
+  background: #f0fdf4;
+  border: 1px solid #dcfce7;
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+.selfie-notice-icon { flex-shrink: 0; margin-top: 2px; }
+.selfie-notice-text {
+  margin: 0;
+  font-size: 12px; color: #166534; line-height: 1.5;
+}
+.selfie-notice-text strong { font-weight: 700; }
+
+.selfie-upload { position: relative; }
+.selfie-preview-wrap {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 8px;
+  width: 100%;
+}
+.selfie-preview-img {
+  width: 120px; height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #1b8a4a;
+  box-shadow: 0 4px 12px rgba(27,138,74,0.2);
+}
+.selfie-retake {
+  font-size: 12px; font-weight: 600;
+  color: #1b8a4a;
+  cursor: pointer;
 }
 </style>
