@@ -87,7 +87,7 @@
 
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
-import { store, courierMetrics } from '../stores/courierStore.js';
+import { store, courierMetrics, fetchCompletedDeliveries } from '../stores/courierStore.js';
 
 const mapContainer = ref(null);
 let mapInstance = null;
@@ -129,6 +129,7 @@ const mapPoints = computed(() => {
 });
 
 onMounted(async () => {
+  await fetchCompletedDeliveries();
   await nextTick();
   if (mapContainer.value && mapPoints.value.length) initMap();
 });

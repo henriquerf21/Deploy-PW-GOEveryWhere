@@ -104,6 +104,7 @@ import {
   filteredDeliveries,
   activeDelivery,
   acceptDelivery,
+  fetchDeliveries,
 } from '../stores/courierStore.js';
 import { deliveryStateLabels } from '../constants.js';
 import DeliveryCard from '../components/DeliveryCard.vue';
@@ -132,8 +133,8 @@ function toggleDistance() {
   store.filters.maxPickupDist = store.filters.maxPickupDist <= 15 ? 50 : 15;
 }
 
-function handleAccept(id) {
-  acceptDelivery(id);
+async function handleAccept(id) {
+  await acceptDelivery(id);
   router.push(`/deliveries/${id}`);
 }
 function goToDetail(id) { router.push(`/deliveries/${id}`); }
@@ -142,7 +143,17 @@ function goToActive() { if (active.value) router.push(`/deliveries/${active.valu
 function zoomIn() { map?.zoomIn(); }
 function zoomOut() { map?.zoomOut(); }
 
+let pollInterval = null;
+
 onMounted(async () => {
+  if (store.activeDeliveryId) {
+    router.replace(`/deliveries/${store.activeDeliveryId}`);
+    return;
+  }
+
+  // Refresh deliveries from Strapi
+  await fetchDeliveries();
+
   await nextTick();
   if (!mapEl.value) return;
   const L = await import('leaflet');
@@ -153,11 +164,17 @@ onMounted(async () => {
   layer = L.layerGroup().addTo(map);
   renderMap();
   setTimeout(() => map?.invalidateSize(), 120);
+
+  // Poll for new deliveries every 15s
+  pollInterval = setInterval(() => fetchDeliveries(), 15000);
 });
 
 watch([mapDeliveries, active], () => renderMap(), { deep: true });
 
-onBeforeUnmount(() => { map?.remove(); map = null; layer = null; leaflet = null; });
+onBeforeUnmount(() => {
+  if (pollInterval) clearInterval(pollInterval);
+  map?.remove(); map = null; layer = null; leaflet = null;
+});
 
 function renderMap() {
   if (!map || !layer || !leaflet) return;

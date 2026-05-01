@@ -601,14 +601,13 @@ export interface ApiCourierEstafetaCourierEstafeta
       'images' | 'files' | 'videos' | 'audios'
     >;
     email: Schema.Attribute.String;
-    firstName: Schema.Attribute.String;
+    fullName: Schema.Attribute.String;
     iban: Schema.Attribute.String;
     inspection: Schema.Attribute.Media<
       'images' | 'files' | 'videos' | 'audios'
     >;
     insurance: Schema.Attribute.Media<'images' | 'files' | 'videos' | 'audios'>;
     isOnline: Schema.Attribute.Boolean;
-    lastName: Schema.Attribute.String;
     licenseNo: Schema.Attribute.String;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
@@ -619,7 +618,10 @@ export interface ApiCourierEstafetaCourierEstafeta
     maxSimultaneousDeliveries: Schema.Attribute.Integer;
     nif: Schema.Attribute.String;
     orders: Schema.Attribute.Relation<'oneToMany', 'api::order.order'>;
-    phone: Schema.Attribute.String;
+    password: Schema.Attribute.String;
+    phone: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
     postalCode: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     rating: Schema.Attribute.Decimal;

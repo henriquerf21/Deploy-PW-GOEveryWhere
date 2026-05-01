@@ -113,28 +113,27 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
-import { useRoute, useRouter } from 'vue-router';
-import { login } from '../stores/courierStore.js';
+import { ref } from 'vue';
+import { useRouter } from 'vue-router';
+import { login, store } from '../stores/courierStore.js';
 
 const router = useRouter();
-const route = useRoute();
 const phone = ref('');
 const countryCode = ref('+351');
 const password = ref('');
 const showPassword = ref(false);
 const remember = ref(true);
 const error = ref('');
+const isLoading = ref(false);
 
 function handlePhoneInput(e) {
   let val = e.target.value.replace(/\D/g, ''); // Apenas dígitos
   if (val.length > 9) val = val.slice(0, 9);
   phone.value = val;
-  // Atualiza também o input dom para refletir a restrição imediatamente
   e.target.value = val;
 }
 
-function handleLogin() {
+async function handleLogin() {
   if (phone.value.length !== 9) {
     error.value = 'O número de telemóvel deve ter 9 dígitos.';
     return;
@@ -144,8 +143,20 @@ function handleLogin() {
     return;
   }
   error.value = '';
-  login(phone.value, countryCode.value, password.value);
-  router.push('/deliveries');
+  isLoading.value = true;
+
+  try {
+    const result = await login(phone.value, countryCode.value, password.value);
+    if (result.success) {
+      router.push('/deliveries');
+    } else {
+      error.value = result.error || 'Erro ao iniciar sessão.';
+    }
+  } catch (err) {
+    error.value = 'Erro de ligação ao servidor.';
+  } finally {
+    isLoading.value = false;
+  }
 }
 </script>
 

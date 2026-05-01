@@ -131,7 +131,7 @@ const pwaAlerts = computed(() => {
     .map(c => ({
       id: c.id,
       time: formatTime(c.createdAt),
-      title: `Candidatura: ${c.name || c.firstName}`,
+      title: `Candidatura: ${c.name || c.fullName}`,
       message: `Novo registo submetido via PWA na zona ${c.zone}. Aguarda validação de documentos.`
     }))
     .sort((a, b) => b.time.localeCompare(a.time));

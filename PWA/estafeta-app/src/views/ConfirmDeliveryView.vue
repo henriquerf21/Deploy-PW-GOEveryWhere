@@ -28,26 +28,10 @@
 
       <!-- Delivery proof section -->
       <div class="section-card">
-        <span class="section-label">COMPROVATIVO DE ENTREGA *</span>
-        <div class="proof-buttons">
-          <button class="proof-btn" :class="{ active: method === 'photo' }" @click="method = 'photo'">
-            <div class="proof-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-            </div>
-            <span>Tirar foto</span>
-          </button>
-          <button class="proof-btn" :class="{ active: method === 'signature' }" @click="method = 'signature'">
-            <div class="proof-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
-            </div>
-            <span>Assinatura</span>
-          </button>
-        </div>
-
-        <!-- Photo capture -->
-        <div v-if="method === 'photo'" class="capture-area-wrap">
+        <span class="section-label">FOTOGRAFIA DA ENTREGA *</span>
+        <div class="capture-area-wrap">
           <label class="capture-area" :class="{ 'has-photo': photoPreview }">
-            <input type="file" accept="image/*" capture="environment" @change="handlePhoto" class="sr-only">
+            <input ref="photoInput" type="file" accept="image/*" capture="environment" @change="handlePhoto" class="sr-only">
             <img v-if="photoPreview" :src="photoPreview" alt="Prova">
             <span v-else class="capture-placeholder">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
@@ -55,9 +39,12 @@
             </span>
           </label>
         </div>
+      </div>
 
-        <!-- Signature -->
-        <div v-if="method === 'signature'" class="signature-wrap">
+      <!-- Signature section -->
+      <div class="section-card">
+        <span class="section-label">ASSINATURA DO CLIENTE *</span>
+        <div class="signature-wrap">
           <canvas ref="sigCanvas" width="360" height="200" @touchstart.prevent @mousedown.prevent></canvas>
           <button class="clear-sig" @click="clearSignature">Limpar</button>
         </div>
@@ -102,9 +89,9 @@
       <div class="section-card">
         <span class="section-label">CHECKLIST</span>
         <div class="checklist">
-          <div class="check-item" :class="{ done: hasPhoto || hasSig }">
-            <span class="check-box"><span v-if="hasPhoto || hasSig" class="check-mark"></span></span>
-            <span>Foto ou assinatura</span>
+          <div class="check-item" :class="{ done: hasPhoto && hasSig }">
+            <span class="check-box"><span v-if="hasPhoto && hasSig" class="check-mark"></span></span>
+            <span>Foto e Assinatura</span>
           </div>
           <div class="check-item" :class="{ done: !!gpsCoords }">
             <span class="check-box"><span v-if="gpsCoords" class="check-mark"></span></span>
@@ -130,7 +117,7 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
         Submeter entrega
       </button>
-      <p class="submit-note">Foto/assinatura e localização são obrigatórios</p>
+      <p class="submit-note">Foto, assinatura e localização são obrigatórios</p>
     </div>
 
     <!-- Footer -->
@@ -153,7 +140,6 @@ const props = defineProps({ id: String });
 const router = useRouter();
 
 const delivery = computed(() => getDeliveryById(props.id));
-const method = ref('photo');
 const error = ref('');
 const notes = ref('');
 const extraDesc = ref('');
@@ -162,7 +148,9 @@ const extraPhotos = ref([]);
 // Photo
 const photoPreview = ref(null);
 const photoFile = ref(null);
+const photoInput = ref(null);
 const hasPhoto = computed(() => !!photoPreview.value);
+
 
 function handlePhoto(e) {
   const file = e.target.files[0];
@@ -176,13 +164,12 @@ function handlePhoto(e) {
 // Signature
 const sigCanvas = ref(null);
 let signaturePad = null;
-const hasSig = computed(() => signaturePad && !signaturePad?.isEmpty());
+const hasSig = ref(false);
 
-watch(method, async (m) => {
-  if (m === 'signature') {
-    await nextTick();
-    initSignature();
-  }
+onMounted(async () => {
+  captureGPS();
+  await nextTick();
+  initSignature();
 });
 
 async function initSignature() {
@@ -190,16 +177,20 @@ async function initSignature() {
   try {
     const { default: SignaturePad } = await import('signature_pad');
     signaturePad = new SignaturePad(sigCanvas.value, { backgroundColor: '#fff', penColor: '#111827' });
+    signaturePad.addEventListener('endStroke', () => {
+      hasSig.value = !signaturePad.isEmpty();
+    });
   } catch (err) { console.warn('SignaturePad:', err); }
 }
 
-function clearSignature() { signaturePad?.clear(); }
+function clearSignature() { 
+  signaturePad?.clear(); 
+  hasSig.value = false;
+}
 
 // GPS
 const gpsCoords = ref(null);
 const gpsFetching = ref(false);
-
-onMounted(() => { captureGPS(); });
 
 function captureGPS() {
   if (!('geolocation' in navigator)) return;
@@ -212,32 +203,36 @@ function captureGPS() {
 }
 
 // Extra photos
+const extraPhotosData = ref([]);
+
 function handleExtraPhotos(e) {
-  extraPhotos.value = Array.from(e.target.files).map(f => f.name);
+  const files = Array.from(e.target.files);
+  extraPhotosData.value = [...extraPhotosData.value, ...files];
+  extraPhotos.value = extraPhotosData.value.map(f => f.name);
 }
 
 // Validation
 const canConfirm = computed(() => {
-  const hasProof = method.value === 'photo' ? hasPhoto.value : (signaturePad && !signaturePad.isEmpty());
-  return hasProof && !!gpsCoords.value;
+  return hasPhoto.value && hasSig.value && !!gpsCoords.value;
 });
 
-function handleConfirm() {
+async function handleConfirm() {
   error.value = '';
   if (!canConfirm.value) {
-    error.value = 'Completa a foto/assinatura e localização.';
+    error.value = 'Completa foto, assinatura e localização.';
     return;
   }
   const data = {
-    method: method.value,
+    method: 'both',
     gps: gpsCoords.value,
     timestamp: new Date().toISOString(),
-    photo: method.value === 'photo' ? photoPreview.value : null,
-    signature: method.value === 'signature' && signaturePad ? signaturePad.toDataURL() : null,
+    photo: photoPreview.value,
+    signature: signaturePad ? signaturePad.toDataURL() : null,
     location: gpsCoords.value,
+    extraPhotos: extraPhotosData.value,
   };
   if (notes.value.trim()) addDeliveryNotes(props.id, notes.value, extraPhotos.value);
-  confirmDelivery(props.id, data);
+  await confirmDelivery(props.id, data);
   router.push(`/completed/${props.id}`);
 }
 </script>
