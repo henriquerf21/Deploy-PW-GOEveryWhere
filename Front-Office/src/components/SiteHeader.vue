@@ -200,6 +200,11 @@ onUnmounted(() => window.removeEventListener('scroll', onScroll));
   border: 2px solid #fff;
   box-shadow: 0 2px 4px rgba(0,0,0,0.1);
 }
+.avatar-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
 .btn-login {
   display: flex;
   align-items: center;

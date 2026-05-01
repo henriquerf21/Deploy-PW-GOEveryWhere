@@ -96,7 +96,15 @@ export async function fetchMe() {
     });
     const data = await res.json();
     if (res.ok) {
-      state.user = data;
+      // Preserve local state fields like picture and authMethod
+      state.user = {
+        ...state.user,
+        ...data,
+        picture: state.user?.picture || data.picture,
+        avatarUrl: state.user?.avatarUrl || data.avatarUrl,
+        authMethod: state.user?.authMethod || data.authMethod
+      };
+      saveSession({ user: state.user, jwt: state.token });
     }
   } catch (err) {
     console.error("Erro no fetchMe:", err);
@@ -146,9 +154,25 @@ export async function loginWithGoogle(googleAccessToken) {
 
     const data = await response.json();
 
-    state.user = data.user;
+    // Now, fetch the profile picture from Google directly
+    let googlePicture = null;
+    try {
+      const googleRes = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${googleAccessToken}`);
+      if (googleRes.ok) {
+        const googleUser = await googleRes.json();
+        googlePicture = googleUser.picture;
+      }
+    } catch (err) {
+      console.error("Erro ao obter userinfo do Google:", err);
+    }
+
+    state.user = {
+      ...data.user,
+      picture: googlePicture || data.user?.picture,
+      authMethod: 'google'
+    };
     state.token = data.jwt;
-    saveSession({ user: data.user, jwt: data.jwt });
+    saveSession({ user: state.user, jwt: data.jwt });
     
     await fetchMe(); // Carregar pontos logo após login Google
 
