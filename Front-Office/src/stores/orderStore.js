@@ -300,6 +300,7 @@ export async function fetchUserOrders() {
         adminMessage: adminMsg,
         clientReply: clientRep,
         deliveryCoords,
+        chatHistory: attr.chatHistory || [],
       };
     });
 
@@ -453,6 +454,55 @@ export async function replyToInfoRequest(documentId, reply) {
     return { success: false, error: err?.error?.message || 'Erro ao enviar resposta' };
   } catch (err) {
     console.error(err);
+    return { success: false, error: err.message };
+  }
+}
+
+export async function sendChatMessage(documentId, text, sender = 'client') {
+  if (!authState.user || !authState.token) return { success: false, error: 'Não autenticado' };
+  
+  // 1. Obter o histórico atual (prioridade à activeOrder que está em memória)
+  let currentHistory = [];
+  const targetOrder = (store.activeOrder?.documentId === documentId) 
+    ? store.activeOrder 
+    : store.orderHistory.find(o => o.documentId === documentId);
+
+  if (targetOrder && Array.isArray(targetOrder.chatHistory)) {
+    currentHistory = [...targetOrder.chatHistory];
+  }
+  
+  // 2. Adicionar a nova mensagem
+  const newMessage = {
+    sender,
+    text,
+    time: new Date().toISOString()
+  };
+  currentHistory.push(newMessage);
+  
+  try {
+    const response = await fetch(`${API_URL}/orders/${documentId}`, {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authState.token}`
+      },
+      body: JSON.stringify({
+        data: { chatHistory: currentHistory }
+      })
+    });
+
+    if (response.ok) {
+      // Atualização local imediata para feedback instantâneo
+      if (targetOrder) {
+        targetOrder.chatHistory = currentHistory;
+      }
+      return { success: true };
+    }
+    
+    const errData = await response.json();
+    return { success: false, error: errData?.error?.message || 'Erro ao atualizar chat' };
+  } catch (err) {
+    console.error('Chat Error:', err);
     return { success: false, error: err.message };
   }
 }

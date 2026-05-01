@@ -5,10 +5,10 @@
       <img src="/media/brand/logo-goeverywhere.png" alt="GoEverywhere" class="logo-mini" />
       <span class="header-title">GoEverywhere</span>
       <div class="header-right">
-        <div class="online-pill">
-          <span class="online-dot"></span>
-          <span>Online</span>
-        </div>
+        <button class="online-pill" :class="{ paused: courierPaused }" @click="handleTogglePause">
+          <span class="online-dot" :class="{ 'paused-dot': courierPaused }"></span>
+          <span>{{ courierPaused ? 'Em Pausa' : 'Online' }}</span>
+        </button>
         <button class="header-icon-btn" @click="showFilters = true" title="Filtros">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 6h16M7 12h10M10 18h4"/></svg>
         </button>
@@ -105,6 +105,10 @@ import {
   activeDelivery,
   acceptDelivery,
   fetchDeliveries,
+  togglePause,
+  isPaused,
+  startGpsTracking,
+  stopGpsTracking,
 } from '../stores/courierStore.js';
 import { deliveryStateLabels } from '../constants.js';
 import DeliveryCard from '../components/DeliveryCard.vue';
@@ -116,6 +120,8 @@ const mapEl = ref(null);
 let map = null;
 let leaflet = null;
 let layer = null;
+
+const courierPaused = computed(() => isPaused());
 
 const list = computed(() => filteredDeliveries.value);
 const active = computed(() => activeDelivery.value);
@@ -135,10 +141,15 @@ function toggleDistance() {
 
 async function handleAccept(id) {
   await acceptDelivery(id);
+  startGpsTracking(); // Start GPS when delivery accepted
   router.push(`/deliveries/${id}`);
 }
 function goToDetail(id) { router.push(`/deliveries/${id}`); }
 function goToActive() { if (active.value) router.push(`/deliveries/${active.value.id}`); }
+
+async function handleTogglePause() {
+  await togglePause();
+}
 
 function zoomIn() { map?.zoomIn(); }
 function zoomOut() { map?.zoomOut(); }
@@ -169,11 +180,19 @@ onMounted(async () => {
   pollInterval = setInterval(() => fetchDeliveries(), 15000);
 });
 
+// Force redirect if active delivery detected
+watch(() => store.activeDeliveryId, (newId) => {
+  if (newId) {
+    router.replace(`/deliveries/${newId}`);
+  }
+}, { immediate: true });
+
 watch([mapDeliveries, active], () => renderMap(), { deep: true });
 
 onBeforeUnmount(() => {
   if (pollInterval) clearInterval(pollInterval);
   map?.remove(); map = null; layer = null; leaflet = null;
+  stopGpsTracking(); // Cleanup GPS on page leave
 });
 
 function renderMap() {
@@ -220,12 +239,23 @@ function renderMap() {
   border-radius: var(--ge-radius-full);
   font-size: 11px; font-weight: 600;
   color: #1b8a4a;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.online-pill.paused {
+  background: #fffbeb;
+  border-color: #fde68a;
+  color: #92400e;
 }
 .online-dot {
   width: 8px; height: 8px;
   background: #22c55e;
   border-radius: 50%;
   animation: pulse-dot 2s infinite;
+}
+.online-dot.paused-dot {
+  background: #f59e0b;
+  animation: none;
 }
 @keyframes pulse-dot {
   0%, 100% { opacity: 1; }

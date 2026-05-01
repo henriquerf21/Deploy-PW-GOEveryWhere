@@ -687,6 +687,19 @@ export function setCourierAdminNotes(courierId, notes) {
   return { ok: true };
 }
 
+export async function clearCourierDataRequest(courierId) {
+  const c = getCourierById(courierId);
+  if (!c) return { ok: false };
+  try {
+    const updated = await withBusy(() => boCourierAction(courierId, { action: 'clear_data_request' }));
+    upsertCourier(updated);
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao marcar pedido de alteração como tratado.' };
+  }
+  logAct(`Pedido de alteração de dados de ${c.name} marcado como tratado.`);
+  return { ok: true };
+}
+
 /** Filtros RF15 */
 export function filterOrders({ status, priority, dateFrom, dateTo, type, zone, q }) {
   return logistics.orders.filter((o) => {

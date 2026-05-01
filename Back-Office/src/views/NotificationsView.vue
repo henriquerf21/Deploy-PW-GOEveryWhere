@@ -258,6 +258,11 @@ const pwaAlerts = computed(() => {
   color: var(--bo-text-secondary);
 }
 
+.alert-actions {
+  flex-shrink: 0;
+  margin-left: 16px;
+}
+
 .action-btn {
   text-decoration: none;
   padding: 8px 16px;
@@ -268,6 +273,9 @@ const pwaAlerts = computed(() => {
   font-size: 13px;
   border: 1px solid var(--bo-border);
   transition: all 0.2s;
+  white-space: nowrap;
+  display: inline-block;
+  text-align: center;
 }
 .action-btn:hover {
   background: var(--bo-brand-soft);

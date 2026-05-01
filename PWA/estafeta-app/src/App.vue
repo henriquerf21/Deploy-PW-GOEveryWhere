@@ -13,7 +13,9 @@ import BottomNav from './components/BottomNav.vue';
 
 const route = useRoute();
 const showNav = computed(() => {
-  return store.auth.loggedIn && !['Login', 'Register'].includes(route.name);
+  const isAuth = store.auth.loggedIn && !['Login', 'Register'].includes(route.name);
+  // Escondemos a navegação se houver uma entrega ativa para manter o foco
+  return isAuth && !store.activeDeliveryId;
 });
 </script>
 

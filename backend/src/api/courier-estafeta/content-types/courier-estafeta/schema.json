@@ -166,6 +166,12 @@
     },
     "accountHolder": {
       "type": "string"
+    },
+    "rejectionReason": {
+      "type": "text"
+    },
+    "dataChangeRequest": {
+      "type": "json"
     }
   }
 }

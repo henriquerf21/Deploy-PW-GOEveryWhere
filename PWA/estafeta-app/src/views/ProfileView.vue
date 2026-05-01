@@ -9,20 +9,19 @@
     <!-- Title bar -->
     <div class="title-bar">
       <h1>Perfil</h1>
-      <button v-if="!isEditing" class="edit-btn" @click="startEdit">Editar</button>
-      <button v-else class="edit-btn" @click="cancelEdit">Cancelar</button>
       <button class="logout-btn" @click="handleLogout">Sair</button>
     </div>
 
     <div class="page-body">
       <!-- Profile card -->
       <div class="profile-card">
-        <div class="avatar">{{ initials }}</div>
+        <div class="avatar-wrap">
+          <img v-if="profilePhotoUrl" :src="profilePhotoUrl" alt="Foto de perfil" class="avatar-img" />
+          <div v-else class="avatar">{{ initials }}</div>
+        </div>
         <div class="profile-info">
-          <h2 v-if="!isEditing">{{ profile.name }}</h2>
-          <input v-else v-model="form.name" class="inline-input" aria-label="Nome" />
-          <p class="profile-phone" v-if="!isEditing">{{ profile.phone }}</p>
-          <input v-else v-model="form.phone" class="inline-input inline-input--small" aria-label="Telefone" />
+          <h2>{{ profile.name }}</h2>
+          <p class="profile-phone">{{ profile.phone }}</p>
           <span class="state-badge">{{ courierStateLabels[profile.state] }}</span>
         </div>
       </div>
@@ -34,60 +33,88 @@
           <span class="stat-lbl">Entregas</span>
         </div>
         <div class="stat-card">
-          <span class="stat-val">{{ profile.rating }} <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b"><polygon points="12,2 15,9 22,9.5 17,14.5 18.5,22 12,18 5.5,22 7,14.5 2,9.5 9,9"/></svg></span>
+          <span class="stat-val">
+            <template v-if="profile.totalDeliveries > 0">
+              {{ profile.rating }} <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b"><polygon points="12,2 15,9 22,9.5 17,14.5 18.5,22 12,18 5.5,22 7,14.5 2,9.5 9,9"/></svg>
+            </template>
+            <template v-else>
+              N/A
+            </template>
+          </span>
           <span class="stat-lbl">Rating</span>
         </div>
         <div class="stat-card">
-          <span class="stat-val">{{ profile.onTimePct }}%</span>
+          <span class="stat-val">{{ profile.totalDeliveries > 0 ? profile.onTimePct + '%' : 'N/A' }}</span>
           <span class="stat-lbl">No prazo</span>
         </div>
       </div>
 
-      <!-- Info sections -->
+      <!-- Info sections (read-only) -->
       <div class="info-section">
         <span class="section-label">INFORMAÇÕES PESSOAIS</span>
-        <div class="info-row"><span class="info-key">Email</span><span v-if="!isEditing">{{ profile.email }}</span><input v-else v-model="form.email" class="row-input" /></div>
-        <div class="info-row"><span class="info-key">Morada</span><span v-if="!isEditing">{{ profile.address }}</span><input v-else v-model="form.address" class="row-input" /></div>
-        <div class="info-row"><span class="info-key">Data nasc.</span><span v-if="!isEditing">{{ profile.birthDate }}</span><input v-else v-model="form.birthDate" type="date" class="row-input" /></div>
-        <div class="info-row"><span class="info-key">IBAN</span><span v-if="!isEditing" class="iban">{{ profile.iban }}</span><input v-else v-model="form.iban" class="row-input iban" /></div>
-        <div class="info-row"><span class="info-key">Zona</span><span v-if="!isEditing">{{ profile.zone }}</span><input v-else v-model="form.zone" class="row-input" /></div>
+        <div class="info-row"><span class="info-key">Email</span><span>{{ profile.email }}</span></div>
+        <div class="info-row"><span class="info-key">Morada</span><span>{{ profile.address }}</span></div>
+        <div class="info-row"><span class="info-key">Data nasc.</span><span>{{ profile.birthDate }}</span></div>
+        <div class="info-row"><span class="info-key">IBAN</span><span class="iban">{{ profile.iban }}</span></div>
+        <div class="info-row"><span class="info-key">Zona</span><span>{{ profile.zone }}</span></div>
       </div>
 
       <div class="info-section">
         <span class="section-label">VEÍCULO</span>
-        <div class="info-row"><span class="info-key">Tipo</span><span v-if="!isEditing">{{ profile.vehicle.type }}</span><input v-else v-model="form.vehicle.type" class="row-input" /></div>
+        <div class="info-row"><span class="info-key">Tipo</span><span>{{ profile.vehicle.type }}</span></div>
         <div class="info-row">
           <span class="info-key">Marca/Modelo</span>
-          <span v-if="!isEditing">{{ profile.vehicle.brand }} {{ profile.vehicle.model }}</span>
-          <div v-else class="row-inputs">
-            <input v-model="form.vehicle.brand" class="row-input" placeholder="Marca" />
-            <input v-model="form.vehicle.model" class="row-input" placeholder="Modelo" />
-          </div>
+          <span>{{ profile.vehicle.brand }} {{ profile.vehicle.model }}</span>
         </div>
-        <div class="info-row"><span class="info-key">Cor</span><span v-if="!isEditing">{{ profile.vehicle.color }}</span><input v-else v-model="form.vehicle.color" class="row-input" /></div>
-        <div class="info-row"><span class="info-key">Matrícula</span><span v-if="!isEditing">{{ profile.vehicle.plate }}</span><input v-else v-model="form.vehicle.plate" class="row-input" /></div>
+        <div class="info-row"><span class="info-key">Cor</span><span>{{ profile.vehicle.color }}</span></div>
+        <div class="info-row" v-if="profile.vehicle.type && profile.vehicle.type.toLowerCase() !== 'bicicleta'"><span class="info-key">Matrícula</span><span>{{ profile.vehicle.plate }}</span></div>
       </div>
 
       <div class="info-section">
-        <span class="section-label">DOCUMENTOS</span>
-        <div class="doc-list">
-          <div class="doc-item" :class="profile.docs.cc ? 'doc-ok' : 'doc-missing'">
-            <span class="doc-circle"><svg v-if="profile.docs.cc" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>
-            <span>Cartão Cidadão</span>
-          </div>
-          <div class="doc-item" :class="profile.docs.license ? 'doc-ok' : 'doc-missing'">
-            <span class="doc-circle"><svg v-if="profile.docs.license" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>
-            <span>Carta de Condução</span>
-          </div>
-          <div class="doc-item" :class="profile.docs.insurance ? 'doc-ok' : 'doc-missing'">
-            <span class="doc-circle"><svg v-if="profile.docs.insurance" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3"><path d="M20 6L9 17l-5-5"/></svg></span>
-            <span>Seguro do Veículo</span>
-          </div>
-        </div>
+        <span class="section-label">GERIR FROTA</span>
+        <button class="add-vehicle-btn" @click.prevent="">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
+          Adicionar Novo Veículo
+        </button>
       </div>
 
-      <div v-if="isEditing" class="save-wrap">
-        <button class="save-btn" @click="saveEdit">Guardar alterações</button>
+      <!-- Data change request section -->
+      <div class="info-section change-request-section">
+        <span class="section-label">ALTERAÇÃO DE DADOS</span>
+        
+        <div class="change-info-banner">
+          <div class="change-info-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <p class="change-info-text">
+            Não é possível editar os teus dados diretamente. Para qualquer alteração, 
+            submete um pedido abaixo e o administrador processará a tua solicitação.
+          </p>
+        </div>
+
+        <div v-if="changeRequestSent" class="change-success">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+          <span>Pedido de alteração enviado com sucesso! O administrador irá analisar e proceder à alteração.</span>
+        </div>
+
+        <template v-else>
+          <div class="field-group">
+            <label>O que queres alterar? *</label>
+            <input v-model="changeField" class="field-input" placeholder="Ex: Nome, Morada, IBAN, Veículo, etc." />
+          </div>
+          <div class="field-group">
+            <label>Novo valor pretendido *</label>
+            <input v-model="changeNewValue" class="field-input" placeholder="Ex: Rua Nova da Estação 45, 4710-000 Braga" />
+          </div>
+          <div class="field-group">
+            <label>Motivo da alteração *</label>
+            <textarea v-model="changeReason" class="field-textarea" placeholder="Explica porque precisas de alterar este dado (ex: mudei de morada, erro de digitação, etc.)" rows="3"></textarea>
+          </div>
+          <p v-if="changeError" class="error-msg">{{ changeError }}</p>
+          <button class="change-btn" @click="submitChangeRequest" :disabled="changeSending">
+            {{ changeSending ? 'A enviar...' : 'Submeter pedido de alteração' }}
+          </button>
+        </template>
       </div>
     </div>
 
@@ -103,49 +130,60 @@
 </template>
 
 <script setup>
-import { computed, reactive, ref } from 'vue';
+import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { store, logout, updateProfile } from '../stores/courierStore.js';
+import { store, logout, submitDataChangeRequest } from '../stores/courierStore.js';
 import { courierStateLabels } from '../constants.js';
 
 const router = useRouter();
 const profile = computed(() => store.profile);
-const isEditing = ref(false);
-const form = reactive({
-  name: '', phone: '', email: '', address: '', birthDate: '', iban: '', zone: '',
-  vehicle: { type: '', brand: '', model: '', color: '', plate: '' },
-});
 const initials = computed(() => {
   const parts = profile.value.name.split(' ');
   return parts.length >= 2 ? parts[0][0] + parts[parts.length - 1][0] : parts[0][0];
 });
 
-function hydrateForm() {
-  form.name = profile.value.name || '';
-  form.phone = profile.value.phone || '';
-  form.email = profile.value.email || '';
-  form.address = profile.value.address || '';
-  form.birthDate = profile.value.birthDate || '';
-  form.iban = profile.value.iban || '';
-  form.zone = profile.value.zone || '';
-  form.vehicle.type = profile.value.vehicle?.type || '';
-  form.vehicle.brand = profile.value.vehicle?.brand || '';
-  form.vehicle.model = profile.value.vehicle?.model || '';
-  form.vehicle.color = profile.value.vehicle?.color || '';
-  form.vehicle.plate = profile.value.vehicle?.plate || '';
+// Profile photo URL from Strapi
+const profilePhotoUrl = computed(() => {
+  if (store.profile.profilePhotoUrl) return store.profile.profilePhotoUrl;
+  return null;
+});
+
+// Change request form
+const changeField = ref('');
+const changeNewValue = ref('');
+const changeReason = ref('');
+const changeError = ref('');
+const changeSending = ref(false);
+const changeRequestSent = ref(false);
+
+async function submitChangeRequest() {
+  changeError.value = '';
+  if (!changeField.value.trim() || !changeNewValue.value.trim() || !changeReason.value.trim()) {
+    changeError.value = 'Preenche todos os campos obrigatórios.';
+    return;
+  }
+  if (changeReason.value.trim().length < 10) {
+    changeError.value = 'O motivo deve ter pelo menos 10 caracteres.';
+    return;
+  }
+  changeSending.value = true;
+  try {
+    await submitDataChangeRequest({
+      field: changeField.value.trim(),
+      newValue: changeNewValue.value.trim(),
+      reason: changeReason.value.trim(),
+    });
+    changeRequestSent.value = true;
+    changeField.value = '';
+    changeNewValue.value = '';
+    changeReason.value = '';
+  } catch (err) {
+    changeError.value = err.message || 'Erro ao enviar pedido.';
+  } finally {
+    changeSending.value = false;
+  }
 }
 
-function startEdit() { hydrateForm(); isEditing.value = true; }
-function cancelEdit() { isEditing.value = false; }
-async function saveEdit() {
-  await updateProfile({
-    name: form.name, phone: form.phone, email: form.email,
-    address: form.address, birthDate: form.birthDate,
-    iban: form.iban, zone: form.zone,
-    vehicle: { type: form.vehicle.type, brand: form.vehicle.brand, model: form.vehicle.model, color: form.vehicle.color, plate: form.vehicle.plate },
-  });
-  isEditing.value = false;
-}
 function handleLogout() { logout(); router.push('/login'); }
 </script>
 
@@ -170,15 +208,6 @@ function handleLogout() { logout(); router.push('/login'); }
   margin: 0; color: #111827;
   flex: 1;
 }
-.edit-btn {
-  padding: 6px 14px;
-  background: #f0fdf4;
-  border: 0.72px solid #dcfce7;
-  border-radius: var(--ge-radius-full);
-  font-size: 12px; font-weight: 600;
-  color: #1b8a4a;
-  cursor: pointer;
-}
 .logout-btn {
   padding: 6px 14px;
   background: #fef2f2;
@@ -198,6 +227,16 @@ function handleLogout() { logout(); router.push('/login'); }
   border-radius: 16px;
   margin-bottom: 12px;
 }
+.avatar-wrap {
+  width: 56px; height: 56px;
+  flex-shrink: 0;
+}
+.avatar-img {
+  width: 56px; height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid #1b8a4a;
+}
 .avatar {
   width: 56px; height: 56px;
   display: flex; align-items: center; justify-content: center;
@@ -206,25 +245,11 @@ function handleLogout() { logout(); router.push('/login'); }
   font-family: var(--ge-font-display);
   font-size: 20px; font-weight: 700;
   border-radius: 50%;
-  flex-shrink: 0;
 }
 .profile-info h2 {
   margin: 0; font-size: 18px;
   font-family: var(--ge-font-display);
   font-weight: 700; color: #111827;
-}
-.inline-input {
-  border: 0.72px solid #e5e7eb;
-  border-radius: 12px; padding: 8px 12px;
-  font-size: 16px; font-weight: 600;
-  font-family: var(--ge-font-display);
-  width: 100%; max-width: 240px;
-  outline: none;
-}
-.inline-input--small {
-  font-size: 13px; font-weight: 500;
-  font-family: var(--ge-font);
-  margin-top: 4px;
 }
 .profile-phone {
   font-size: 13px; color: #6b7280;
@@ -291,45 +316,106 @@ function handleLogout() { logout(); router.push('/login'); }
 .info-row:last-child { border-bottom: none; }
 .info-key { color: #6b7280; font-weight: 500; }
 .iban { font-family: var(--ge-font-mono); font-size: 11px; }
-.row-input {
-  border: 0.72px solid #e5e7eb;
-  border-radius: 12px; padding: 6px 10px;
-  font-size: 13px; outline: none;
-  min-width: 140px;
-}
-.row-inputs { display: flex; gap: 6px; width: 62%; }
-.row-inputs .row-input { flex: 1; min-width: 0; }
 
-/* Documents */
-.doc-list {
-  display: flex; flex-direction: column; gap: 10px;
-}
-.doc-item {
-  display: flex; align-items: center; gap: 10px;
-  font-size: 13px; color: #111827;
-}
-.doc-circle {
-  width: 24px; height: 24px;
-  border-radius: 50%;
-  display: flex; align-items: center; justify-content: center;
-  flex-shrink: 0;
-}
-.doc-ok .doc-circle { background: #22c55e; }
-.doc-missing .doc-circle { background: #ef4444; }
-
-/* Save button */
-.save-wrap { margin-top: 12px; }
-.save-btn {
+/* Add Vehicle Button */
+.add-vehicle-btn {
   width: 100%;
-  padding: 16px;
-  background: #1b8a4a;
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  padding: 14px;
+  background: #f0fdf4;
+  border: 1.5px dashed #22c55e;
+  border-radius: 14px;
+  color: #166534;
+  font-family: var(--ge-font-display);
+  font-size: 13px; font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+.add-vehicle-btn:active { transform: scale(0.98); background: #dcfce7; }
+
+/* Change request */
+.change-request-section {
+  border-color: #fef3c7;
+  background: #fffbeb;
+}
+.change-info-banner {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 12px 14px;
+  background: #fef3c7;
+  border-radius: 12px;
+  margin-bottom: 16px;
+}
+.change-info-icon { flex-shrink: 0; margin-top: 1px; }
+.change-info-text {
+  margin: 0; font-size: 12px; color: #92400e; line-height: 1.5;
+}
+.change-success {
+  display: flex; align-items: center; gap: 10px;
+  padding: 14px;
+  background: #f0fdf4;
+  border: 1px solid #dcfce7;
+  border-radius: 12px;
+  font-size: 13px; color: #166534; font-weight: 500;
+  line-height: 1.4;
+}
+.field-group {
+  display: flex; flex-direction: column; gap: 6px;
+  margin-bottom: 12px;
+}
+.field-group label {
+  font-family: var(--ge-font-display);
+  font-size: 12px; font-weight: 500;
+  color: #92400e;
+}
+.field-input {
+  width: 100%;
+  padding: 12px 14px;
+  background: #fff;
+  border: 0.72px solid #e5e7eb;
+  border-radius: 12px;
+  font-family: var(--ge-font);
+  font-size: 13px; color: #111827;
+  outline: none;
+}
+.field-input:focus {
+  border-color: var(--ge-brand);
+  box-shadow: 0 0 0 3px rgba(27,138,74,0.1);
+}
+.field-textarea {
+  width: 100%;
+  padding: 12px 14px;
+  background: #fff;
+  border: 0.72px solid #e5e7eb;
+  border-radius: 12px;
+  font-family: var(--ge-font);
+  font-size: 13px; color: #111827;
+  outline: none;
+  resize: vertical;
+  min-height: 70px;
+}
+.field-textarea:focus {
+  border-color: var(--ge-brand);
+  box-shadow: 0 0 0 3px rgba(27,138,74,0.1);
+}
+.error-msg {
+  color: #ef4444; font-size: 12px; margin: 0 0 8px;
+}
+.change-btn {
+  width: 100%;
+  padding: 14px;
+  background: #f59e0b;
   color: #fff;
   border: none;
-  border-radius: 16px;
+  border-radius: 12px;
   font-family: var(--ge-font-display);
-  font-size: 14px; font-weight: 600;
-  box-shadow: 0 8px 24px rgba(27,138,74,0.25);
+  font-size: 13px; font-weight: 600;
   cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+  box-shadow: 0 4px 12px rgba(245,158,11,0.25);
+}
+.change-btn:active { transform: scale(0.97); }
+.change-btn:disabled {
+  opacity: 0.5; cursor: not-allowed;
 }
 
 /* Footer */

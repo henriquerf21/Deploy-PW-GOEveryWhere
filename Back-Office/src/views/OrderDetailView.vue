@@ -109,6 +109,17 @@
         <h3>Atribuir estafeta</h3>
         <p class="hint">Apenas estafetas online na zona do pedido, dentro do limite de entregas simultâneas.</p>
         <fieldset class="fieldset" :disabled="!canAssignSection">
+        <!-- Estafeta Atual -->
+        <div v-if="order.courierName" class="current-courier-box">
+          <div class="cc-info">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>
+            </svg>
+            <span>Estafeta atribuído: <strong>{{ order.courierName }}</strong></span>
+          </div>
+          <span class="pill pill--success">Ativo</span>
+        </div>
+
         <div v-if="suggested.length" class="suggest">
           <h4 class="suggest__title">Sugestão assistida (score)</h4>
           <p class="hint">Ordenado por zona, disponibilidade, carga e distância à loja. A decisão final é sempre tua.</p>
@@ -126,14 +137,18 @@
             </li>
           </ul>
         </div>
-        <ul v-if="!available.length" class="muted">Sem estafetas elegíveis para esta zona.</ul>
-        <div v-else class="assign-list">
+        
+        <div v-if="available.length" class="assign-title">Alterar ou atribuir novo estafeta:</div>
+        <ul v-if="!available.length && !order.courierName" class="muted">Sem estafetas elegíveis para esta zona.</ul>
+        <div v-else-if="available.length" class="assign-list">
           <label v-for="c in available" :key="c.id" class="radio-line">
             <input v-model="pickCourier" type="radio" :value="c.id" />
             <span>{{ c.name }} · {{ c.vehicle?.type }} · max {{ c.maxConcurrent }} simult.</span>
           </label>
         </div>
-        <button type="button" class="btn btn--go" :disabled="!pickCourier" @click="doAssign">Atribuir</button>
+        <button type="button" class="btn btn--go" :disabled="!pickCourier" @click="doAssign">
+          {{ order.courierName ? 'Re-atribuir' : 'Atribuir' }}
+        </button>
         <button
           v-if="order.status === ORDER_STATUS.ASSIGNED"
           type="button"
@@ -664,5 +679,37 @@ label {
   font-size: 13px;
   font-weight: 600;
   color: #92400e;
+}
+
+.current-courier-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #f0fdf4;
+  border: 1px solid #dcfce7;
+  border-radius: var(--bo-radius-sm);
+  margin-bottom: 16px;
+}
+
+.cc-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #166534;
+}
+
+.assign-title {
+  font-size: 12px;
+  font-weight: 700;
+  margin: 16px 0 8px;
+  color: var(--bo-text-secondary);
+  text-transform: uppercase;
+}
+
+.pill--success {
+  background: #22c55e;
+  color: #fff;
 }
 </style>

@@ -34,7 +34,7 @@ export const orderTypeLabels = {
   [ORDER_TYPES.B2B]: 'B2B',
 };
 
-export const ZONES = ['Porto Centro', 'Matosinhos', 'Vila Nova de Gaia', 'Maia', 'Gondomar', 'Outro'];
+export const ZONES = ['Porto Centro', 'Matosinhos', 'Vila Nova de Gaia', 'Maia', 'Gondomar', 'Braga', 'Outro'];
 
 export const priorityLabels = {
   1: '1 — Baixa',
