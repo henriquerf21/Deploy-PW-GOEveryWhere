@@ -58,21 +58,33 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref, onMounted } from 'vue';
+import { store, fetchCompletedDeliveries } from '../stores/courierStore.js';
 
-const history = [
-  { id: 1, clientName: 'Pedro F.', orderId: '#ORD-2847', time: '12:45', duration: 18, earning: 4.20 },
-  { id: 2, clientName: 'Sofia L.', orderId: '#ORD-2846', time: '11:30', duration: 25, earning: 5.50 },
-  { id: 3, clientName: 'Tiago M.', orderId: '#ORD-2845', time: '10:15', duration: 32, earning: 6.80 },
-  { id: 4, clientName: 'Rita G.', orderId: '#ORD-2844', time: '09:22', duration: 15, earning: 3.90 },
-  { id: 5, clientName: 'Carlos A.', orderId: '#ORD-2843', time: '08:50', duration: 22, earning: 4.60 },
-  { id: 6, clientName: 'Ana R.', orderId: '#ORD-2842', time: '08:15', duration: 19, earning: 5.10 },
-  { id: 7, clientName: 'Bruno M.', orderId: '#ORD-2841', time: '07:40', duration: 28, earning: 7.20 },
-  { id: 8, clientName: 'Marta S.', orderId: '#ORD-2840', time: '07:10', duration: 20, earning: 10.00 },
-];
+const isLoading = ref(true);
 
-const todayTotal = computed(() => history.reduce((s, h) => s + h.earning, 0));
-const avgPerDelivery = computed(() => (todayTotal.value / history.length).toFixed(2));
+const history = computed(() => {
+  return store.completedDeliveries.map(d => ({
+    id: d.id,
+    clientName: d.destination?.name || 'Cliente',
+    orderId: d.orderId || `#ORD-${d.id}`,
+    time: d.timestamps?.['E-09'] ? new Date(d.timestamps['E-09']).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }) : '--:--',
+    duration: d.timestamps?.['E-09'] && d.timestamps?.['E-13']
+      ? Math.max(1, Math.round((new Date(d.timestamps['E-13']) - new Date(d.timestamps['E-09'])) / 60000))
+      : d.etaMinutes || 20,
+    earning: d.costEuro || 0,
+  }));
+});
+
+const todayTotal = computed(() => history.value.reduce((s, h) => s + h.earning, 0));
+const avgPerDelivery = computed(() => history.value.length ? (todayTotal.value / history.value.length).toFixed(2) : '0.00');
+
+onMounted(async () => {
+  try {
+    await fetchCompletedDeliveries();
+  } catch (e) { /* fallback to existing */ }
+  isLoading.value = false;
+});
 </script>
 
 <style scoped>

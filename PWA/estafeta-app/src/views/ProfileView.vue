@@ -137,8 +137,8 @@ function hydrateForm() {
 
 function startEdit() { hydrateForm(); isEditing.value = true; }
 function cancelEdit() { isEditing.value = false; }
-function saveEdit() {
-  updateProfile({
+async function saveEdit() {
+  await updateProfile({
     name: form.name, phone: form.phone, email: form.email,
     address: form.address, birthDate: form.birthDate,
     iban: form.iban, zone: form.zone,

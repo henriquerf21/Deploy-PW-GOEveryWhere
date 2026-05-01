@@ -11,16 +11,18 @@
   },
   "pluginOptions": {},
   "attributes": {
-    "firstName": {
-      "type": "string"
-    },
-    "lastName": {
+    "fullName": {
       "type": "string"
     },
     "email": {
       "type": "string"
     },
     "phone": {
+      "type": "string",
+      "required": true,
+      "unique": true
+    },
+    "password": {
       "type": "string"
     },
     "nif": {

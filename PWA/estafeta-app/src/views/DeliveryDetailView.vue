@@ -8,9 +8,12 @@
 
     <!-- Order banner (Figma: < #ORD-2850 URGENTE €6.50 / state) -->
     <div class="order-banner">
-      <button class="ob-back" @click="$router.push('/deliveries')">
+      <button v-if="delivery.state === 'E-08'" class="ob-back" @click="$router.push('/deliveries')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111827" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
+      <div v-else style="width:36px; height:36px; display:flex; align-items:center; justify-content:center;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+      </div>
       <div class="ob-info">
         <div class="ob-top-row">
           <span class="ob-id">{{ delivery.orderId }}</span>
@@ -292,19 +295,36 @@ const timeEntries = computed(() => {
 const timerSeconds = ref(300);
 let timerInterval = null;
 const timerDisplay = computed(() => {
+  if (timerSeconds.value <= 0) return '0:00';
   const m = Math.floor(timerSeconds.value / 60);
   const s = timerSeconds.value % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
 });
+
+function calculateRemainingSeconds() {
+  if (!delivery.value?.timestamps?.['E-08']) return 300;
+  const createdAt = new Date(delivery.value.timestamps['E-08']).getTime();
+  const now = new Date().getTime();
+  const diffSecs = Math.floor((now - createdAt) / 1000);
+  return Math.max(0, 300 - diffSecs);
+}
 
 function zoomIn() { routeMap?.zoomIn(); }
 function zoomOut() { routeMap?.zoomOut(); }
 
 onMounted(() => {
   if (delivery.value?.state === DELIVERY_STATE.E08) {
+    timerSeconds.value = calculateRemainingSeconds();
+    if (timerSeconds.value <= 0) {
+      router.push('/deliveries');
+      return;
+    }
     timerInterval = setInterval(() => {
-      timerSeconds.value--;
-      if (timerSeconds.value <= 0) clearInterval(timerInterval);
+      timerSeconds.value = calculateRemainingSeconds();
+      if (timerSeconds.value <= 0) {
+        clearInterval(timerInterval);
+        router.push('/deliveries');
+      }
     }, 1000);
   }
 });
@@ -335,21 +355,21 @@ function handleAccept() {
   acceptDelivery(props.id);
 }
 
-function handleCTA() {
+async function handleCTA() {
   if (!delivery.value) return;
   if (delivery.value.state === DELIVERY_STATE.E12) {
     router.push(`/confirm/${props.id}`);
     return;
   }
-  advanceDeliveryState(props.id);
+  await advanceDeliveryState(props.id);
 }
 
 const showImpossible = ref(false);
 const impossibleReason = ref('');
 
-function handleImpossible() {
+async function handleImpossible() {
   if (!impossibleReason.value.trim()) return;
-  markDeliveryImpossible(props.id, impossibleReason.value, null);
+  await markDeliveryImpossible(props.id, impossibleReason.value, null);
   showImpossible.value = false;
   router.push('/deliveries');
 }

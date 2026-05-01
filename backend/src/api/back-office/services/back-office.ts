@@ -208,15 +208,13 @@ function buildPublicOrder(entry: any) {
 function buildPublicCourier(entry: any, assignedCount = 0) {
   const attrs = entry ?? {};
   const state = mapCourierStatus(attrs.courier_status, attrs.isOnline);
-  const firstName = attrs.firstName || '';
-  const lastName = attrs.lastName || '';
   const idNum = toNum(attrs.id, 0);
   const pseudoLat = 41.14 + ((idNum % 15) * 0.003);
   const pseudoLng = -8.67 + ((idNum % 13) * 0.004);
   return {
     id: idToPublic('ST', attrs.documentId || attrs.id),
     _documentId: attrs.documentId,
-    name: `${firstName} ${lastName}`.trim(),
+    name: attrs.fullName || '',
     email: attrs.email || '',
     phone: attrs.phone || '',
     nif: attrs.nif || '',
@@ -1189,11 +1187,9 @@ export default ({ strapi }: any) => ({
     const plateRes = validatePtPlate(plateRaw);
     if (!plateRes.ok) return { ok: false, error: (plateRes as any).error as string };
 
-    const split = splitCourierName(name);
     const created = await strapi.documents('api::courier-estafeta.courier-estafeta').create({
       data: {
-        firstName: split.firstName,
-        lastName: split.lastName,
+        fullName: name,
         email: emailRes.value,
         phone: phoneRes.value,
         nif: nifRes.value,
@@ -1252,12 +1248,11 @@ export default ({ strapi }: any) => ({
     const plateRes = validatePtPlate(plateRaw);
     if (!plateRes.ok) return { ok: false, error: (plateRes as any).error as string };
 
-    const split = splitCourierName(payload.name || `${target.firstName || ''} ${target.lastName || ''}`);
+    const newFullName = payload.name != null ? String(payload.name).trim() : target.fullName;
     const updated = await strapi.documents('api::courier-estafeta.courier-estafeta').update({
       documentId: target.documentId,
       data: {
-        firstName: split.firstName,
-        lastName: split.lastName,
+        fullName: newFullName,
         email: emailRes.value,
         phone: phoneRes.value,
         nif: nifRes.value,
@@ -1301,6 +1296,7 @@ export default ({ strapi }: any) => ({
     } else if (action === 'reject') {
       patch.courier_status = COURIER_STATE.E03;
       patch.isOnline = false;
+      if (payload.reason) patch.rejectionReason = payload.reason;
     } else if (action === 'request_info') {
       await this.trySendEmail(target.email, 'Informação adicional necessária', String(payload.message || 'Completa a documentação.'));
     } else if (action === 'suspend') {
