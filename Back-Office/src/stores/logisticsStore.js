@@ -40,24 +40,20 @@ export const logistics = reactive({
   initialized: false,
   loading: false,
   busyCount: 0,
-  continentStores: [
-    { id: 'CT-GAIA', name: 'Continente Gaia', lat: 41.1235, lng: -8.612 },
-    { id: 'CT-MAT', name: 'Continente Matosinhos', lat: 41.185, lng: -8.69 },
-    { id: 'CT-POR', name: 'Continente Boavista', lat: 41.162, lng: -8.645 },
-  ],
+  continentStores: [],
   orders: [],
   couriers: [],
   customers: [],
   emailLog: [],
   activityLog: [],
   adminAlerts: [],
-  /** RF30 — packs mais vendidos (agregado demo) */
+  /** RF30 — packs mais vendidos (agregado a partir do bootstrap) */
   packSales: [],
   /** RF30 / RF29 — volumes por zona */
   deliveriesByZone: [],
   hourlyVolume: [],
   recentReviews: [],
-  /** Catálogo back-office (demo) */
+  /** Catálogo (bootstrap + refresh de produtos) */
   products: [],
   slaMetrics: null,
   stores: [],
@@ -79,8 +75,16 @@ async function withBusy(fn) {
 }
 
 function applyBootstrap(data) {
-  const storesFromApi = data.stores || data.continentStores || [];
-  logistics.continentStores = storesFromApi.length ? storesFromApi : logistics.continentStores;
+  const rawStores = data.stores ?? data.continentStores;
+  const storeList = Array.isArray(rawStores) ? rawStores : [];
+  logistics.continentStores = storeList;
+  logistics.stores = storeList;
+  if (
+    !logistics.selectedStoreId ||
+    !storeList.some((s) => s.id === logistics.selectedStoreId)
+  ) {
+    logistics.selectedStoreId = storeList[0]?.id || '';
+  }
   logistics.orders = data.orders || [];
   logistics.couriers = data.couriers || [];
   logistics.customers = data.customers || [];
@@ -91,10 +95,8 @@ function applyBootstrap(data) {
   logistics.deliveriesByZone = data.deliveriesByZone || [];
   logistics.hourlyVolume = data.hourlyVolume || [];
   logistics.recentReviews = data.recentReviews || [];
-  logistics.products = data.products || logistics.products;
+  logistics.products = Array.isArray(data.products) ? data.products : [];
   logistics.slaMetrics = data.slaMetrics ?? logistics.slaMetrics;
-  logistics.stores = storesFromApi;
-  logistics.selectedStoreId = logistics.selectedStoreId || logistics.stores[0]?.id || '';
   logistics.storeInventory = Array.isArray(data.storeInventory) ? data.storeInventory : logistics.storeInventory;
   logistics.initialized = true;
 }
@@ -264,7 +266,7 @@ function pushUrgentAlert(msg) {
   });
 }
 
-/** Atualiza agregados demo (zonas, histograma horário) a partir dos pedidos — alinha dashboard/relatórios com a lista real. */
+/** Atualiza agregados (zonas, histograma horário) a partir dos pedidos — alinha dashboard/relatórios com a lista em memória. */
 export function syncOperationalAggregatesFromOrders() {
   const zoneMap = {};
   for (const o of logistics.orders) {

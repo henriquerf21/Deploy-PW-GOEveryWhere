@@ -555,6 +555,7 @@ export interface ApiCourierEstafetaCourierEstafeta
     createdAt: Schema.Attribute.DateTime;
     createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
       Schema.Attribute.Private;
+    dataChangeRequest: Schema.Attribute.JSON;
     deliveries: Schema.Attribute.Relation<
       'oneToMany',
       'api::delivery.delivery'
@@ -603,7 +604,6 @@ export interface ApiCourierEstafetaCourierEstafeta
     publishedAt: Schema.Attribute.DateTime;
     rating: Schema.Attribute.Decimal;
     rejectionReason: Schema.Attribute.Text;
-    dataChangeRequest: Schema.Attribute.JSON;
     reviews: Schema.Attribute.Relation<'oneToMany', 'api::review.review'>;
     totalDeliveries: Schema.Attribute.Integer;
     updatedAt: Schema.Attribute.DateTime;
