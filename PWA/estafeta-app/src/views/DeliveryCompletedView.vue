@@ -44,15 +44,15 @@
       <div class="confirm-section">
         <span class="confirm-title">CONFIRMAÇÃO</span>
         <div class="confirm-badges">
-          <span class="confirm-badge" v-if="delivery?.confirmData?.photo">
+          <span class="confirm-badge" v-if="delivery?.confirmation?.photo">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
             Foto
           </span>
-          <span class="confirm-badge" v-if="delivery?.confirmData?.location">
+          <span class="confirm-badge" v-if="delivery?.confirmation?.location || delivery?.confirmation?.gps">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
             GPS
           </span>
-          <span class="confirm-badge" v-if="delivery?.confirmData?.signature">
+          <span class="confirm-badge" v-if="delivery?.confirmation?.signature">
             <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#166534" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
             Assinatura
           </span>
@@ -82,37 +82,34 @@
 <script setup>
 import { computed } from 'vue';
 import { useRoute } from 'vue-router';
-import { store } from '../stores/courierStore.js';
+import { getDeliveryById, store } from '../stores/courierStore.js';
 
 const route = useRoute();
 const id = route.params.id;
 
-const delivery = computed(() =>
-  store.deliveries.find((d) => d.id === id) ||
-  store.deliveries.find((d) => d.id === Number(id))
-);
+const delivery = computed(() => getDeliveryById(id));
 
-const now = new Date();
-const fmt = (d) => {
-  const h = String(d.getHours()).padStart(2, '0');
-  const m = String(d.getMinutes()).padStart(2, '0');
-  return `${h}:${m}`;
+const formatTime = (ts) => {
+  if (!ts) return '--:--';
+  return new Date(ts).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
 };
 
 const times = computed(() => {
   const ts = delivery.value?.timestamps || {};
   return [
-    { label: 'Aceite', time: ts.accepted || '14:50' },
-    { label: 'Em recolha', time: ts.pickup || '14:51' },
-    { label: 'Em trânsito', time: ts.transit || '14:51' },
-    { label: 'Chegou ao destino', time: ts.arrived || '14:51' },
-    { label: 'Concluída', time: ts.completed || fmt(now) },
+    { label: 'Aceite', time: formatTime(ts['E-09']) },
+    { label: 'Em recolha', time: formatTime(ts['E-10']) },
+    { label: 'Em trânsito', time: formatTime(ts['E-11']) },
+    { label: 'Chegou ao destino', time: formatTime(ts['E-12']) },
+    { label: 'Concluída', time: formatTime(ts['E-13']) },
   ];
 });
 
 const duration = computed(() => {
-  if (!delivery.value?.timestamps?.accepted) return 2;
-  return Math.max(1, Math.round((now - new Date('2026-01-01T' + delivery.value.timestamps.accepted)) / 60000));
+  const start = delivery.value?.timestamps?.['E-09'];
+  const end = delivery.value?.timestamps?.['E-13'];
+  if (!start || !end) return delivery.value?.etaMinutes || 25;
+  return Math.max(1, Math.round((new Date(end) - new Date(start)) / 60000));
 });
 </script>
 

@@ -8,9 +8,12 @@
 
     <!-- Order banner (Figma: < #ORD-2850 URGENTE €6.50 / state) -->
     <div class="order-banner">
-      <button class="ob-back" @click="$router.push('/deliveries')">
+      <button v-if="delivery.state === 'E-08'" class="ob-back" @click="$router.push('/deliveries')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111827" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
+      <div v-else style="width:36px; height:36px; display:flex; align-items:center; justify-content:center;">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
+      </div>
       <div class="ob-info">
         <div class="ob-top-row">
           <span class="ob-id">{{ delivery.orderId }}</span>
@@ -68,8 +71,9 @@
           <span class="client-phone">{{ delivery.destination.phone }}</span>
         </div>
         <div class="client-actions">
-          <a href="#" class="action-btn action-chat">
+          <a href="#" class="action-btn action-chat" @click.prevent="openChat = true">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1b8a4a" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+            <div v-if="unreadCount > 0" class="chat-badge">{{ unreadCount }}</div>
           </a>
           <a :href="'tel:' + delivery.destination.phone" class="action-btn action-call">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1b8a4a" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
@@ -188,6 +192,36 @@
       <button class="timer-accept" @click="handleAccept">Aceitar</button>
     </div>
 
+    <!-- Chat Modal -->
+    <Teleport to="body">
+      <div v-if="openChat" class="modal-overlay" @click.self="openChat = false">
+        <div class="modal-card chat-modal">
+          <div class="chat-header">
+            <h3>Chat com {{ delivery.destination.name }}</h3>
+            <button @click="openChat = false" class="close-btn">&times;</button>
+          </div>
+          <div class="chat-messages" ref="chatContainer">
+            <div v-for="(msg, idx) in delivery.chatHistory || []" :key="idx" 
+                 class="chat-bubble" :class="{ 'mine': msg.sender === 'courier', 'theirs': msg.sender === 'client' }">
+              <span class="msg-sender" v-if="msg.sender === 'client'">{{ delivery.destination.name }}</span>
+              <span class="msg-sender" v-else>Tu</span>
+              <p>{{ msg.text }}</p>
+              <span class="msg-time">{{ new Date(msg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }}</span>
+            </div>
+            <div v-if="!(delivery.chatHistory?.length)" class="no-messages">
+              <p>Nenhuma mensagem ainda.</p>
+            </div>
+          </div>
+          <div class="chat-input-area">
+            <input v-model="chatInput" @keyup.enter="handleSendChat" placeholder="Escreve mensagem..." />
+            <button class="btn-send-chat" @click="handleSendChat" :disabled="!chatInput.trim() || sendingChat">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
     <!-- Impossible delivery modal -->
     <Teleport to="body">
       <div v-if="showImpossible" class="modal-overlay" @click.self="showImpossible = false">
@@ -217,7 +251,8 @@ import { computed, ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import {
   getDeliveryById, acceptDelivery, advanceDeliveryState,
-  markDeliveryImpossible, wazeLink,
+  markDeliveryImpossible, wazeLink, fetchDeliveries, sendDeliveryChatMessage,
+  declineDeliveryTimeout, startGpsTracking, stopGpsTracking,
 } from '../stores/courierStore.js';
 import { DELIVERY_STATE, deliveryStateLabels, STATE_CTA } from '../constants.js';
 import StatusStepper from '../components/StatusStepper.vue';
@@ -276,6 +311,60 @@ function formatTime(iso) {
   return new Date(iso).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
 }
 
+// --- Chat logic ---
+const openChat = ref(false);
+const chatInput = ref('');
+const sendingChat = ref(false);
+const chatContainer = ref(null);
+const unreadCount = ref(0);
+
+// We can just keep track of the last seen length
+let lastSeenChatLength = 0;
+
+watch(openChat, (newVal) => {
+  if (newVal) {
+    unreadCount.value = 0;
+    lastSeenChatLength = delivery.value?.chatHistory?.length || 0;
+    setTimeout(() => {
+      if (chatContainer.value) {
+        chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+      }
+    }, 100);
+  }
+});
+
+watch(() => delivery.value?.chatHistory, (newHistory) => {
+  const currentLength = newHistory?.length || 0;
+  if (!openChat.value) {
+    if (currentLength > lastSeenChatLength) {
+      unreadCount.value += (currentLength - lastSeenChatLength);
+      lastSeenChatLength = currentLength;
+    }
+  } else {
+    lastSeenChatLength = currentLength;
+    setTimeout(() => {
+      if (chatContainer.value) {
+        chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+      }
+    }, 100);
+  }
+}, { deep: true });
+
+async function handleSendChat() {
+  if (!chatInput.value.trim() || sendingChat.value) return;
+  sendingChat.value = true;
+  const res = await sendDeliveryChatMessage(delivery.value.orderDocumentId, chatInput.value.trim());
+  if (res) {
+    chatInput.value = '';
+    setTimeout(() => {
+      if (chatContainer.value) {
+        chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+      }
+    }, 100);
+  }
+  sendingChat.value = false;
+}
+
 const stateOrder = ['E-09', 'E-10', 'E-11', 'E-12'];
 const timeEntries = computed(() => {
   const ts = delivery.value?.timestamps || {};
@@ -292,26 +381,58 @@ const timeEntries = computed(() => {
 const timerSeconds = ref(300);
 let timerInterval = null;
 const timerDisplay = computed(() => {
+  if (timerSeconds.value <= 0) return '0:00';
   const m = Math.floor(timerSeconds.value / 60);
   const s = timerSeconds.value % 60;
   return `${m}:${s.toString().padStart(2, '0')}`;
 });
+
+function calculateRemainingSeconds() {
+  if (!delivery.value?.timestamps?.['E-08']) return 300;
+  const createdAt = new Date(delivery.value.timestamps['E-08']).getTime();
+  const now = new Date().getTime();
+  const diffSecs = Math.floor((now - createdAt) / 1000);
+  return Math.max(0, 300 - diffSecs);
+}
 
 function zoomIn() { routeMap?.zoomIn(); }
 function zoomOut() { routeMap?.zoomOut(); }
 
 onMounted(() => {
   if (delivery.value?.state === DELIVERY_STATE.E08) {
+    timerSeconds.value = calculateRemainingSeconds();
+    if (timerSeconds.value <= 0) {
+      // Timer already expired — notify backend and go back
+      declineDeliveryTimeout(props.id);
+      router.push('/deliveries');
+      return;
+    }
     timerInterval = setInterval(() => {
-      timerSeconds.value--;
-      if (timerSeconds.value <= 0) clearInterval(timerInterval);
+      timerSeconds.value = calculateRemainingSeconds();
+      if (timerSeconds.value <= 0) {
+        clearInterval(timerInterval);
+        // Notify Strapi so admin can reassign to another courier
+        declineDeliveryTimeout(props.id);
+        router.push('/deliveries');
+      }
     }, 1000);
+  } else if (delivery.value && !['E-08', 'E-13', 'E-14'].includes(delivery.value.state)) {
+    // Active delivery in progress — start GPS tracking
+    startGpsTracking();
   }
 });
+
+let chatPollTimer = null;
 
 onMounted(async () => {
   await nextTick();
   if (!routeMapEl.value || !delivery.value) return;
+  
+  // Set up polling for chat while viewing the delivery
+  chatPollTimer = setInterval(() => {
+    fetchDeliveries();
+  }, 5000);
+
   const L = await import('leaflet');
   leaflet = L;
   await import('leaflet/dist/leaflet.css');
@@ -327,29 +448,32 @@ watch(delivery, () => renderRouteMap(), { deep: true });
 
 onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval);
+  if (chatPollTimer) clearInterval(chatPollTimer);
   routeMap?.remove(); routeMap = null; routeLayer = null; leaflet = null;
+  // GPS tracking is managed at app level, don't stop here
 });
 
 function handleAccept() {
   if (timerInterval) clearInterval(timerInterval);
   acceptDelivery(props.id);
+  startGpsTracking(); // Begin GPS tracking on accept
 }
 
-function handleCTA() {
+async function handleCTA() {
   if (!delivery.value) return;
   if (delivery.value.state === DELIVERY_STATE.E12) {
     router.push(`/confirm/${props.id}`);
     return;
   }
-  advanceDeliveryState(props.id);
+  await advanceDeliveryState(props.id);
 }
 
 const showImpossible = ref(false);
 const impossibleReason = ref('');
 
-function handleImpossible() {
+async function handleImpossible() {
   if (!impossibleReason.value.trim()) return;
-  markDeliveryImpossible(props.id, impossibleReason.value, null);
+  await markDeliveryImpossible(props.id, impossibleReason.value, null);
   showImpossible.value = false;
   router.push('/deliveries');
 }
@@ -502,6 +626,14 @@ function renderRouteMap() {
   border-radius: 50%;
   text-decoration: none;
   transition: background 0.15s;
+  position: relative;
+}
+.chat-badge {
+  position: absolute; top: -4px; right: -4px;
+  background: #ef4444; color: #fff;
+  font-size: 10px; font-weight: 700;
+  width: 16px; height: 16px; border-radius: 50%;
+  display: flex; align-items: center; justify-content: center;
 }
 .action-chat { background: #f0fdf4; border: 0.72px solid #dcfce7; }
 .action-call { background: #f0fdf4; border: 0.72px solid #dcfce7; }
@@ -662,4 +794,49 @@ function renderRouteMap() {
 }
 .footer-name { font-family: var(--ge-font-display); font-size: 14px; font-weight: 700; color: #111827; }
 .footer-copy { font-size: 11px; color: #9ca3af; margin: 0; }
+
+/* Chat Modal */
+.chat-modal {
+  display: flex; flex-direction: column;
+  height: 80vh; max-height: 500px;
+  padding: 0; overflow: hidden;
+}
+.chat-header {
+  padding: 16px; background: #f9fafb; border-bottom: 1px solid #e5e7eb;
+  display: flex; align-items: center; justify-content: space-between;
+}
+.chat-header h3 { margin: 0; font-size: 16px; }
+.close-btn { background: none; border: none; font-size: 24px; cursor: pointer; color: #6b7280; line-height: 1; }
+.chat-messages {
+  flex: 1; padding: 16px; overflow-y: auto; background: #fff;
+  display: flex; flex-direction: column; gap: 12px;
+}
+.chat-bubble { max-width: 85%; display: flex; flex-direction: column; gap: 2px; }
+.chat-bubble.mine { align-self: flex-end; }
+.chat-bubble.theirs { align-self: flex-start; }
+.msg-sender { font-size: 10px; font-weight: 600; color: #9ca3af; }
+.chat-bubble.mine .msg-sender { text-align: right; color: var(--ge-brand); }
+.chat-bubble p {
+  margin: 0; padding: 10px 14px; border-radius: 14px; font-size: 14px; line-height: 1.4;
+}
+.chat-bubble.mine p { background: var(--ge-brand); color: #fff; border-bottom-right-radius: 4px; }
+.chat-bubble.theirs p { background: #f3f4f6; color: #1f2937; border-bottom-left-radius: 4px; }
+.msg-time { font-size: 9px; color: #9ca3af; }
+.chat-bubble.mine .msg-time { text-align: right; }
+.no-messages { flex: 1; display: flex; align-items: center; justify-content: center; color: #9ca3af; font-size: 14px; }
+.chat-input-area {
+  padding: 12px 16px; background: #f9fafb; border-top: 1px solid #e5e7eb;
+  display: flex; gap: 8px; align-items: center;
+}
+.chat-input-area input {
+  flex: 1; padding: 10px 14px; border: 1px solid #d1d5db; border-radius: 20px;
+  font-family: var(--ge-font); font-size: 14px; outline: none;
+}
+.chat-input-area input:focus { border-color: var(--ge-brand); }
+.btn-send-chat {
+  width: 40px; height: 40px; border-radius: 50%;
+  background: var(--ge-brand); color: #fff; border: none;
+  display: flex; align-items: center; justify-content: center; cursor: pointer;
+}
+.btn-send-chat:disabled { background: #9ca3af; cursor: not-allowed; }
 </style>

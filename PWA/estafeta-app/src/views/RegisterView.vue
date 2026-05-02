@@ -127,16 +127,31 @@
           </div>
           <p v-if="form.docLicense && ['carro', 'mota'].includes(form.vehicleType)" class="file-name">✓ {{ form.docLicense.name }}</p>
 
-          <!-- Foto de Rosto -->
-          <div class="upload-area" @click="$refs.selfieInput.click()">
-            <div class="upload-icon">
-              <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 00-16 0"/></svg>
+          <!-- Foto de Rosto (câmera obrigatória — será usada como foto de perfil) -->
+          <div class="selfie-profile-notice">
+            <div class="selfie-notice-icon">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#1b8a4a" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
             </div>
-            <p class="upload-hint">Tira uma foto agora ou escolhe da galeria</p>
-            <p class="upload-label">Foto de Rosto (Sem acessórios)</p>
-            <input ref="selfieInput" type="file" accept="image/*" capture="user" class="sr-only" @change="form.docSelfie = $event.target.files[0]">
+            <p class="selfie-notice-text">
+              <strong>Esta foto será usada como a tua foto de perfil</strong> na conta GoEverywhere.
+              Certifica-te que estás bem iluminado e sem acessórios (chapéus, óculos de sol, etc.).
+            </p>
           </div>
-          <p v-if="form.docSelfie" class="file-name">✓ {{ form.docSelfie.name }}</p>
+          <div class="upload-area selfie-upload" @click="$refs.selfieInput.click()">
+            <div v-if="selfiePreview" class="selfie-preview-wrap">
+              <img :src="selfiePreview" alt="Pré-visualização" class="selfie-preview-img" />
+              <span class="selfie-retake">Tirar outra foto</span>
+            </div>
+            <template v-else>
+              <div class="upload-icon">
+                <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><circle cx="12" cy="8" r="5"/><path d="M20 21a8 8 0 00-16 0"/></svg>
+              </div>
+              <p class="upload-hint">Abre a câmera para tirar a foto</p>
+              <p class="upload-label">Foto de Rosto / Perfil (Câmera obrigatória)</p>
+            </template>
+            <input ref="selfieInput" type="file" accept="image/*" capture="user" class="sr-only" @change="handleSelfieCapture">
+          </div>
+          <p v-if="form.docSelfie" class="file-name">✓ Foto de perfil capturada</p>
 
           <!-- Seguro do Veículo (Condicional) -->
           <div class="upload-area" v-if="['carro', 'mota'].includes(form.vehicleType)" @click="$refs.insuranceInput.click()">
@@ -174,6 +189,7 @@
             </div>
           </div>
           <div class="field-group"><label>Titular da conta</label><input v-model="form.accountHolder" class="field-input" :placeholder="form.fullName"></div>
+          <div class="field-group"><label>Password para Login</label><input v-model="form.password" type="password" class="field-input" placeholder="Cria uma password segura"></div>
 
           <div class="summary-card" v-if="form.fullName">
             <h3>Resumo da candidatura</h3>
@@ -185,17 +201,47 @@
           </div>
         </div>
 
-        <!-- Step 5: Success / Waiting -->
+        <!-- Step 5: Success / Waiting / Rejected -->
         <div v-show="step === 5" class="success-step">
-          <div class="success-icon-wrapper">
-            <svg class="spinner" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--ge-brand)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+          <div v-if="waitingStatus === 'pending'">
+            <div class="success-icon-wrapper">
+              <svg class="spinner" width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="var(--ge-brand)" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+            </div>
+            <h2 class="step-title" style="text-align: center; margin-top: 0;">Candidatura Submetida!</h2>
+            <p class="success-msg">A aguardar confirmação da equipa de suporte GoEverywhere.</p>
+            
+            <div class="waiting-alert">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <p><strong>Não saias desta página</strong> até a confirmação estar validada. Pode demorar no máx 20 minutos.</p>
+            </div>
           </div>
-          <h2 class="step-title" style="text-align: center; margin-top: 0;">Candidatura Submetida!</h2>
-          <p class="success-msg">A aguardar confirmação da equipa de suporte GoEverywhere.</p>
           
-          <div class="waiting-alert">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#eab308" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-            <p><strong>Não saias desta página</strong> até a confirmação estar validada. Pode demorar no máx 20 minutos.</p>
+          <div v-else-if="waitingStatus === 'approved'">
+            <div class="success-icon-wrapper" style="background: rgba(34,197,94,0.1);">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
+            </div>
+            <h2 class="step-title" style="text-align: center; margin-top: 0;">Conta Verificada!</h2>
+            <p class="success-msg">A tua candidatura foi aprovada com sucesso. Já podes começar a fazer entregas.</p>
+            
+            <button type="button" class="continue-btn" style="margin-top: 24px;" @click="$router.push('/login')">
+              <span>Fazer Login</span>
+            </button>
+          </div>
+          
+          <div v-else-if="waitingStatus === 'rejected'">
+            <div class="success-icon-wrapper" style="background: rgba(239,68,68,0.1);">
+              <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="15" y1="9" x2="9" y2="15"/><line x1="9" y1="9" x2="15" y2="15"/></svg>
+            </div>
+            <h2 class="step-title" style="text-align: center; margin-top: 0; color: #ef4444;">Candidatura Rejeitada</h2>
+            <p class="success-msg">A tua candidatura não pôde ser aceite neste momento.</p>
+            
+            <div class="waiting-alert" style="background: #fef2f2; border-color: #fecaca; color: #991b1b;">
+              <p><strong>Motivo:</strong> {{ rejectionReason }}</p>
+            </div>
+            
+            <button type="button" class="continue-btn" style="margin-top: 24px; background: #374151;" @click="$router.push('/login')">
+              <span>Voltar ao início</span>
+            </button>
           </div>
         </div>
 
@@ -243,8 +289,20 @@ const form = reactive({
   vehicleType: '', vehicleBrand: '', vehicleModel: '', vehicleColor: '',
   vehicleYear: '', vehiclePlate: '', licenseNo: '', zone: '',
   docLicense: null, docCc: null, docSelfie: null, docInsurance: null, docIban: null,
-  iban: '', accountHolder: '',
+  iban: '', accountHolder: '', password: ''
 });
+
+// Selfie preview for profile photo
+const selfiePreview = ref(null);
+
+function handleSelfieCapture(e) {
+  const file = e.target.files[0];
+  if (!file) return;
+  form.docSelfie = file;
+  const reader = new FileReader();
+  reader.onload = () => { selfiePreview.value = reader.result; };
+  reader.readAsDataURL(file);
+}
 
 function handleNumber(max, field, e) {
   let val = e.target.value.replace(/\D/g, ''); // apenas números
@@ -315,12 +373,7 @@ async function submitRegistration() {
       uploadFile(form.docInsurance)
     ]);
 
-    // Preparar Nomes
-    const nameParts = form.fullName.trim().split(' ');
-    const firstName = nameParts[0];
-    const lastName = nameParts.slice(1).join(' ') || '';
-
-    // Preparar Data (de DD/MM/AAAA para AAAA-MM-DD)
+    // Obter Labels em vez de IDs
     const dateParts = form.birthDate.split('/');
     const birthDateISO = `${dateParts[2]}-${dateParts[1]}-${dateParts[0]}`;
 
@@ -331,10 +384,10 @@ async function submitRegistration() {
     // 3. Payload principal do estafeta
     const payload = {
       data: {
-        firstName,
-        lastName,
+        fullName: form.fullName,
         email: form.email,
         phone: form.countryCode + form.phone,
+        password: form.password,
         nif: form.nif,
         cc: form.cc,
         iban: 'PT50' + form.iban,
@@ -368,17 +421,63 @@ async function submitRegistration() {
       body: JSON.stringify(payload)
     });
 
-    if (!res.ok) throw new Error('Ocorreu um erro ao registar a candidatura.');
+    if (!res.ok) {
+      const errData = await res.json().catch(() => null);
+      if (errData?.error?.message?.toLowerCase().includes('unique')) {
+        throw new Error('Este número de telemóvel já se encontra registado. Tenta outro ou faz login.');
+      }
+      throw new Error('Ocorreu um erro ao registar a candidatura. ' + (errData?.error?.message || ''));
+    }
+    
+    const courierData = await res.json();
+    const documentId = courierData.data?.documentId;
     
     // Sucesso garantido! A PWA fica a aguardar no Step 5
+    if (documentId) {
+      waitingStatus.value = 'pending';
+      startStatusPolling(documentId);
+    }
   } catch (err) {
     console.error(err);
-    error.value = 'Ocorreu um erro ao submeter. Tenta novamente.';
+    error.value = err.message || 'Ocorreu um erro ao submeter. Tenta novamente.';
     step.value = 4; // Voltar atrás para deixar o utilizador retentar
   } finally {
     isSubmitting.value = false;
   }
 }
+
+const waitingStatus = ref('pending'); // pending, approved, rejected
+const rejectionReason = ref('');
+
+let pollTimer = null;
+function startStatusPolling(docId) {
+  pollTimer = setInterval(async () => {
+    try {
+      const res = await fetch(`http://localhost:1337/api/courier-estafetas?filters[documentId][$eq]=${docId}`);
+      if (!res.ok) return;
+      const json = await res.json();
+      if (!json.data || json.data.length === 0) return;
+      const courier = json.data[0];
+      const status = courier.courier_status || '';
+      
+      if (status.startsWith('E-02') || status.startsWith('E-06')) {
+        clearInterval(pollTimer);
+        waitingStatus.value = 'approved';
+      } else if (status.startsWith('E-03')) {
+        clearInterval(pollTimer);
+        waitingStatus.value = 'rejected';
+        rejectionReason.value = courier.rejectionReason || 'Não cumpriu os requisitos mínimos. Por favor entra em contacto com o suporte.';
+      }
+    } catch (e) {
+      console.warn('Polling error', e);
+    }
+  }, 5000); // Polling every 5 seconds for better UX
+}
+
+import { onUnmounted } from 'vue';
+onUnmounted(() => {
+  if (pollTimer) clearInterval(pollTimer);
+});
 
 function nextStep() {
   error.value = '';
@@ -446,8 +545,8 @@ function nextStep() {
   }
 
   if (step.value === 4) {
-    if (!form.iban || !form.accountHolder) { 
-      error.value = 'Preenche os dados de pagamento.'; 
+    if (!form.iban || !form.accountHolder || !form.password) { 
+      error.value = 'Preenche os dados de pagamento e cria uma password.'; 
       return; 
     }
     
@@ -751,5 +850,40 @@ function nextStep() {
 }
 .footer-copy {
   font-size: 11px; color: #9ca3af; margin: 0;
+}
+
+/* Selfie profile notice */
+.selfie-profile-notice {
+  display: flex; align-items: flex-start; gap: 10px;
+  padding: 14px 16px;
+  background: #f0fdf4;
+  border: 1px solid #dcfce7;
+  border-radius: 12px;
+  margin-bottom: 12px;
+}
+.selfie-notice-icon { flex-shrink: 0; margin-top: 2px; }
+.selfie-notice-text {
+  margin: 0;
+  font-size: 12px; color: #166534; line-height: 1.5;
+}
+.selfie-notice-text strong { font-weight: 700; }
+
+.selfie-upload { position: relative; }
+.selfie-preview-wrap {
+  display: flex; flex-direction: column;
+  align-items: center; gap: 8px;
+  width: 100%;
+}
+.selfie-preview-img {
+  width: 120px; height: 120px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 3px solid #1b8a4a;
+  box-shadow: 0 4px 12px rgba(27,138,74,0.2);
+}
+.selfie-retake {
+  font-size: 12px; font-weight: 600;
+  color: #1b8a4a;
+  cursor: pointer;
 }
 </style>

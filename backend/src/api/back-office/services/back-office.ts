@@ -27,7 +27,8 @@ const ORDER_STATE = {
   INFO_REQUESTED: 'S-03 Info Adicional Solicitada',
   REJECTED: 'S-04 Rejeitado',
   APPROVED: 'S-05 Aprovado',
-  ASSIGNED: 'S-07 Aceite pelo Estafeta',
+  ASSIGNED: 'S-06 Aguardando Aceitação',
+  ACCEPTED: 'S-07 Aceite pelo Estafeta',
   IN_TRANSIT: 'S-09 Em Trânsito',
   DELIVERED: 'S-11 Entregue',
 };
@@ -82,6 +83,7 @@ function zoneFromAddress(address?: string | null) {
   if (normalized.includes('matosinhos')) return 'Matosinhos';
   if (normalized.includes('gaia')) return 'Vila Nova de Gaia';
   if (normalized.includes('maia')) return 'Maia';
+  if (normalized.includes('braga')) return 'Braga';
   return 'Outro';
 }
 
@@ -240,7 +242,9 @@ function buildPublicOrder(entry: any) {
     etaMinutes: attrs.estimatedTime != null ? toNum(attrs.estimatedTime, 0) : null,
     resources: bo.resources || null,
     courierId: courier?.documentId ? idToPublic('ST', courier.documentId) : (courier?.id ? idToPublic('ST', courier.id) : null),
-    courierName: courier ? `${courier.firstName ?? ''} ${courier.lastName ?? ''}`.trim() : null,
+    courierName: courier
+      ? (`${courier.firstName ?? ''} ${courier.lastName ?? ''}`.trim() || courier.fullName || null)
+      : null,
     rejectionReason: attrs.rejectionReason || null,
     infoRequestMessage: bo.infoRequestMessage || null,
     clientReply: attrs.clientReply || null,
@@ -286,15 +290,13 @@ function buildOrderTimeline(attrs: any, boMeta: any) {
 function buildPublicCourier(entry: any, assignedCount = 0) {
   const attrs = entry ?? {};
   const state = mapCourierStatus(attrs.courier_status, attrs.isOnline);
-  const firstName = attrs.firstName || '';
-  const lastName = attrs.lastName || '';
   const idNum = toNum(attrs.id, 0);
   const pseudoLat = 41.14 + ((idNum % 15) * 0.003);
   const pseudoLng = -8.67 + ((idNum % 13) * 0.004);
   return {
     id: idToPublic('ST', attrs.documentId || attrs.id),
     _documentId: attrs.documentId,
-    name: `${firstName} ${lastName}`.trim(),
+    name: attrs.fullName || '',
     email: attrs.email || '',
     phone: attrs.phone || '',
     nif: attrs.nif || '',
@@ -341,6 +343,7 @@ function buildPublicCourier(entry: any, assignedCount = 0) {
       rating: toNum(attrs.rating, 0),
       onTimePct: toNum(attrs.onTimePct, 0),
     },
+    dataChangeRequest: attrs.dataChangeRequest || null,
     currentOrderId: null,
     etaMinutes: null,
     activeAssignments: assignedCount,
@@ -390,7 +393,10 @@ function buildCustomerOrderSummary(rawOrders: any) {
       status: mapOrderStatus(o?.order_status),
       costEuro: o.total_price != null ? toNum(o.total_price, 0) : null,
       storeName: o.store_name || '',
-      courierName: o.courier ? `${o.courier.firstName || ''} ${o.courier.lastName || ''}`.trim() : '',
+      courierName: o.courier
+        ? (String(o.courier.fullName || '').trim()
+          || `${o.courier.firstName || ''} ${o.courier.lastName || ''}`.trim())
+        : '',
       rating: o.review?.rating != null ? toNum(o.review.rating, 0) : null,
     }));
 }
@@ -1294,30 +1300,32 @@ export default ({ strapi }: any) => ({
 
   async assignCourier(ctx: BoCtx | undefined, publicId: string, payload: any) {
     const courierToken = parsePublicToken(payload.courierId, 'ST');
-    const courierIdNumeric = Number(courierToken);
     if (!courierToken) return { ok: false, error: 'Estafeta inválido.' };
-    const before = auditSnapshotOrder(await this.getOrder(ctx, publicId));
-    const order = before;
-    if (!order) return { ok: false, error: 'Pedido não encontrado.' };
-    if (!['APPROVED', 'ASSIGNED'].includes(order.status)) {
+
+    console.log('[AssignCourier] Iniciando atribuição:', { orderId: publicId, courierDocId: courierToken });
+
+    const orderRaw = await this.getOrder(ctx, publicId);
+    if (!orderRaw) return { ok: false, error: 'Pedido não encontrado.' };
+
+    if (!['APPROVED', 'ASSIGNED'].includes(orderRaw.status)) {
       return { ok: false, error: 'Aprova o pedido antes de atribuir estafeta.' };
     }
-    let courierEntity = await strapi.db.query('api::courier-estafeta.courier-estafeta').findOne({
-      where: { documentId: courierToken },
+
+    // Usar Document Service para encontrar o estafeta
+    const courierEntity = await strapi.documents('api::courier-estafeta.courier-estafeta').findOne({
+      documentId: courierToken,
     });
-    if (!courierEntity && Number.isFinite(courierIdNumeric)) {
-      courierEntity = await strapi.db.query('api::courier-estafeta.courier-estafeta').findOne({
-        where: { id: courierIdNumeric },
-      });
-    }
-    if (!courierEntity) return { ok: false, error: 'Estafeta não encontrado.' };
-    const courier = buildPublicCourier(courierEntity);
-    if (courier.state !== 'E-06' || !courier.online) return { ok: false, error: 'Estafeta indisponível.' };
-    if (!courier.zones.includes(order.zone)) return { ok: false, error: 'Estafeta não cobre a zona.' };
-    if (courier.activeAssignments >= courier.maxConcurrent) {
-      return { ok: false, error: 'Limite de entregas simultâneas atingido.' };
+
+    if (!courierEntity) {
+      console.error('[AssignCourier] Estafeta não encontrado no Document Service:', courierToken);
+      return { ok: false, error: 'Estafeta não encontrado.' };
     }
 
+    const courier = buildPublicCourier(courierEntity);
+    if (courier.state !== 'E-06' || !courier.online) return { ok: false, error: 'Estafeta indisponível.' };
+    if (!courier.zones.includes(orderRaw.zone)) return { ok: false, error: 'Estafeta não cobre a zona.' };
+
+    // Atualizar a Encomenda
     const updated = await this.patchOrder(publicId, {
       data: {
         order_status: ORDER_STATE.ASSIGNED,
@@ -1326,18 +1334,59 @@ export default ({ strapi }: any) => ({
     }, {
       action: 'assign_courier',
       ctx,
-      from: order.status,
+      from: orderRaw.status,
       to: 'ASSIGNED',
       meta: {
         courierId: courier.id,
         courierName: courier.name,
       },
     });
-    if (!updated) return { ok: false, error: 'Falha ao atribuir estafeta.' };
-    await this.notify('order_assigned', `Pedido ${order.id} atribuído ao estafeta ${courier.name}.`);
-    const after = buildPublicOrder(updated);
 
-    return { ok: true, data: after };
+    if (!updated) return { ok: false, error: 'Falha ao atualizar estado da encomenda.' };
+
+    // GESTÃO DA ENTIDADE DE ENTREGA
+    try {
+      console.log('[AssignCourier] Document IDs para Delivery:', { 
+        orderDocId: updated.documentId, 
+        courierDocId: courierEntity.documentId,
+        orderId: updated.id,
+        courierId: courierEntity.id
+      });
+      
+      const deliveries = await strapi.documents('api::delivery.delivery').findMany({
+        filters: { order: { documentId: updated.documentId } }
+      });
+
+      const existingDelivery = deliveries[0];
+
+      if (existingDelivery) {
+        console.log('[AssignCourier] Atualizando Delivery:', existingDelivery.documentId);
+        await strapi.documents('api::delivery.delivery').update({
+          documentId: existingDelivery.documentId,
+          data: { 
+            courier: courierEntity.documentId,
+            delivery_status: 'E-08 Pedido Recebido'
+          },
+          status: 'published'
+        });
+      } else {
+        console.log('[AssignCourier] Criando nova Delivery...');
+        const created = await strapi.documents('api::delivery.delivery').create({
+          data: {
+            order: updated.documentId,
+            courier: courierEntity.documentId,
+            delivery_status: 'E-08 Pedido Recebido',
+          },
+          status: 'published'
+        });
+        console.log('[AssignCourier] Delivery criada com sucesso:', created.documentId);
+      }
+    } catch (err) {
+      console.error('[AssignCourier] ERRO AO GERIR DELIVERY:', err);
+    }
+
+    await this.notify('order_assigned', `Pedido ${orderRaw.id} atribuído ao estafeta ${courier.name}.`);
+    return { ok: true, data: buildPublicOrder(updated) };
   },
 
   async setPriority(ctx: BoCtx | undefined, publicId: string, payload: any) {
@@ -1419,11 +1468,9 @@ export default ({ strapi }: any) => ({
     const plateRes = validatePtPlate(plateRaw);
     if (!plateRes.ok) return { ok: false, error: (plateRes as any).error as string };
 
-    const split = splitCourierName(name);
     const created = await strapi.documents('api::courier-estafeta.courier-estafeta').create({
       data: {
-        firstName: split.firstName,
-        lastName: split.lastName,
+        fullName: name,
         email: emailRes.value,
         phone: phoneRes.value,
         nif: nifRes.value,
@@ -1494,12 +1541,11 @@ export default ({ strapi }: any) => ({
     const plateRes = validatePtPlate(plateRaw);
     if (!plateRes.ok) return { ok: false, error: (plateRes as any).error as string };
 
-    const split = splitCourierName(payload.name || `${target.firstName || ''} ${target.lastName || ''}`);
+    const newFullName = payload.name != null ? String(payload.name).trim() : target.fullName;
     const updated = await strapi.documents('api::courier-estafeta.courier-estafeta').update({
       documentId: target.documentId,
       data: {
-        firstName: split.firstName,
-        lastName: split.lastName,
+        fullName: newFullName,
         email: emailRes.value,
         phone: phoneRes.value,
         nif: nifRes.value,
@@ -1555,6 +1601,7 @@ export default ({ strapi }: any) => ({
     } else if (action === 'reject') {
       patch.courier_status = COURIER_STATE.E03;
       patch.isOnline = false;
+      if (payload.reason) patch.rejectionReason = payload.reason;
     } else if (action === 'request_info') {
       await this.trySendEmail(target.email, 'Informação adicional necessária', String(payload.message || 'Completa a documentação.'));
     } else if (action === 'suspend') {
@@ -1571,6 +1618,8 @@ export default ({ strapi }: any) => ({
       patch.maxSimultaneousDeliveries = Math.max(1, Math.min(10, toNum(payload.maxConcurrent, target.maxSimultaneousDeliveries || 1)));
     } else if (action === 'save_notes') {
       patch.adminNotes = String(payload.notes ?? payload.adminNotes ?? '').trim();
+    } else if (action === 'clear_data_request') {
+      patch.dataChangeRequest = null;
     } else {
       return { ok: false, error: 'Ação inválida.' };
     }
@@ -1836,6 +1885,7 @@ A tua função é guiar os clientes a utilizarem a nossa App. Aqui estão as inf
 5. ENTREGAS: "As recolhas são feitas de forma totalmente automatizada numa loja Continente perto de ti e entregues no teu destino."
 6. PROBLEMAS NA ENCOMENDA: "Se tiveres algum problema com a encomenda, vai ao separador 'Histórico' no menu superior, seleciona a encomenda e envia uma mensagem na caixa de 'Contacto' (que será lida pelos nossos administradores)."
 7. ASSISTENTE HUMANO: "Neste momento a nossa linha principal de apoio aos clientes faz-se diretamente pela área de Histórico, onde podes enviar mensagens ao administrador sobre qualquer encomenda!"
+8. PRODUTOS/GOMAS: Se perguntarem sobre o que vendemos ou sobre as gomas (como por exemplo o sabor), responde: "As nossas GoGummies são gomas proteicas feitas para te dar um boost de energia. Elas têm um delicioso sabor a limão!"
 
 Sê conciso (máx. 2 a 3 frases por resposta), prático e ajuda ativamente o utilizador a navegar no site. Nunca digas "não tenho acesso a isso", diz antes "Para veres isso, vai ao menu X".
 

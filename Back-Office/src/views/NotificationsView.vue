@@ -134,8 +134,8 @@ const pwaAlerts = computed(() => {
     .map(c => ({
       id: c.id,
       time: formatTime(c.createdAt),
-      title: `Candidatura · ${c.name || c.firstName}`,
-      message: `Novo registo via PWA na zona ${Array.isArray(c.zones) ? c.zones.join(', ') : (c.zone || '—')}. Documentos pendentes de validação.`,
+      title: `Candidatura · ${c.name || 'Estafeta'}`,
+      message: `Novo registo via PWA na zona ${Array.isArray(c.zones) && c.zones.length ? c.zones.join(', ') : (c.zone || '—')}. Documentos pendentes de validação.`,
     }))
     .sort((a, b) => b.time.localeCompare(a.time));
 });
@@ -185,6 +185,24 @@ const pwaAlerts = computed(() => {
   font-size: 14px;
   font-weight: 700;
   color: var(--bo-text);
+}
+
+.alert-actions {
+  flex-shrink: 0;
+  margin-left: 16px;
+}
+
+.action-btn {
+  text-decoration: none;
+  padding: 8px 16px;
+  border-radius: 6px;
+  background: var(--bo-page);
+  border: 1px solid var(--bo-border);
+  color: var(--bo-text);
+  transition: all 0.2s;
+  white-space: nowrap;
+  display: inline-block;
+  text-align: center;
 }
 
 .alert-card__msg {

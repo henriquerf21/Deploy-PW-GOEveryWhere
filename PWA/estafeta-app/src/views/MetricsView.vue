@@ -60,8 +60,8 @@
           <div class="rating-circle">
             <svg width="28" height="28" viewBox="0 0 24 24" fill="#f59e0b"><polygon points="12,2 15,9 22,9.5 17,14.5 18.5,22 12,18 5.5,22 7,14.5 2,9.5 9,9"/></svg>
           </div>
-          <div class="rating-value">{{ metrics.avgRating }}/5</div>
-          <div class="rating-stars">
+          <div class="rating-value">{{ metrics.avgRating > 0 ? metrics.avgRating : 'N/A' }}</div>
+          <div class="rating-stars" v-if="metrics.avgRating > 0">
             <span v-for="i in 5" :key="i" class="star" :class="{ on: i <= roundedRating }">★</span>
           </div>
         </div>
@@ -87,7 +87,7 @@
 
 <script setup>
 import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
-import { store, courierMetrics } from '../stores/courierStore.js';
+import { store, courierMetrics, fetchCompletedDeliveries } from '../stores/courierStore.js';
 
 const mapContainer = ref(null);
 let mapInstance = null;
@@ -111,7 +111,7 @@ const kmGoalPct = computed(() => {
   const p = (metrics.value.totalDistanceKm / weeklyKmGoal) * 100;
   return Math.max(0, Math.min(100, p));
 });
-const roundedRating = computed(() => Math.max(1, Math.min(5, Math.round(metrics.value.avgRating || 0))));
+const roundedRating = computed(() => Math.max(0, Math.min(5, Math.round(metrics.value.avgRating || 0))));
 
 const deliveriesForMap = computed(() => {
   const byId = new Map();
@@ -129,6 +129,7 @@ const mapPoints = computed(() => {
 });
 
 onMounted(async () => {
+  await fetchCompletedDeliveries();
   await nextTick();
   if (mapContainer.value && mapPoints.value.length) initMap();
 });

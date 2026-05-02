@@ -38,6 +38,23 @@
       </div>
     </section>
 
+    <section v-if="c.dataChangeRequest" class="bo-card bo-card--padded data-change-alert" role="alert">
+      <header class="bo-card__head" style="padding-top: 0; border-bottom: none;">
+        <div>
+          <h3 class="bo-card__title">Pedido de alteração de dados</h3>
+          <p class="bo-card__sub">Pedido submetido pelo estafeta na PWA.</p>
+        </div>
+        <span class="bo-badge bo-badge--warn">Pendente</span>
+      </header>
+      <div class="bo-card__body" style="padding-top: 0;">
+        <dl class="bo-dl">
+          <dt>Campo</dt><dd>{{ c.dataChangeRequest.field || 'Não especificado' }}</dd>
+          <dt>Motivo / novo valor</dt><dd>{{ c.dataChangeRequest.reason }}<template v-if="c.dataChangeRequest.newValue"> (Novo: {{ c.dataChangeRequest.newValue }})</template></dd>
+        </dl>
+        <button type="button" class="bo-btn bo-btn--outline bo-btn--sm" @click="clearDataRequest">Marcar como tratado</button>
+      </div>
+    </section>
+
     <div class="bo-kpi-grid">
       <article v-for="s in statItems" :key="s.k" class="bo-kpi">
         <span class="bo-kpi__label">{{ s.k }}</span>
@@ -298,9 +315,18 @@ import { computed, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { ArrowLeft } from 'lucide-vue-next';
 import {
-  getCourierById, canEditCourierData, updateCourierVerified,
-  verifyCourier, rejectCourier, requestCourierInfo, suspendCourier,
-  reactivateCourier, setCourierOnline, setCourierMaxConcurrent, setCourierAdminNotes,
+  getCourierById,
+  canEditCourierData,
+  updateCourierVerified,
+  verifyCourier,
+  rejectCourier,
+  requestCourierInfo,
+  suspendCourier,
+  reactivateCourier,
+  setCourierOnline,
+  setCourierMaxConcurrent,
+  setCourierAdminNotes,
+  clearCourierDataRequest,
 } from '../stores/logisticsStore.js';
 import { courierStateLabels, COURIER_STATE, ZONES } from '../constants/logistics.js';
 import { toast } from '../utils/notify.js';
@@ -381,6 +407,11 @@ async function saveEdit() {
 async function saveAdminNotes() {
   const r = await setCourierAdminNotes(c.value.id, adminNotesDraft.value);
   toast(r.ok ? 'Notas guardadas.' : r.error || 'Erro', r.ok ? 'success' : 'error');
+}
+
+async function clearDataRequest() {
+  const r = await clearCourierDataRequest(c.value.id);
+  toast(r.ok ? 'Pedido de alteração marcado como tratado.' : r.error || 'Erro', r.ok ? 'success' : 'error');
 }
 
 async function onToggleOnline(e) {
@@ -487,6 +518,11 @@ function stateBadgeClass(state) {
 }
 
 .back-link:hover { opacity: 0.75; }
+
+.data-change-alert {
+  border: 1px solid #fcd34d;
+  background: linear-gradient(90deg, #fffbeb, var(--bo-surface));
+}
 
 .zones-grid {
   display: flex;

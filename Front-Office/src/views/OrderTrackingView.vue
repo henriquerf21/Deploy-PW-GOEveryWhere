@@ -60,6 +60,36 @@
             </div>
           </div>
 
+          <!-- Courier info card (visible from S-05 Aprovada onwards) -->
+          <div v-if="courierInfo && showCourierCard" class="courier-card">
+            <span class="courier-card-label">ESTAFETA ATRIBUÍDO</span>
+            <div class="courier-card-body">
+              <div class="courier-avatar-wrap">
+                <img v-if="courierInfo.photoUrl" :src="courierInfo.photoUrl" alt="Foto do estafeta" class="courier-avatar-img" />
+                <div v-else class="driver-avatar">{{ courierInfo.initials }}</div>
+              </div>
+              <div class="courier-details">
+                <span class="courier-name">{{ courierInfo.name }}</span>
+                <span class="courier-vehicle">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M16 3H8l-4 8h16l-4-8zM4 11v6a1 1 0 001 1h1a1 1 0 001-1v-1h10v1a1 1 0 001 1h1a1 1 0 001-1v-6"/></svg>
+                  {{ courierInfo.vehicleType }} {{ courierInfo.vehicleBrand ? '— ' + courierInfo.vehicleBrand + ' ' + courierInfo.vehicleModel : '' }}
+                </span>
+                <span v-if="courierInfo.phone" class="courier-phone">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72c.127.96.361 1.903.7 2.81a2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45c.907.339 1.85.573 2.81.7A2 2 0 0122 16.92z"/></svg>
+                  {{ courierInfo.phone }}
+                </span>
+                <span v-if="courierInfo.rating" class="courier-rating-badge">
+                  <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b"><polygon points="12,2 15,9 22,9.5 17,14.5 18.5,22 12,18 5.5,22 7,14.5 2,9.5 9,9"/></svg>
+                  {{ courierInfo.rating }}
+                </span>
+              </div>
+            </div>
+            <button class="btn-chat-courier" @click="openChat = true">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right: 6px;"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z"></path></svg>
+              Falar com o Estafeta
+            </button>
+          </div>
+
           <!-- S-03: Info Adicional Solicitada — Alerta + Resposta -->
           <div v-if="order.status === 'S-03'" class="s03-card">
             <div class="s03-header">
@@ -135,6 +165,35 @@
       </div>
     </Transition>
 
+    <!-- Chat Modal -->
+    <div v-if="openChat" class="modal-overlay">
+      <div class="modal-card chat-modal">
+        <div class="chat-header">
+          <h3>Chat com {{ courierInfo?.name || 'Estafeta' }}</h3>
+          <button @click="openChat = false" class="close-btn">&times;</button>
+        </div>
+        <div class="chat-messages" ref="chatContainer">
+          <div v-for="(msg, idx) in order.chatHistory || []" :key="idx" 
+               class="chat-bubble" :class="{ 'mine': msg.sender === 'client', 'theirs': msg.sender === 'courier' }">
+            <span class="msg-sender" v-if="msg.sender === 'courier'">{{ courierInfo?.name || 'Estafeta' }}</span>
+            <span class="msg-sender" v-else>Tu</span>
+            <p>{{ msg.text }}</p>
+            <span class="msg-time">{{ new Date(msg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }}</span>
+          </div>
+          <div v-if="!(order.chatHistory?.length)" class="no-messages">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#e5e7eb" stroke-width="1"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z"></path></svg>
+            <p>Ainda não existem mensagens.</p>
+          </div>
+        </div>
+        <div class="chat-input-area">
+          <input v-model="chatInput" @keyup.enter="handleSendChat" placeholder="Escreve uma mensagem..." />
+          <button class="btn-send-chat" @click="handleSendChat" :disabled="!chatInput.trim() || sendingChat">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+          </button>
+        </div>
+      </div>
+    </div>
+
     <!-- Modal de Cancelamento (S-13) -->
     <div v-if="showCancelModal" class="modal-overlay">
       <div class="modal-card cancel-modal">
@@ -187,7 +246,7 @@ import DeliveryRouteMap from '../components/DeliveryRouteMap.vue';
 import { getDestinationLatLng } from '../utils/mapCoords.js';
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { useOrderStore, ORDER_STATES, fetchUserOrders, cancelActiveOrder, replyToInfoRequest } from '../stores/orderStore.js';
+import { useOrderStore, ORDER_STATES, fetchUserOrders, cancelActiveOrder, replyToInfoRequest, sendChatMessage } from '../stores/orderStore.js';
 import { requestNotificationPermission, notifyOrderStateChange } from '../utils/notifications.js';
 
 const router = useRouter();
@@ -196,6 +255,38 @@ const store = useOrderStore();
 const order = computed(() => store.activeOrder);
 const toastMessage = ref('');
 let pollingTimer = null;
+
+// --- Chat ---
+const openChat = ref(false);
+const chatInput = ref('');
+const sendingChat = ref(false);
+const chatContainer = ref(null);
+
+async function handleSendChat() {
+  if (!chatInput.value.trim() || sendingChat.value) return;
+  sendingChat.value = true;
+  const res = await sendChatMessage(order.value.documentId, chatInput.value.trim(), 'client');
+  if (res.success) {
+    chatInput.value = '';
+    // scroll to bottom
+    setTimeout(() => {
+      if (chatContainer.value) {
+        chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+      }
+    }, 100);
+  }
+  sendingChat.value = false;
+}
+
+watch(openChat, (val) => {
+  if (val) {
+    setTimeout(() => {
+      if (chatContainer.value) {
+        chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+      }
+    }, 100);
+  }
+});
 
 // --- Cancelamento (S-13) ---
 const showCancelModal = ref(false);
@@ -208,6 +299,64 @@ const showSuccessModal = ref(false);
 const s03ReplyText = ref('');
 const s03Sending = ref(false);
 const s03Sent = ref(false);
+
+// --- Courier info (visible from S-05 onwards) ---
+const courierInfo = ref(null);
+
+const showCourierCard = computed(() => {
+  if (!order.value) return false;
+  const statusFlow = ['S-05','S-06','S-07','S-08','S-09','S-10','S-11'];
+  return statusFlow.includes(order.value.status);
+});
+
+async function fetchCourierInfo() {
+  if (!order.value?.documentId) return;
+  try {
+    // 1. Tentar primeiro via Delivery (se o estafeta já aceitou na PWA)
+    const deliveryRes = await fetch(`http://localhost:1337/api/deliveries?filters[order][documentId][$eq]=${order.value.documentId}&populate[courier][populate]=docSelfie&status=published`);
+    const deliveryJson = await deliveryRes.json();
+    const deliveryData = deliveryJson.data?.[0];
+    
+    let courierRaw = deliveryData?.courier?.data?.attributes || deliveryData?.courier || null;
+    
+    // 2. Fallback: Se não houver Delivery, tentar diretamente pela relação da Encomenda (atribuição manual do Admin)
+    if (!courierRaw || !courierRaw.fullName) {
+      const orderRes = await fetch(`http://localhost:1337/api/orders/${order.value.documentId}?populate[courier][populate]=docSelfie`, {
+        headers: { 'Authorization': `Bearer ${authState.token}` }
+      });
+      if (orderRes.ok) {
+        const orderJson = await orderRes.json();
+        courierRaw = orderJson.data?.courier?.data?.attributes || orderJson.data?.courier || null;
+      }
+    }
+
+    if (courierRaw && courierRaw.fullName) {
+      setCourierInfo(courierRaw);
+    }
+  } catch (err) {
+    console.warn('Failed to fetch courier info:', err);
+  }
+}
+
+function setCourierInfo(raw) {
+  const selfie = raw.docSelfie?.data?.attributes || raw.docSelfie || null;
+  let photoUrl = null;
+  if (selfie?.url) {
+    photoUrl = selfie.url.startsWith('http') ? selfie.url : `http://localhost:1337${selfie.url}`;
+  }
+  const nameParts = (raw.fullName || '').split(' ');
+  const initials = nameParts.length >= 2 ? nameParts[0][0] + nameParts[nameParts.length - 1][0] : (nameParts[0]?.[0] || '?');
+  courierInfo.value = {
+    name: raw.fullName || 'Estafeta',
+    phone: raw.phone || '',
+    vehicleType: raw.vehicleType || '',
+    vehicleBrand: raw.vehicleBrand || '',
+    vehicleModel: raw.vehicleModel || '',
+    rating: raw.rating || null,
+    photoUrl,
+    initials,
+  };
+}
 
 async function submitS03Reply() {
   if (!order.value || s03ReplyText.value.trim().length < 10) return;
@@ -259,6 +408,10 @@ onMounted(async () => {
   requestNotificationPermission();
 
   await fetchUserOrders();
+  // Fetch courier info if order is already in S-05+
+  if (order.value && showCourierCard.value) {
+    fetchCourierInfo();
+  }
   pollingTimer = setInterval(async () => {
     if (order.value && !ORDER_STATES[order.value.status]?.terminal) {
       const oldStatus = order.value.status;
@@ -267,6 +420,10 @@ onMounted(async () => {
         showStateToast(order.value.status);
         // RF13: Notificação nativa do browser em cada mudança de estado
         notifyOrderStateChange(order.value.id, order.value.status, ORDER_STATES[order.value.status]);
+        // Fetch courier info when status reaches S-05 (Aprovada)
+        if (showCourierCard.value && !courierInfo.value) {
+          fetchCourierInfo();
+        }
       }
     }
   }, 10000); // RNF02: Atualização a cada 10 segundos
@@ -387,6 +544,8 @@ function showStateToast(newState) {
     setTimeout(() => { toastMessage.value = ''; }, 3000);
   }
 }
+
+import authState from '../stores/authStore';
 </script>
 
 
@@ -1160,6 +1319,91 @@ function showStateToast(newState) {
 }
 
 /* ══════════════════════════════════════════
+   COURIER CARD
+   ══════════════════════════════════════════ */
+.courier-card {
+  margin-top: 1.5rem;
+  background: #f0fdf4;
+  border: 1px solid #dcfce7;
+  border-radius: var(--cf-radius-lg);
+  padding: 1.25rem;
+  animation: courierCardIn 0.4s ease;
+}
+
+@keyframes courierCardIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.courier-card-label {
+  display: block;
+  font-size: 0.625rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #166534;
+  margin-bottom: 0.85rem;
+}
+
+.courier-card-body {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.courier-avatar-wrap {
+  flex-shrink: 0;
+}
+
+.courier-avatar-img {
+  width: 56px;
+  height: 56px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2.5px solid #22c55e;
+  box-shadow: 0 4px 12px rgba(34, 197, 94, 0.2);
+}
+
+.courier-details {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.courier-name {
+  font-family: var(--cf-display);
+  font-weight: 700;
+  font-size: 0.9375rem;
+  color: var(--cf-ink);
+}
+
+.courier-vehicle {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8125rem;
+  color: var(--cf-muted);
+}
+
+.courier-phone {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 0.8125rem;
+  color: #166534;
+  font-weight: 500;
+}
+
+.courier-rating-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  font-size: 0.8125rem;
+  color: var(--cf-muted);
+  font-weight: 600;
+}
+
+/* ══════════════════════════════════════════
    S-03: INFO ADICIONAL SOLICITADA
    ══════════════════════════════════════════ */
 .s03-card {
@@ -1325,4 +1569,138 @@ function showStateToast(newState) {
   opacity: 0.5;
   cursor: not-allowed;
 }
+
+/* ------------------- Chat Modal & Button ------------------- */
+.btn-chat-courier {
+  width: 100%;
+  margin-top: 12px;
+  display: flex !important; 
+  align-items: center; 
+  justify-content: center;
+  padding: 12px 16px;
+  background: var(--go-primary) !important;
+  color: #fff !important;
+  border: none;
+  border-radius: 12px;
+  font-family: var(--go-font-display);
+  font-size: 14px; 
+  font-weight: 700;
+  cursor: pointer;
+  opacity: 1 !important;
+  visibility: visible !important;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.2);
+}
+.btn-chat-courier:hover { 
+  background: var(--go-primary-hover) !important;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 15px rgba(16, 185, 129, 0.3);
+}
+
+.chat-modal {
+  display: flex; flex-direction: column;
+  height: 80vh; max-height: 600px;
+  padding: 0;
+  overflow: hidden;
+}
+
+.chat-header {
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--go-line);
+  display: flex; align-items: center; justify-content: space-between;
+  background: var(--go-surface-light);
+}
+
+.chat-header h3 {
+  margin: 0; font-size: 16px; font-family: var(--go-font-display); font-weight: 600;
+  color: var(--go-ink);
+}
+
+.close-btn {
+  background: none; border: none; font-size: 24px; cursor: pointer; color: var(--go-muted);
+  line-height: 1;
+}
+
+.chat-messages {
+  flex: 1;
+  padding: 20px;
+  overflow-y: auto;
+  display: flex; flex-direction: column; gap: 16px;
+  background: #fff;
+}
+
+.chat-bubble {
+  max-width: 85%;
+  display: flex; flex-direction: column; gap: 4px;
+}
+
+.chat-bubble.mine {
+  align-self: flex-end;
+}
+
+.chat-bubble.theirs {
+  align-self: flex-start;
+}
+
+.msg-sender {
+  font-size: 11px; font-weight: 600; color: var(--go-subtle);
+}
+.chat-bubble.mine .msg-sender {
+  text-align: right; color: var(--go-primary);
+}
+
+.chat-bubble p {
+  margin: 0; padding: 12px 16px;
+  border-radius: 16px;
+  font-size: 14px; line-height: 1.4;
+}
+
+.chat-bubble.mine p {
+  background: var(--go-primary); color: #fff;
+  border-bottom-right-radius: 4px;
+}
+
+.chat-bubble.theirs p {
+  background: var(--go-surface); color: var(--go-ink);
+  border-bottom-left-radius: 4px;
+}
+
+.msg-time {
+  font-size: 10px; color: var(--go-subtle);
+}
+.chat-bubble.mine .msg-time {
+  text-align: right;
+}
+
+.no-messages {
+  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+  color: var(--go-muted); text-align: center; font-size: 14px;
+}
+.no-messages svg { margin-bottom: 8px; }
+
+.chat-input-area {
+  padding: 16px;
+  border-top: 1px solid var(--go-line);
+  background: var(--go-surface-light);
+  display: flex; align-items: center; gap: 12px;
+}
+
+.chat-input-area input {
+  flex: 1; padding: 12px 16px;
+  border: 1px solid var(--go-line); border-radius: 24px;
+  font-family: var(--go-font-body); font-size: 14px;
+  outline: none; transition: border-color 0.2s;
+}
+.chat-input-area input:focus { border-color: var(--go-primary); }
+
+.btn-send-chat {
+  width: 44px; height: 44px;
+  border-radius: 50%;
+  background: var(--go-primary); color: #fff;
+  border: none; display: flex; align-items: center; justify-content: center;
+  cursor: pointer; transition: all 0.2s;
+}
+.btn-send-chat:hover:not(:disabled) { background: var(--go-primary-hover); transform: scale(1.05); }
+.btn-send-chat:disabled { background: var(--go-subtle); cursor: not-allowed; }
+
 </style>

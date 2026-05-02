@@ -22,32 +22,24 @@
         </div>
         <div class="db-text">
           <span class="db-title">Estás no destino!</span>
-          <span class="db-desc">Confirma a entrega com foto ou assinatura</span>
+          <span class="db-desc">Confirma a entrega com fotografia e assinatura do cliente</span>
         </div>
       </div>
 
-      <!-- Delivery proof section -->
-      <div class="section-card">
-        <span class="section-label">COMPROVATIVO DE ENTREGA *</span>
-        <div class="proof-buttons">
-          <button class="proof-btn" :class="{ active: method === 'photo' }" @click="method = 'photo'">
-            <div class="proof-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-            </div>
-            <span>Tirar foto</span>
-          </button>
-          <button class="proof-btn" :class="{ active: method === 'signature' }" @click="method = 'signature'">
-            <div class="proof-icon">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M17 3a2.83 2.83 0 114 4L7.5 20.5 2 22l1.5-5.5L17 3z"/></svg>
-            </div>
-            <span>Assinatura</span>
-          </button>
+      <!-- Proof requirements info -->
+      <div class="section-card requirements-card">
+        <div class="req-icon">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         </div>
+        <span class="req-text">São obrigatórios <strong>fotografia</strong> e <strong>assinatura</strong> para confirmar a entrega.</span>
+      </div>
 
-        <!-- Photo capture -->
-        <div v-if="method === 'photo'" class="capture-area-wrap">
+      <!-- Photo section (always visible) -->
+      <div class="section-card">
+        <span class="section-label">FOTOGRAFIA DA ENTREGA *</span>
+        <div class="capture-area-wrap">
           <label class="capture-area" :class="{ 'has-photo': photoPreview }">
-            <input type="file" accept="image/*" capture="environment" @change="handlePhoto" class="sr-only">
+            <input ref="photoInput" type="file" accept="image/*" capture="environment" @change="handlePhoto" class="sr-only">
             <img v-if="photoPreview" :src="photoPreview" alt="Prova">
             <span v-else class="capture-placeholder">
               <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
@@ -55,12 +47,17 @@
             </span>
           </label>
         </div>
+        <p v-if="photoPreview" class="proof-status proof-ok">✓ Fotografia capturada</p>
+      </div>
 
-        <!-- Signature -->
-        <div v-if="method === 'signature'" class="signature-wrap">
+      <!-- Signature section (always visible) -->
+      <div class="section-card">
+        <span class="section-label">ASSINATURA DO CLIENTE *</span>
+        <div class="signature-wrap">
           <canvas ref="sigCanvas" width="360" height="200" @touchstart.prevent @mousedown.prevent></canvas>
           <button class="clear-sig" @click="clearSignature">Limpar</button>
         </div>
+        <p v-if="hasSig" class="proof-status proof-ok">✓ Assinatura recolhida</p>
       </div>
 
       <!-- Location section -->
@@ -102,9 +99,13 @@
       <div class="section-card">
         <span class="section-label">CHECKLIST</span>
         <div class="checklist">
-          <div class="check-item" :class="{ done: hasPhoto || hasSig }">
-            <span class="check-box"><span v-if="hasPhoto || hasSig" class="check-mark"></span></span>
-            <span>Foto ou assinatura</span>
+          <div class="check-item" :class="{ done: hasPhoto }">
+            <span class="check-box"><span v-if="hasPhoto" class="check-mark"></span></span>
+            <span>Fotografia da entrega</span>
+          </div>
+          <div class="check-item" :class="{ done: hasSig }">
+            <span class="check-box"><span v-if="hasSig" class="check-mark"></span></span>
+            <span>Assinatura do cliente</span>
           </div>
           <div class="check-item" :class="{ done: !!gpsCoords }">
             <span class="check-box"><span v-if="gpsCoords" class="check-mark"></span></span>
@@ -130,7 +131,7 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
         Submeter entrega
       </button>
-      <p class="submit-note">Foto/assinatura e localização são obrigatórios</p>
+      <p class="submit-note">Fotografia, assinatura e localização GPS são obrigatórios</p>
     </div>
 
     <!-- Footer -->
@@ -145,7 +146,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, watch, nextTick } from 'vue';
+import { ref, computed, onMounted, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
 import { getDeliveryById, confirmDelivery, addDeliveryNotes } from '../stores/courierStore.js';
 
@@ -153,7 +154,6 @@ const props = defineProps({ id: String });
 const router = useRouter();
 
 const delivery = computed(() => getDeliveryById(props.id));
-const method = ref('photo');
 const error = ref('');
 const notes = ref('');
 const extraDesc = ref('');
@@ -162,6 +162,7 @@ const extraPhotos = ref([]);
 // Photo
 const photoPreview = ref(null);
 const photoFile = ref(null);
+const photoInput = ref(null);
 const hasPhoto = computed(() => !!photoPreview.value);
 
 function handlePhoto(e) {
@@ -176,13 +177,12 @@ function handlePhoto(e) {
 // Signature
 const sigCanvas = ref(null);
 let signaturePad = null;
-const hasSig = computed(() => signaturePad && !signaturePad?.isEmpty());
+const hasSig = ref(false);
 
-watch(method, async (m) => {
-  if (m === 'signature') {
-    await nextTick();
-    initSignature();
-  }
+onMounted(async () => {
+  captureGPS();
+  await nextTick();
+  initSignature();
 });
 
 async function initSignature() {
@@ -190,16 +190,20 @@ async function initSignature() {
   try {
     const { default: SignaturePad } = await import('signature_pad');
     signaturePad = new SignaturePad(sigCanvas.value, { backgroundColor: '#fff', penColor: '#111827' });
+    signaturePad.addEventListener('endStroke', () => {
+      hasSig.value = !signaturePad.isEmpty();
+    });
   } catch (err) { console.warn('SignaturePad:', err); }
 }
 
-function clearSignature() { signaturePad?.clear(); }
+function clearSignature() { 
+  signaturePad?.clear(); 
+  hasSig.value = false;
+}
 
 // GPS
 const gpsCoords = ref(null);
 const gpsFetching = ref(false);
-
-onMounted(() => { captureGPS(); });
 
 function captureGPS() {
   if (!('geolocation' in navigator)) return;
@@ -212,32 +216,40 @@ function captureGPS() {
 }
 
 // Extra photos
+const extraPhotosData = ref([]);
+
 function handleExtraPhotos(e) {
-  extraPhotos.value = Array.from(e.target.files).map(f => f.name);
+  const files = Array.from(e.target.files);
+  extraPhotosData.value = [...extraPhotosData.value, ...files];
+  extraPhotos.value = extraPhotosData.value.map(f => f.name);
 }
 
-// Validation
+// Validation — Requires BOTH photo AND signature
 const canConfirm = computed(() => {
-  const hasProof = method.value === 'photo' ? hasPhoto.value : (signaturePad && !signaturePad.isEmpty());
-  return hasProof && !!gpsCoords.value;
+  return hasPhoto.value && hasSig.value && !!gpsCoords.value;
 });
 
-function handleConfirm() {
+async function handleConfirm() {
   error.value = '';
   if (!canConfirm.value) {
-    error.value = 'Completa a foto/assinatura e localização.';
+    const missing = [];
+    if (!hasPhoto.value) missing.push('fotografia');
+    if (!hasSig.value) missing.push('assinatura do cliente');
+    if (!gpsCoords.value) missing.push('localização GPS');
+    error.value = `Falta: ${missing.join(', ')}. Todos os campos são obrigatórios.`;
     return;
   }
   const data = {
-    method: method.value,
+    method: 'photo_and_signature',
     gps: gpsCoords.value,
     timestamp: new Date().toISOString(),
-    photo: method.value === 'photo' ? photoPreview.value : null,
-    signature: method.value === 'signature' && signaturePad ? signaturePad.toDataURL() : null,
+    photo: photoPreview.value,
+    signature: signaturePad ? signaturePad.toDataURL() : null,
     location: gpsCoords.value,
+    extraPhotos: extraPhotosData.value,
   };
   if (notes.value.trim()) addDeliveryNotes(props.id, notes.value, extraPhotos.value);
-  confirmDelivery(props.id, data);
+  await confirmDelivery(props.id, data);
   router.push(`/completed/${props.id}`);
 }
 </script>
@@ -294,6 +306,19 @@ function handleConfirm() {
   font-size: 12px; color: #6b7280;
 }
 
+/* Requirements info */
+.requirements-card {
+  display: flex; align-items: center; gap: 10px;
+  background: #fffbeb;
+  border-color: #fef3c7;
+  margin-bottom: 12px;
+}
+.req-icon { flex-shrink: 0; display: flex; }
+.req-text {
+  font-size: 12px; color: #92400e; line-height: 1.4;
+}
+.req-text strong { font-weight: 700; }
+
 /* Section cards */
 .section-card {
   background: #fff;
@@ -310,31 +335,6 @@ function handleConfirm() {
   display: block;
   margin-bottom: 10px;
 }
-
-/* Proof buttons */
-.proof-buttons {
-  display: flex; gap: 8px;
-  margin-bottom: 12px;
-}
-.proof-btn {
-  flex: 1;
-  display: flex; flex-direction: column;
-  align-items: center; gap: 6px;
-  padding: 16px;
-  background: #f9fafb;
-  border: 1.5px solid #e5e7eb;
-  border-radius: 16px;
-  cursor: pointer;
-  transition: all 0.15s;
-  font-size: 12px; font-weight: 500;
-  color: #6b7280;
-}
-.proof-btn.active {
-  border-color: var(--ge-brand);
-  background: #f0fdf4;
-  color: var(--ge-brand);
-}
-.proof-icon { display: flex; }
 
 /* Photo capture */
 .capture-area-wrap { margin-top: 8px; }
@@ -354,6 +354,12 @@ function handleConfirm() {
   align-items: center; gap: 8px;
   font-size: 13px; color: #9ca3af;
 }
+
+/* Proof status */
+.proof-status {
+  font-size: 12px; font-weight: 600; margin: 8px 0 0;
+}
+.proof-ok { color: #1b8a4a; }
 
 /* Signature */
 .signature-wrap {

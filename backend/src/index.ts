@@ -40,6 +40,55 @@ export default {
     } catch (err) {
       strapi.log.warn('[BO] não foi possível garantir permissões de upload automaticamente', err);
     }
+
+    try {
+      const publicRole = await strapi.db.query('plugin::users-permissions.role').findOne({ where: { type: 'public' } });
+      if (publicRole) {
+        const permissions = await strapi.db.query('plugin::users-permissions.permission').findMany({
+          where: { role: publicRole.id, action: 'api::courier-estafeta.courier-estafeta.find' },
+        });
+        if (permissions.length === 0) {
+          await strapi.db.query('plugin::users-permissions.permission').create({
+            data: { action: 'api::courier-estafeta.courier-estafeta.find', role: publicRole.id },
+          });
+        }
+      }
+
+      if (publicRole) {
+        const p2 = await strapi.db.query('plugin::users-permissions.permission').findMany({
+          where: { role: publicRole.id, action: 'api::delivery.delivery.find' },
+        });
+        if (p2.length === 0) {
+          await strapi.db.query('plugin::users-permissions.permission').create({
+            data: { action: 'api::delivery.delivery.find', role: publicRole.id },
+          });
+        }
+      }
+
+      const existing = await strapi.db.query('api::courier-estafeta.courier-estafeta').findOne({
+        where: { phone: '+351222222222' },
+      });
+      if (!existing) {
+        await strapi.db.query('api::courier-estafeta.courier-estafeta').create({
+          data: {
+            fullName: 'Estafeta Teste',
+            phone: '+351222222222',
+            password: '123',
+            courier_status: 'E-06 Online',
+            zone: 'Porto Centro',
+            vehicleType: 'mota',
+            publishedAt: new Date(),
+          },
+        });
+      } else {
+        await strapi.db.query('api::courier-estafeta.courier-estafeta').updateMany({
+          where: { phone: '+351222222222' },
+          data: { password: '123' },
+        });
+      }
+    } catch (e) {
+      strapi.log.error('Bootstrap error (PWA permissions / seed courier):', e);
+    }
   },
 };
 

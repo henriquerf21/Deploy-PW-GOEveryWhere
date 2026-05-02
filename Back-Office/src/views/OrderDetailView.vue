@@ -235,6 +235,10 @@
           </header>
           <div class="bo-card__body bo-stack">
             <fieldset class="bo-stack" :disabled="!canAssignSection" style="border: none; padding: 0; margin: 0;">
+              <div v-if="order.courierName" class="current-courier-banner">
+                <span class="bo-badge bo-badge--success">Ativo</span>
+                <span>Estafeta atribuído: <strong>{{ order.courierName }}</strong></span>
+              </div>
               <div v-if="suggested.length" class="suggest">
                 <span class="bo-eyebrow">Sugestão assistida</span>
                 <ul class="suggest__list">
@@ -249,7 +253,7 @@
                   </li>
                 </ul>
               </div>
-              <p v-if="!available.length" class="bo-muted" style="font-size: 13px;">Sem estafetas elegíveis para esta zona.</p>
+              <p v-if="!available.length && !order.courierName" class="bo-muted" style="font-size: 13px;">Sem estafetas elegíveis para esta zona.</p>
               <div v-else class="assign-list">
                 <label v-for="c in available" :key="c.id" class="assign-row" :class="{ 'is-selected': pickCourier === c.id }">
                   <input v-model="pickCourier" type="radio" :value="c.id" />
@@ -260,7 +264,7 @@
                 </label>
               </div>
               <div class="bo-row">
-                <button type="button" class="bo-btn bo-btn--primary" :disabled="!pickCourier" @click="doAssign">Atribuir</button>
+                <button type="button" class="bo-btn bo-btn--primary" :disabled="!pickCourier" @click="doAssign">{{ order.courierName ? 'Re-atribuir' : 'Atribuir' }}</button>
                 <button v-if="order.status === ORDER_STATUS.ASSIGNED" type="button" class="bo-btn bo-btn--outline" @click="doStartTransit">Marcar em trânsito</button>
               </div>
             </fieldset>
@@ -748,6 +752,19 @@ async function doComplete() {
   color: var(--bo-text-secondary);
 }
 
+.current-courier-banner {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 12px;
+  background: var(--bo-page);
+  border: 1px solid var(--bo-border);
+  border-radius: var(--bo-radius-sm);
+  font-size: 13px;
+}
+
 .mail-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
 
 .mail-list__row {
@@ -862,5 +879,37 @@ async function doComplete() {
   font-size: 12.5px;
   color: var(--bo-text-secondary, #475569);
   line-height: 1.5;
+}
+
+.current-courier-box {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  background: #f0fdf4;
+  border: 1px solid #dcfce7;
+  border-radius: var(--bo-radius-sm);
+  margin-bottom: 16px;
+}
+
+.cc-info {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-size: 14px;
+  color: #166534;
+}
+
+.assign-title {
+  font-size: 12px;
+  font-weight: 700;
+  margin: 16px 0 8px;
+  color: var(--bo-text-secondary);
+  text-transform: uppercase;
+}
+
+.pill--success {
+  background: #22c55e;
+  color: #fff;
 }
 </style>

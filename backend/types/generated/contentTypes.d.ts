@@ -572,7 +572,7 @@ export interface ApiCourierEstafetaCourierEstafeta
       'images' | 'files' | 'videos' | 'audios'
     >;
     email: Schema.Attribute.String;
-    firstName: Schema.Attribute.String;
+    fullName: Schema.Attribute.String;
     iban: Schema.Attribute.String;
     inspection: Schema.Attribute.Media<
       'images' | 'files' | 'videos' | 'audios'
@@ -581,7 +581,6 @@ export interface ApiCourierEstafetaCourierEstafeta
     insurance: Schema.Attribute.Media<'images' | 'files' | 'videos' | 'audios'>;
     insuranceRef: Schema.Attribute.String;
     isOnline: Schema.Attribute.Boolean;
-    lastName: Schema.Attribute.String;
     lat: Schema.Attribute.Decimal;
     licenseNo: Schema.Attribute.String;
     licenseNumber: Schema.Attribute.String;
@@ -596,10 +595,15 @@ export interface ApiCourierEstafetaCourierEstafeta
     nif: Schema.Attribute.String;
     onTimePct: Schema.Attribute.Decimal;
     orders: Schema.Attribute.Relation<'oneToMany', 'api::order.order'>;
-    phone: Schema.Attribute.String;
+    password: Schema.Attribute.String;
+    phone: Schema.Attribute.String &
+      Schema.Attribute.Required &
+      Schema.Attribute.Unique;
     postalCode: Schema.Attribute.String;
     publishedAt: Schema.Attribute.DateTime;
     rating: Schema.Attribute.Decimal;
+    rejectionReason: Schema.Attribute.Text;
+    dataChangeRequest: Schema.Attribute.JSON;
     reviews: Schema.Attribute.Relation<'oneToMany', 'api::review.review'>;
     totalDeliveries: Schema.Attribute.Integer;
     updatedAt: Schema.Attribute.DateTime;
@@ -752,6 +756,7 @@ export interface ApiOrderOrder extends Struct.CollectionTypeSchema {
   attributes: {
     adminMessage: Schema.Attribute.Text;
     cancelReason: Schema.Attribute.String;
+    chatHistory: Schema.Attribute.JSON;
     clientReply: Schema.Attribute.Text;
     courier: Schema.Attribute.Relation<
       'manyToOne',
