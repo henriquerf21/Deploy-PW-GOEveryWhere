@@ -1,76 +1,88 @@
 <template>
-  <div class="page">
-    <div v-if="routeError" class="banner" role="status">{{ routeError }}</div>
-    <div v-if="isolateInvalid" class="banner banner--err" role="alert">
-      O pedido na URL não está roteável (atribui estafeta, loja e GPS) ou não existe.
+  <div class="bo-page">
+    <header class="bo-page-head">
+      <div class="bo-page-head__main">
+        <p class="bo-page-head__eyebrow">Operações em tempo real</p>
+        <h1 class="bo-page-head__title">Mapa operacional</h1>
+        <p class="bo-page-head__sub">
+          Estafetas online, lojas Continente, clientes e rotas calculadas. Clica num pedido para isolá-lo no mapa.
+        </p>
+      </div>
+      <div class="bo-page-head__actions">
+        <span v-if="routesLoading" class="bo-badge bo-badge--info">A calcular rotas...</span>
+        <span v-else-if="usedFallback" class="bo-badge bo-badge--warn">Algumas rotas em linha reta</span>
+        <button v-if="mapIsolated" type="button" class="bo-btn bo-btn--outline" @click="clearMapSelection">Mostrar todas</button>
+      </div>
+    </header>
+
+    <div v-if="routeError" class="bo-card bo-card--padded" style="border-left: 4px solid var(--bo-warning);">
+      <p class="bo-muted" style="font-size: 13px; margin: 0;">{{ routeError }}</p>
     </div>
+    <div v-if="isolateInvalid" class="bo-card bo-card--padded" style="border-left: 4px solid var(--bo-danger); background: var(--bo-danger-soft);">
+      <p style="margin: 0; font-size: 13px; font-weight: 600; color: #991b1b;">
+        O pedido na URL não está roteável (atribui estafeta, loja e GPS) ou não existe.
+      </p>
+    </div>
+
     <div class="layout">
-      <aside class="panel panel--left card">
-        <h3>{{ mapIsolated ? 'Estafeta desta entrega' : 'Estafetas' }}</h3>
-        <p class="hint">{{ mapIsolated ? 'Só o motorista do pedido selecionado' : 'Online e com encomenda' }}</p>
-        <ul class="list">
-          <li v-if="!couriersForSidePanel.length" class="li muted">Sem estafeta para mostrar.</li>
-          <li v-for="c in couriersForSidePanel" :key="c.id" class="li">
+      <aside class="panel">
+        <header class="panel__head">
+          <h3 class="panel__title">{{ mapIsolated ? 'Estafeta desta entrega' : 'Estafetas' }}</h3>
+          <p class="panel__sub">{{ mapIsolated ? 'Apenas o motorista do pedido selecionado.' : 'Online e com encomenda atribuída.' }}</p>
+        </header>
+        <ul class="panel__list">
+          <li v-if="!couriersForSidePanel.length" class="bo-muted" style="font-size: 13px; padding: 12px 0;">Sem estafetas para mostrar.</li>
+          <li v-for="c in couriersForSidePanel" :key="c.id" class="panel__item">
             <span class="pulse" aria-hidden="true" />
-            <div>
-              <strong>{{ c.name }}</strong>
-              <div class="muted">{{ courierStateLabels[c.state] }} · {{ c.online ? 'Online' : 'Offline' }}</div>
-              <div v-if="c.currentOrderId" class="order-line">Pedido {{ c.currentOrderId }} · ETA ~{{ c.etaMinutes }} min</div>
-              <div v-else class="muted">Sem encomenda atribuída</div>
+            <div class="panel__item-body">
+              <div class="panel__item-name">{{ c.name }}</div>
+              <div class="panel__item-meta">{{ courierStateLabels[c.state] }} · {{ c.online ? 'Online' : 'Offline' }}</div>
+              <div v-if="c.currentOrderId" class="panel__item-order">Pedido {{ c.currentOrderId }} · ETA ~{{ c.etaMinutes }} min</div>
+              <div v-else class="panel__item-meta">Sem encomenda atribuída</div>
             </div>
           </li>
         </ul>
       </aside>
 
-      <div class="map-wrap card">
+      <div class="map-wrap">
         <div ref="mapEl" class="map" role="application" aria-label="Mapa operacional" />
         <div class="legend">
-          <span class="leg leg--rider">
-            <img class="leg-rider-thumb" :src="courierPinUrl" width="16" height="16" alt="" />
-            Estafeta (GPS)
-          </span>
-          <span class="leg leg--store">
-            <img class="leg-store-thumb" :src="continentePinUrl" width="16" height="16" alt="" />
-            Loja Continente
-          </span>
-          <span class="leg leg--dest">
-            <img class="leg-house-thumb" :src="customerHousePinUrl" width="16" height="16" alt="" />
-            Entrega (cliente)
-          </span>
-          <span class="leg leg--leg1"><i class="leg-dash--sample" /> ① Estafeta → loja (tom néon do pedido)</span>
-          <span class="leg leg--leg2"><i class="leg-line--sample" /> ② Loja → cliente (tom néon do pedido)</span>
-          <span v-if="routesLoading" class="leg leg--load">A calcular rotas…</span>
-          <span v-else-if="usedFallback" class="leg leg--warn">Alguns traços: linha reta (API indisponível)</span>
+          <span class="leg"><img class="leg-rider-thumb" :src="courierPinUrl" width="16" height="16" alt="" /> Estafeta</span>
+          <span class="leg"><img class="leg-store-thumb" :src="continentePinUrl" width="16" height="16" alt="" /> Loja</span>
+          <span class="leg"><img class="leg-house-thumb" :src="customerHousePinUrl" width="16" height="16" alt="" /> Cliente</span>
+          <span class="leg"><i class="leg-dash--sample" /> Estafeta para loja</span>
+          <span class="leg"><i class="leg-line--sample" /> Loja para cliente</span>
         </div>
       </div>
 
-      <aside class="panel panel--right card">
-        <h3>Pedidos com rota</h3>
-        <p class="hint">Atribuídos ou em trânsito (com loja e GPS). Um clique = mapa só com esse pedido.</p>
-        <p v-if="mapIsolated" class="isolate-bar">
-          <span class="isolate-pill">Mapa: {{ selectedOrderId }}</span>
-          <button type="button" class="btn-clear-map" @click="clearMapSelection">Mostrar todas no mapa</button>
-        </p>
-        <ul class="list">
+      <aside class="panel">
+        <header class="panel__head">
+          <h3 class="panel__title">Pedidos com rota</h3>
+          <p class="panel__sub">Atribuídos ou em trânsito (loja e GPS). Clica para isolar no mapa.</p>
+          <span v-if="mapIsolated" class="bo-badge bo-badge--info" style="margin-top: 8px;">Mapa: {{ selectedOrderId }}</span>
+        </header>
+        <ul class="panel__list">
           <li
             v-for="o in routableOrders"
             :key="o.id"
-            class="li li--click"
+            class="panel__item panel__item--click"
             :class="{ 'is-selected': selectedOrderId === o.id }"
             role="button"
             tabindex="0"
             @click="selectOrder(o.id)"
             @keydown.enter.prevent="selectOrder(o.id)"
           >
-            <div>
-              <strong>{{ o.id }}</strong>
-              <div class="muted">{{ o.clientName }}</div>
-              <div>Loja: {{ storeName(o.storeId) }}</div>
-              <div>Estafeta: {{ courierName(o.courierId) }}</div>
-              <div class="eta">ETA ~{{ o.etaMinutes ?? '—' }} min · {{ orderStatusLabels[o.status] }}</div>
+            <div class="panel__item-body">
+              <div class="panel__item-name">{{ o.id }}</div>
+              <div class="panel__item-meta">{{ o.clientName }}</div>
+              <div class="panel__item-meta">Loja: {{ storeName(o.storeId) }}</div>
+              <div class="panel__item-meta">Estafeta: {{ courierName(o.courierId) }}</div>
+              <div class="panel__item-eta">ETA ~{{ o.etaMinutes ?? '—' }} min · {{ orderStatusLabels[o.status] }}</div>
             </div>
           </li>
-          <li v-if="!routableOrders.length" class="li muted">Nenhum pedido elegível. Aprove, atribua estafeta e defina loja.</li>
+          <li v-if="!routableOrders.length" class="bo-muted" style="font-size: 13px; padding: 12px 0;">
+            Nenhum pedido elegível. Aprova, atribui estafeta e define loja.
+          </li>
         </ul>
       </aside>
     </div>
@@ -522,159 +534,115 @@ onBeforeUnmount(() => {
 </script>
 
 <style scoped>
-.page {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.banner {
-  padding: 10px 14px;
-  border-radius: var(--bo-radius-sm);
-  background: #fef3c7;
-  color: #92400e;
-  font-size: 13px;
-  font-weight: 600;
-}
-
-.banner--err {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.isolate-bar {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 10px;
-  margin: 0 0 12px;
-  padding: 10px 12px;
-  background: #eff6ff;
-  border-radius: var(--bo-radius-sm);
-  border: 1px solid #bfdbfe;
-}
-
-.isolate-pill {
-  font-size: 12px;
-  font-weight: 700;
-  color: #1d4ed8;
-}
-
-.btn-clear-map {
-  margin-left: auto;
-  padding: 8px 12px;
-  border-radius: var(--bo-radius-sm);
-  border: 1px solid var(--bo-border);
-  background: var(--bo-surface);
-  font-size: 12px;
-  font-weight: 600;
-  cursor: pointer;
-  color: var(--bo-text);
-}
-
-.btn-clear-map:hover {
-  background: var(--bo-page);
-}
-
 .layout {
   display: grid;
-  grid-template-columns: 260px 1fr 280px;
-  gap: 14px;
-  min-height: min(560px, 72vh);
+  grid-template-columns: 280px 1fr 300px;
+  gap: 18px;
+  align-items: stretch;
+  min-height: 540px;
 }
 
 @media (max-width: 1100px) {
-  .layout {
-    grid-template-columns: 1fr;
-  }
-
-  .map-wrap {
-    order: -1;
-    min-height: 380px;
-  }
-}
-
-.card {
-  background: var(--bo-surface);
-  border-radius: var(--bo-radius-lg);
-  border: 1px solid var(--bo-border);
-  box-shadow: var(--bo-shadow);
+  .layout { grid-template-columns: 1fr; min-height: auto; }
 }
 
 .panel {
-  padding: 16px;
-  overflow-y: auto;
+  background: var(--bo-surface);
+  border: 1px solid var(--bo-border);
+  border-radius: var(--bo-radius-lg);
+  box-shadow: var(--bo-shadow);
+  display: flex;
+  flex-direction: column;
+  max-height: 720px;
+  overflow: hidden;
 }
 
-.panel h3 {
+.panel__head {
+  padding: 16px 18px;
+  border-bottom: 1px solid var(--bo-border);
+}
+
+.panel__title {
   margin: 0 0 4px;
-  font-size: 15px;
+  font-size: 14px;
+  font-weight: 700;
 }
 
-.hint {
-  margin: 0 0 12px;
+.panel__sub {
+  margin: 0;
   font-size: 12px;
+  line-height: 1.5;
   color: var(--bo-text-secondary);
 }
 
-.list {
+.panel__list {
   list-style: none;
   margin: 0;
-  padding: 0;
+  padding: 8px 12px;
+  overflow-y: auto;
+  flex: 1;
 }
 
-.li {
+.panel__item {
   display: flex;
   gap: 10px;
-  padding: 12px 0;
-  border-bottom: 1px solid var(--bo-border);
+  padding: 12px 8px;
+  border-bottom: 1px solid #f1f5f9;
   font-size: 13px;
 }
 
-.li--click {
+.panel__item:last-child { border-bottom: none; }
+
+.panel__item--click {
   cursor: pointer;
-  border-radius: var(--bo-radius-sm);
-  margin: 0 -8px;
-  padding-left: 8px;
-  padding-right: 8px;
+  border-radius: 8px;
+  transition: background var(--bo-transition-fast);
 }
 
-.li--click:hover {
-  background: var(--bo-page);
-}
+.panel__item--click:hover { background: var(--bo-page); }
 
-.li--click.is-selected {
-  background: #eff6ff;
+.panel__item--click.is-selected {
+  background: var(--bo-info-soft);
   outline: 1px solid #93c5fd;
 }
 
-.pulse {
-  width: 12px;
-  height: 12px;
-  margin-top: 4px;
-  border-radius: 50%;
-  background: #00ffcc;
-  box-shadow: 0 0 10px rgba(0, 255, 204, 0.7);
-  flex-shrink: 0;
-  animation: pulse 1.4s ease-in-out infinite;
+.panel__item-body { flex: 1; min-width: 0; }
+
+.panel__item-name {
+  font-weight: 600;
+  color: var(--bo-text);
+  font-size: 13.5px;
 }
 
-.muted {
-  color: var(--bo-text-secondary);
+.panel__item-meta {
   font-size: 12px;
+  color: var(--bo-text-secondary);
+  margin-top: 2px;
 }
 
-.order-line {
+.panel__item-order {
   font-size: 12px;
   color: var(--bo-brand);
   font-weight: 600;
   margin-top: 4px;
 }
 
-.eta {
+.panel__item-eta {
   font-weight: 700;
-  color: #059669;
+  color: var(--bo-success);
+  font-size: 12px;
   margin-top: 4px;
+}
+
+.pulse {
+  width: 10px;
+  height: 10px;
+  margin-top: 5px;
+  border-radius: 50%;
+  background: var(--bo-success);
+  box-shadow: 0 0 12px rgba(5, 150, 105, 0.6);
+  flex-shrink: 0;
+  animation: pulse 1.4s ease-in-out infinite;
 }
 
 .map-wrap {
@@ -682,6 +650,10 @@ onBeforeUnmount(() => {
   padding: 0;
   overflow: hidden;
   min-height: 400px;
+  background: var(--bo-surface);
+  border: 1px solid var(--bo-border);
+  border-radius: var(--bo-radius-lg);
+  box-shadow: var(--bo-shadow);
 }
 
 .map {

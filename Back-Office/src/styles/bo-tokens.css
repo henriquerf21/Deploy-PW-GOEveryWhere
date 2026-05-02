@@ -3,6 +3,7 @@
  * Ajustes: sidebar ligeiramente mais profunda, acentos teal para contraste.
  */
 :root {
+  /* Core palette */
   --bo-sidebar: #252b3d;
   --bo-sidebar-border: rgba(255, 255, 255, 0.06);
   --bo-sidebar-muted: rgba(255, 255, 255, 0.45);
@@ -17,16 +18,40 @@
   --bo-text: #111827;
   --bo-text-secondary: #6b7280;
   --bo-border: #e5e7eb;
+
+  /* Status colors */
+  --bo-success: #059669;
+  --bo-success-soft: #ecfdf5;
+  --bo-danger: #dc2626;
+  --bo-danger-soft: #fef2f2;
+  --bo-warning: #d97706;
+  --bo-warning-soft: #fffbeb;
+  --bo-info: #2563eb;
+  --bo-info-soft: #eff6ff;
+
+  /* Radii */
   --bo-radius-sm: 8px;
   --bo-radius: 12px;
   --bo-radius-lg: 16px;
+
+  /* Shadows */
   --bo-shadow: 0 1px 3px rgba(15, 23, 42, 0.06);
   --bo-shadow-md: 0 8px 30px rgba(15, 23, 42, 0.08);
+  --bo-shadow-lg: 0 12px 48px rgba(15, 23, 42, 0.12);
+
+  /* Transitions */
+  --bo-transition: 0.2s ease;
+  --bo-transition-fast: 0.12s ease;
+
+  /* Layout */
   --bo-header-h: 64px;
   --bo-sidebar-w: 252px;
   --bo-content-max: 1400px;
+
+  /* Typography */
   --bo-font: 'Inter', system-ui, sans-serif;
   --bo-font-display: 'Poppins', var(--bo-font);
+  --bo-font-mono: 'JetBrains Mono', ui-monospace, 'SFMono-Regular', monospace;
 }
 
 *,
@@ -41,19 +66,27 @@ body {
   color: var(--bo-text);
   background: var(--bo-page);
   -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 a {
   color: inherit;
+  transition: color var(--bo-transition-fast);
 }
 
 button {
   font-family: inherit;
   cursor: pointer;
+  transition: background var(--bo-transition-fast), border-color var(--bo-transition-fast), transform 0.1s ease;
 }
 
-input {
+button:active:not(:disabled) {
+  transform: scale(0.98);
+}
+
+input, select, textarea {
   font-family: inherit;
+  transition: border-color var(--bo-transition-fast), box-shadow var(--bo-transition-fast);
 }
 
 button:disabled,

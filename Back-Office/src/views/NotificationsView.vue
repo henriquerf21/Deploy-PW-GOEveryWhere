@@ -1,90 +1,97 @@
 <template>
-  <div class="notifications-page">
-    <header class="page-header">
-      <h2>Gestor de Notificações</h2>
-      <p class="subtitle">Acompanha e gere alertas recebidos das diferentes plataformas do sistema GoEverywhere.</p>
+  <div class="bo-page">
+    <header class="bo-page-head">
+      <div class="bo-page-head__main">
+        <p class="bo-page-head__eyebrow">Mensagens operacionais</p>
+        <h1 class="bo-page-head__title">Notificações</h1>
+        <p class="bo-page-head__sub">
+          Centro de tarefas pendentes: pedidos por aprovar do Front-Office e candidaturas de estafetas vindas da PWA.
+        </p>
+      </div>
+      <div class="bo-page-head__actions">
+        <span class="bo-badge" :class="frontOfficeAlerts.length ? 'bo-badge--warn' : 'bo-badge--neutral'">{{ frontOfficeAlerts.length }} pedido(s)</span>
+        <span class="bo-badge" :class="pwaAlerts.length ? 'bo-badge--warn' : 'bo-badge--neutral'">{{ pwaAlerts.length }} candidatura(s)</span>
+      </div>
     </header>
 
-    <div class="tabs-container">
-      <div class="tabs-nav">
-        <button 
-          class="tab-btn" 
-          :class="{ active: activeTab === 'front-office' }"
-          @click="activeTab = 'front-office'"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"></path><polyline points="9 22 9 12 15 12 15 22"></polyline></svg>
-          Front-Office (Pedidos)
-          <span class="badge" v-if="frontOfficeAlerts.length">{{ frontOfficeAlerts.length }}</span>
-        </button>
-        <button 
-          class="tab-btn" 
-          :class="{ active: activeTab === 'pwa' }"
-          @click="activeTab = 'pwa'"
-        >
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s-8-4.5-8-11.8A8 8 0 0 1 12 2a8 8 0 0 1 8 8.2c0 7.3-8 11.8-8 11.8z"/><circle cx="12" cy="10" r="3"/></svg>
-          PWA (Estafetas)
-          <span class="badge badge-warning" v-if="pwaAlerts.length">{{ pwaAlerts.length }}</span>
-        </button>
-      </div>
-
-      <div class="tab-content" v-if="activeTab === 'front-office'">
-        <div v-if="!frontOfficeAlerts.length" class="empty-state">
-          <p>Não existem pedidos pendentes de aprovação neste momento.</p>
+    <section class="bo-card">
+      <header class="bo-card__head">
+        <div class="bo-tabs" role="tablist" style="border-bottom: none; padding: 0;">
+          <button type="button" class="bo-tab" :class="{ 'is-active': activeTab === 'front-office' }" role="tab" :aria-selected="activeTab === 'front-office'" @click="activeTab = 'front-office'">
+            Pedidos · Front-Office
+            <span class="bo-tab__counter">{{ frontOfficeAlerts.length }}</span>
+          </button>
+          <button type="button" class="bo-tab" :class="{ 'is-active': activeTab === 'pwa' }" role="tab" :aria-selected="activeTab === 'pwa'" @click="activeTab = 'pwa'">
+            Estafetas · PWA
+            <span class="bo-tab__counter">{{ pwaAlerts.length }}</span>
+          </button>
         </div>
-        
-        <template v-else>
-          <div v-if="urgentOrders.length" class="alerts-section">
-            <h3 class="section-title">⚠️ Pedidos Urgentes (Pagos c/ Prioridade)</h3>
-            <div class="alert-card danger-card" v-for="alert in urgentOrders" :key="alert.id">
-              <div class="alert-info">
-                <span class="alert-time">{{ alert.time }}</span>
-                <div class="alert-text">
-                  <h4>{{ alert.title }} <span class="badge badge-danger">Urgente</span></h4>
-                  <p>{{ alert.message }}</p>
+      </header>
+
+      <div class="bo-card__body">
+        <div v-if="activeTab === 'front-office'">
+          <div v-if="!frontOfficeAlerts.length" class="bo-empty">
+            <h3 class="bo-empty__title">Tudo em dia</h3>
+            <p class="bo-empty__hint">Não há pedidos pendentes de aprovação.</p>
+          </div>
+          <div v-else class="bo-stack">
+            <div v-if="urgentOrders.length">
+              <h4 class="section-title">Urgentes</h4>
+              <div class="bo-stack--sm">
+                <article v-for="alert in urgentOrders" :key="alert.id" class="alert-card alert-card--danger">
+                  <div class="alert-card__main">
+                    <div class="bo-row" style="gap: 8px;">
+                      <span class="bo-mono bo-muted">{{ alert.time }}</span>
+                      <span class="bo-badge bo-badge--danger">Urgente</span>
+                    </div>
+                    <h5 class="alert-card__title">{{ alert.title }}</h5>
+                    <p class="alert-card__msg">{{ alert.message }}</p>
+                  </div>
+                  <RouterLink :to="{ name: 'order-detail', params: { id: alert.id } }" class="bo-btn bo-btn--danger-solid">Tratar imediatamente</RouterLink>
+                </article>
+              </div>
+            </div>
+
+            <div v-if="normalOrders.length">
+              <h4 class="section-title">Normais</h4>
+              <div class="bo-stack--sm">
+                <article v-for="alert in normalOrders" :key="alert.id" class="alert-card">
+                  <div class="alert-card__main">
+                    <div class="bo-row" style="gap: 8px;">
+                      <span class="bo-mono bo-muted">{{ alert.time }}</span>
+                      <span class="bo-badge bo-badge--info">Pedido</span>
+                    </div>
+                    <h5 class="alert-card__title">{{ alert.title }}</h5>
+                    <p class="alert-card__msg">{{ alert.message }}</p>
+                  </div>
+                  <RouterLink :to="{ name: 'order-detail', params: { id: alert.id } }" class="bo-btn bo-btn--outline">Ver pedido</RouterLink>
+                </article>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div v-if="activeTab === 'pwa'">
+          <div v-if="!pwaAlerts.length" class="bo-empty">
+            <h3 class="bo-empty__title">Sem candidaturas</h3>
+            <p class="bo-empty__hint">Não há novos registos de estafetas pendentes de verificação.</p>
+          </div>
+          <div v-else class="bo-stack--sm">
+            <article v-for="alert in pwaAlerts" :key="alert.id" class="alert-card alert-card--warn">
+              <div class="alert-card__main">
+                <div class="bo-row" style="gap: 8px;">
+                  <span class="bo-mono bo-muted">{{ alert.time }}</span>
+                  <span class="bo-badge bo-badge--warn">E-01</span>
                 </div>
+                <h5 class="alert-card__title">{{ alert.title }}</h5>
+                <p class="alert-card__msg">{{ alert.message }}</p>
               </div>
-              <div class="alert-actions">
-                <router-link :to="{ name: 'order-detail', params: { id: alert.id } }" class="action-btn danger-btn">Tratar Imediatamente</router-link>
-              </div>
-            </div>
-          </div>
-
-          <div v-if="normalOrders.length" class="alerts-section">
-            <h3 class="section-title">Pedidos Normais</h3>
-            <div class="alert-card" v-for="alert in normalOrders" :key="alert.id">
-              <div class="alert-info">
-                <span class="alert-time">{{ alert.time }}</span>
-                <div class="alert-text">
-                  <h4>{{ alert.title }}</h4>
-                  <p>{{ alert.message }}</p>
-                </div>
-              </div>
-              <div class="alert-actions">
-                <router-link :to="{ name: 'order-detail', params: { id: alert.id } }" class="action-btn">Ver Pedido</router-link>
-              </div>
-            </div>
-          </div>
-        </template>
-      </div>
-
-      <div class="tab-content" v-if="activeTab === 'pwa'">
-        <div v-if="!pwaAlerts.length" class="empty-state">
-          <p>Não existem candidaturas de estafetas pendentes de verificação.</p>
-        </div>
-        <div class="alert-card warning-card" v-for="alert in pwaAlerts" :key="alert.id">
-          <div class="alert-info">
-            <span class="alert-time">{{ alert.time }}</span>
-            <div class="alert-text">
-              <h4>{{ alert.title }}</h4>
-              <p>{{ alert.message }}</p>
-            </div>
-          </div>
-          <div class="alert-actions">
-            <router-link :to="{ name: 'courier-detail', params: { id: alert.id } }" class="action-btn warning-btn">Avaliar Candidatura</router-link>
+              <RouterLink :to="{ name: 'courier-detail', params: { id: alert.id } }" class="bo-btn bo-btn--warn">Avaliar candidatura</RouterLink>
+            </article>
           </div>
         </div>
       </div>
-    </div>
+    </section>
   </div>
 </template>
 
@@ -96,27 +103,24 @@ import { ORDER_STATUS, COURIER_STATE } from '../constants/logistics.js';
 const activeTab = ref('front-office');
 
 onMounted(() => {
-  // Dá refresh à store para garantir que apanha candidaturas feitas recentemente
   initLogistics({ force: true });
 });
 
-// Extrair horas para o layout
 const formatTime = (isoString) => {
   if (!isoString) return 'Agora';
   const d = new Date(isoString);
   return d.getHours().toString().padStart(2, '0') + ':' + d.getMinutes().toString().padStart(2, '0');
 };
 
-// Pedidos pendentes (Front-Office)
 const frontOfficeAlerts = computed(() => {
   return logistics.orders
     .filter(o => o.status === ORDER_STATUS.PENDING)
     .map(o => ({
       id: o.id,
       time: formatTime(o.createdAt),
-      title: `Novo Pedido: ${o.id}`,
-      message: `O cliente ${o.clientName || 'Desconhecido'} fez um pedido e aguarda aprovação.`,
-      isUrgent: o.is_urgent === true || o.priority >= 4 || o.type === 'EXPRESS' || o.urgent
+      title: `Novo pedido · ${o.id}`,
+      message: `O cliente ${o.clientName || 'Desconhecido'} aguarda aprovação.`,
+      isUrgent: o.is_urgent === true || o.priority >= 4 || o.type === 'EXPRESS',
     }))
     .sort((a, b) => b.time.localeCompare(a.time));
 });
@@ -124,159 +128,73 @@ const frontOfficeAlerts = computed(() => {
 const urgentOrders = computed(() => frontOfficeAlerts.value.filter(a => a.isUrgent));
 const normalOrders = computed(() => frontOfficeAlerts.value.filter(a => !a.isUrgent));
 
-// Estafetas por verificar (PWA)
 const pwaAlerts = computed(() => {
   return logistics.couriers
     .filter(c => c.state === COURIER_STATE.E01 || c.courier_status === 'E-01 Pendente Verificação')
     .map(c => ({
       id: c.id,
       time: formatTime(c.createdAt),
-      title: `Candidatura: ${c.name || c.firstName}`,
-      message: `Novo registo submetido via PWA na zona ${c.zone}. Aguarda validação de documentos.`
+      title: `Candidatura · ${c.name || c.firstName}`,
+      message: `Novo registo via PWA na zona ${Array.isArray(c.zones) ? c.zones.join(', ') : (c.zone || '—')}. Documentos pendentes de validação.`,
     }))
     .sort((a, b) => b.time.localeCompare(a.time));
 });
 </script>
 
 <style scoped>
-.notifications-page {
-  padding: 24px;
-  max-width: 900px;
-  margin: 0 auto;
-}
-
-.page-header {
-  margin-bottom: 32px;
-}
-.page-header h2 {
-  font-size: 24px;
-  font-weight: 700;
-  margin-bottom: 8px;
-}
-.subtitle {
-  color: var(--bo-text-secondary);
-  font-size: 15px;
-}
-
-.tabs-container {
-  background: var(--bo-surface);
-  border: 1px solid var(--bo-border);
-  border-radius: 12px;
-  overflow: hidden;
-}
-
-.tabs-nav {
-  display: flex;
-  border-bottom: 1px solid var(--bo-border);
-  background: #f9fafb;
-}
-
-.tab-btn {
-  flex: 1;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: 16px;
-  border: none;
-  background: transparent;
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--bo-text-secondary);
-  cursor: pointer;
-  border-bottom: 3px solid transparent;
-  transition: all 0.2s;
-}
-.tab-btn:hover {
-  background: #f3f4f6;
-}
-.tab-btn.active {
-  color: var(--bo-brand);
-  border-bottom-color: var(--bo-brand);
-  background: #fff;
-}
-
-.badge {
-  background: var(--bo-brand);
-  color: white;
+.section-title {
+  margin: 0 0 10px;
   font-size: 11px;
-  padding: 2px 8px;
-  border-radius: 10px;
-  margin-left: 4px;
-}
-.badge-warning {
-  background: #eab308;
-}
-
-.tab-content {
-  padding: 24px;
-}
-
-.empty-state {
-  text-align: center;
-  padding: 40px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--bo-text-secondary);
-  font-style: italic;
 }
 
 .alert-card {
   display: flex;
+  align-items: center;
   justify-content: space-between;
-  align-items: center;
-  padding: 16px;
-  border: 1px solid var(--bo-border);
-  border-radius: 8px;
-  margin-bottom: 12px;
-  background: #fff;
-}
-.alert-card:last-child {
-  margin-bottom: 0;
-}
-.warning-card {
-  border-left: 4px solid #eab308;
-}
-
-.alert-info {
-  display: flex;
   gap: 16px;
-  align-items: center;
-}
-.alert-time {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--bo-text-secondary);
-  width: 50px;
-}
-.alert-text h4 {
-  margin: 0 0 4px;
-  font-size: 15px;
-  font-weight: 700;
-}
-.alert-text p {
-  margin: 0;
-  font-size: 14px;
-  color: var(--bo-text-secondary);
+  padding: 14px 18px;
+  background: var(--bo-surface);
+  border: 1px solid var(--bo-border);
+  border-radius: var(--bo-radius);
+  transition: border-color var(--bo-transition-fast);
 }
 
-.action-btn {
-  text-decoration: none;
-  padding: 8px 16px;
-  border-radius: 6px;
-  background: var(--bo-page);
+.alert-card:hover { border-color: var(--bo-brand-mid); }
+
+.alert-card--danger {
+  border-left: 4px solid var(--bo-danger);
+  background: linear-gradient(90deg, var(--bo-danger-soft), var(--bo-surface) 60%);
+}
+
+.alert-card--warn {
+  border-left: 4px solid var(--bo-warning);
+  background: linear-gradient(90deg, var(--bo-warning-soft), var(--bo-surface) 60%);
+}
+
+.alert-card__main {
+  flex: 1;
+  min-width: 0;
+}
+
+.alert-card__title {
+  margin: 4px 0;
+  font-size: 14px;
+  font-weight: 700;
   color: var(--bo-text);
-  font-weight: 600;
+}
+
+.alert-card__msg {
+  margin: 0;
   font-size: 13px;
-  border: 1px solid var(--bo-border);
-  transition: all 0.2s;
+  color: var(--bo-text-secondary);
+  line-height: 1.45;
 }
-.action-btn:hover {
-  background: var(--bo-brand-soft);
-  color: var(--bo-brand);
-  border-color: var(--bo-brand);
-}
-.warning-btn:hover {
-  background: #fefce8;
-  color: #ca8a04;
-  border-color: #fef08a;
+
+@media (max-width: 700px) {
+  .alert-card { flex-direction: column; align-items: stretch; }
 }
 </style>

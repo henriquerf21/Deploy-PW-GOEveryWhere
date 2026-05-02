@@ -556,10 +556,29 @@ export function canEditCourierData(c) {
 }
 
 /** RF22 */
+const COURIER_DOC_KEYS = [
+  'docLicenseUrl',
+  'docInsuranceUrl',
+  'docInspectionUrl',
+  'docCcUrl',
+  'docSelfieUrl',
+  'docIbanUrl',
+];
+
+function isDocOnlyPatch(patch) {
+  const keys = Object.keys(patch || {});
+  if (!keys.length) return false;
+  return keys.every((k) => COURIER_DOC_KEYS.includes(k));
+}
+
 export async function updateCourierVerified(courierId, patch) {
   const c = getCourierById(courierId);
   if (!c) return { ok: false, error: 'Não encontrado.' };
-  if (!canEditCourier(c)) return { ok: false, error: 'Edição apenas após verificação (E-02+) ou estados operacionais.' };
+  // Permite uploads/atualizações de documentos em qualquer estado (incluindo E-01) para
+  // que o admin possa anexar ou substituir documentação antes de verificar o estafeta.
+  if (!isDocOnlyPatch(patch) && !canEditCourier(c)) {
+    return { ok: false, error: 'Edição apenas após verificação (E-02+) ou estados operacionais.' };
+  }
   try {
     const updated = await withBusy(() => boUpdateCourier(courierId, patch));
     upsertCourier(updated);
@@ -679,21 +698,28 @@ export async function setCourierMaxConcurrent(courierId, n) {
   return { ok: true };
 }
 
-export function setCourierAdminNotes(courierId, notes) {
+export async function setCourierAdminNotes(courierId, notes) {
   const c = getCourierById(courierId);
   if (!c) return { ok: false, error: 'Não encontrado' };
-  c.adminNotes = String(notes || '').trim();
+  try {
+    const updated = await withBusy(() => boCourierAction(courierId, { action: 'save_notes', notes: String(notes || '').trim() }));
+    upsertCourier(updated);
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao guardar notas.' };
+  }
   logAct(`Notas internas atualizadas — ${c.name}.`);
   return { ok: true };
 }
 
-/** Filtros RF15 */
-export function filterOrders({ status, priority, dateFrom, dateTo, type, zone, q }) {
+/** Filtros RF15 — inclui filtro por urgência */
+export function filterOrders({ status, priority, dateFrom, dateTo, type, zone, q, urgent }) {
   return logistics.orders.filter((o) => {
     if (status && o.status !== status) return false;
     if (priority && String(o.priority) !== String(priority)) return false;
     if (type && o.type !== type) return false;
     if (zone && o.zone !== zone) return false;
+    if (urgent === 'urgent' && !o.is_urgent) return false;
+    if (urgent === 'normal' && o.is_urgent) return false;
     if (dateFrom && ts(o.createdAt) < ts(`${dateFrom}T00:00:00.000Z`)) return false;
     if (dateTo) {
       const end = ts(`${dateTo}T23:59:59.999Z`);

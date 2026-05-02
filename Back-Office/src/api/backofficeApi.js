@@ -182,3 +182,57 @@ export async function boDeleteProduct(idOrSku) {
     method: 'DELETE',
   });
 }
+
+/**
+ * Abre uma ligação Server-Sent Events (SSE) ao back-office.
+ * Devolve uma instância de `EventSource` já ligada — o caller deve fechá-la
+ * quando deixar de precisar.
+ *
+ * Como o `EventSource` nativo do browser não permite headers HTTP customizados,
+ * o JWT é passado via query string (a ligação é HTTP local em dev, e em prod
+ * deve estar atrás de TLS).
+ */
+export function boOpenStream() {
+  if (typeof window === 'undefined' || typeof window.EventSource !== 'function') {
+    throw new Error('EventSource não suportado neste browser.');
+  }
+  const jwt = getJwt();
+  const qs = jwt ? `?token=${encodeURIComponent(jwt)}` : '';
+  const url = `${API_BASE}/api/bo/stream${qs}`;
+  return new EventSource(url, { withCredentials: false });
+}
+
+/**
+ * Upload de ficheiro para o Strapi Media Library via /api/upload.
+ * Devolve { url, name, mime, size, id }.
+ */
+export async function boUpload(file) {
+  if (!file) throw new Error('Ficheiro inválido.');
+  const fd = new FormData();
+  fd.append('files', file, file.name);
+  const headers = {};
+  const jwt = getJwt();
+  if (jwt) headers.Authorization = `Bearer ${jwt}`;
+  const res = await fetch(`${API_BASE}/api/upload`, {
+    method: 'POST',
+    headers,
+    body: fd,
+  });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) {
+    const msg = json?.error?.message || json?.message || `HTTP ${res.status}`;
+    throw new Error(String(msg));
+  }
+  const arr = Array.isArray(json) ? json : [];
+  const first = arr[0];
+  if (!first) throw new Error('Upload sem resposta.');
+  const rawUrl = first.url || '';
+  const fullUrl = rawUrl.startsWith('http') ? rawUrl : `${API_BASE}${rawUrl}`;
+  return {
+    id: first.id,
+    url: fullUrl,
+    name: first.name,
+    mime: first.mime,
+    size: first.size,
+  };
+}

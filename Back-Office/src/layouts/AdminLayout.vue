@@ -33,7 +33,7 @@
           </div>
           <ChevronDown class="bo-sidebar__chev" :size="18" />
         </div>
-        <a :href="`${frontOfficeUrl}/product`" class="bo-sidebar__back" target="_blank" rel="noopener noreferrer">← Ver site GoGummies</a>
+        <a :href="`${frontOfficeUrl}/product`" class="bo-sidebar__back" target="_blank" rel="noopener noreferrer"><ExternalLink :size="14" /> Ver site GoGummies</a>
         <button type="button" class="bo-sidebar__logout" @click="logout">Sair do painel</button>
       </div>
     </aside>
@@ -51,18 +51,21 @@
 
 
       <div class="bo-breadcrumb-bar">
-        <h1 class="bo-page-title">{{ pageTitle }}</h1>
         <nav class="bo-breadcrumb" aria-label="Localização">
-          <span>GoEverywhere</span>
-          <ChevronRight :size="14" class="bo-breadcrumb__sep" />
+          <RouterLink :to="{ name: 'dashboard' }" class="bo-breadcrumb__home">GoEverywhere</RouterLink>
+          <ChevronRight :size="13" class="bo-breadcrumb__sep" aria-hidden="true" />
           <span>Admin</span>
           <template v-if="breadcrumbParent">
-            <ChevronRight :size="14" class="bo-breadcrumb__sep" />
+            <ChevronRight :size="13" class="bo-breadcrumb__sep" aria-hidden="true" />
             <RouterLink :to="breadcrumbParent.to" class="bo-breadcrumb__link">{{ breadcrumbParent.label }}</RouterLink>
           </template>
-          <ChevronRight :size="14" class="bo-breadcrumb__sep" />
+          <ChevronRight :size="13" class="bo-breadcrumb__sep" aria-hidden="true" />
           <span class="bo-breadcrumb__current">{{ pageTitle }}</span>
         </nav>
+        <div class="bo-page-status" :title="streamLabel">
+          <span class="bo-status-dot" :class="{ 'is-busy': shellBusy, 'is-offline': realtimeStatus === 'offline' }" aria-hidden="true" />
+          <span class="bo-status-label">{{ statusLabel }}</span>
+        </div>
       </div>
 
       <main class="bo-content">
@@ -75,11 +78,12 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watch } from 'vue';
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { clearBoSession, getSessionUser } from '../auth/session.js';
-import { logistics, dismissAdminAlert, getOrderById, getCourierById, initLogistics } from '../stores/logisticsStore.js';
+import { logistics, getOrderById, getCourierById, initLogistics } from '../stores/logisticsStore.js';
 import { ORDER_STATUS, COURIER_STATE } from '../constants/logistics.js';
+import { boOpenStream } from '../api/backofficeApi.js';
 import {
   LayoutDashboard,
   Package,
@@ -89,58 +93,13 @@ import {
   Users,
   BarChart3,
   Bell,
-  MessageSquare,
-  Settings,
-  Search,
   ChevronDown,
   ChevronRight,
+  ExternalLink,
 } from 'lucide-vue-next';
 
 const route = useRoute();
 const router = useRouter();
-const globalSearch = ref('');
-const notifOpen = ref(false);
-const msgOpen = ref(false);
-const settingsOpen = ref(false);
-
-const recentActivity = computed(() => logistics.activityLog.slice(0, 12));
-
-function closeAllPopovers() {
-  notifOpen.value = false;
-  msgOpen.value = false;
-  settingsOpen.value = false;
-}
-
-function toggleNotif() {
-  const n = !notifOpen.value;
-  closeAllPopovers();
-  notifOpen.value = n;
-}
-
-function toggleMsg() {
-  const n = !msgOpen.value;
-  closeAllPopovers();
-  msgOpen.value = n;
-}
-
-function toggleSettings() {
-  const n = !settingsOpen.value;
-  closeAllPopovers();
-  settingsOpen.value = n;
-}
-
-watch(
-  () => route.query.q,
-  (q) => {
-    globalSearch.value = typeof q === 'string' ? q : '';
-  },
-  { immediate: true }
-);
-
-watch(
-  () => route.fullPath,
-  () => closeAllPopovers()
-);
 
 function logout() {
   clearBoSession();
@@ -158,10 +117,6 @@ const userInitials = computed(() => {
   if (p.length >= 2) return (p[0][0] + p[1][0]).toUpperCase();
   return (n.slice(0, 2) || 'AD').toUpperCase();
 });
-
-const urgentAlerts = computed(() => logistics.adminAlerts);
-const visibleUrgentAlerts = computed(() => urgentAlerts.value.slice(0, 4));
-const hiddenAlertsCount = computed(() => Math.max(0, urgentAlerts.value.length - visibleUrgentAlerts.value.length));
 
 const shellBusy = computed(() => !!logistics.loading || (logistics.busyCount || 0) > 0);
 
@@ -199,11 +154,6 @@ const breadcrumbParent = computed(() => {
   return null;
 });
 
-function runGlobalSearch() {
-  const q = globalSearch.value.trim();
-  router.push({ name: 'orders', query: q ? { q } : {} });
-}
-
 function isActive(item) {
   if (item.name === 'couriers') {
     return ['couriers', 'couriers-new', 'courier-detail'].includes(String(route.name));
@@ -221,18 +171,98 @@ const pendingCouriersCount = computed(() => {
   return logistics.couriers.filter(c => c.state === COURIER_STATE.E01 || c.courier_status === 'E-01 Pendente Verificação').length;
 });
 
-const knownOrderIds = new Set();
-const knownCourierIds = new Set();
+const statusLabel = computed(() => {
+  if (shellBusy.value) return 'A sincronizar com o Strapi…';
+  if (realtimeStatus.value === 'live') return 'Operacional · em tempo real';
+  if (realtimeStatus.value === 'connecting') return 'A ligar ao stream…';
+  return 'Modo fallback (polling 60s)';
+});
+
+const streamLabel = computed(() => {
+  if (realtimeStatus.value === 'live') return 'SSE ligado — eventos do Strapi em tempo real.';
+  if (realtimeStatus.value === 'connecting') return 'A negociar a ligação SSE…';
+  return 'Sem ligação SSE — a fazer fallback de polling a cada 60s.';
+});
+
+// Real-time updates via SSE com fallback para polling longo (60s) caso o
+// stream esteja indisponível ou se desligue. O polling original a cada 10s
+// foi substituído porque é caro em volumes maiores.
+const realtimeStatus = ref('connecting'); // 'connecting' | 'live' | 'offline'
+let eventSource = null;
+let fallbackPollHandle = null;
+let refreshDebounce = null;
+
+function scheduleRefresh() {
+  if (refreshDebounce) clearTimeout(refreshDebounce);
+  refreshDebounce = setTimeout(async () => {
+    refreshDebounce = null;
+    try {
+      await initLogistics({ force: true });
+    } catch (err) {
+      // ignore — SSE may have raced with a transient backend hiccup
+      void err;
+    }
+  }, 350);
+}
+
+function startFallbackPolling() {
+  if (fallbackPollHandle) return;
+  fallbackPollHandle = setInterval(() => {
+    initLogistics({ force: true }).catch(() => {});
+  }, 60000);
+}
+
+function stopFallbackPolling() {
+  if (fallbackPollHandle) {
+    clearInterval(fallbackPollHandle);
+    fallbackPollHandle = null;
+  }
+}
+
+function connectStream() {
+  try {
+    eventSource = boOpenStream();
+  } catch {
+    realtimeStatus.value = 'offline';
+    startFallbackPolling();
+    return;
+  }
+  eventSource.addEventListener('hello', () => {
+    realtimeStatus.value = 'live';
+    stopFallbackPolling();
+  });
+  eventSource.addEventListener('change', () => {
+    realtimeStatus.value = 'live';
+    scheduleRefresh();
+  });
+  eventSource.onerror = () => {
+    // EventSource auto-reconecta — apenas marcamos offline e ligamos fallback.
+    realtimeStatus.value = 'offline';
+    startFallbackPolling();
+  };
+  eventSource.onopen = () => {
+    realtimeStatus.value = 'live';
+    stopFallbackPolling();
+  };
+}
 
 onMounted(async () => {
   await initLogistics();
+  if (typeof window !== 'undefined' && typeof window.EventSource === 'function') {
+    connectStream();
+  } else {
+    realtimeStatus.value = 'offline';
+    startFallbackPolling();
+  }
+});
 
-  logistics.orders.forEach(o => knownOrderIds.add(o.id));
-  logistics.couriers.forEach(c => knownCourierIds.add(c.id));
-
-  setInterval(async () => {
-    await initLogistics({ force: true });
-  }, 10000);
+onBeforeUnmount(() => {
+  if (refreshDebounce) clearTimeout(refreshDebounce);
+  if (eventSource) {
+    try { eventSource.close(); } catch { /* ignore */ }
+    eventSource = null;
+  }
+  stopFallbackPolling();
 });
 </script>
 
@@ -397,12 +427,15 @@ onMounted(async () => {
 }
 
 .bo-sidebar__back {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 6px;
   margin-top: 10px;
   padding: 8px;
   font-size: 12px;
   color: var(--bo-sidebar-dim);
   text-decoration: none;
+  transition: color var(--bo-transition-fast);
 }
 
 .bo-sidebar__back:hover {
@@ -485,289 +518,36 @@ onMounted(async () => {
   }
 }
 
-.bo-urgent-bar {
-  background: linear-gradient(90deg, #fef3c7, #fff7ed);
-  border-bottom: 1px solid #fcd34d;
-  padding: 10px 28px;
-  max-height: 170px;
-  overflow: hidden;
-}
-
-.bo-urgent-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 6px;
-  font-size: 12px;
-  color: #7c2d12;
-}
-
-.bo-urgent-more {
-  padding: 2px 8px;
-  border-radius: 999px;
-  background: rgba(146, 64, 14, 0.1);
-  font-weight: 700;
-  font-size: 11px;
-}
-
-.bo-urgent-list {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  max-height: 118px;
-  overflow-y: auto;
-  padding-right: 2px;
-}
-
-.bo-urgent-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  font-size: 13px;
-  font-weight: 600;
-  color: #92400e;
-  padding: 4px 0;
-  border-bottom: 1px dashed rgba(146, 64, 14, 0.18);
-}
-
-.bo-urgent-item:last-child {
-  border-bottom: none;
-}
-
-.bo-urgent-x {
-  border: none;
-  background: rgba(0, 0, 0, 0.06);
-  width: 28px;
-  height: 28px;
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 18px;
-  line-height: 1;
-}
-
-.bo-urgent-x:hover {
-  background: rgba(0, 0, 0, 0.1);
-}
-
-.bo-topbar {
-  height: var(--bo-header-h);
-  flex-shrink: 0;
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 0 28px;
-  background: var(--bo-surface);
-  border-bottom: 1px solid var(--bo-border);
-}
-
-.bo-topbar__left {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.bo-topbar__user {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding-right: 12px;
-  border-right: 1px solid var(--bo-border);
-  margin-right: 4px;
-}
-
-.bo-topbar__avatar {
-  width: 34px;
-  height: 34px;
-  border-radius: 10px;
-  background: var(--bo-brand-soft);
-  color: var(--bo-brand);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 11px;
-  font-weight: 700;
-}
-
-.bo-topbar__name {
-  font-size: 14px;
-  font-weight: 600;
-}
-
-.bo-topbar__chev {
-  color: var(--bo-text-secondary);
-}
-
-.bo-icon-btn {
-  width: 40px;
-  height: 40px;
-  border: none;
-  border-radius: 10px;
-  background: transparent;
-  color: var(--bo-text-secondary);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.bo-icon-btn:hover {
-  background: var(--bo-page);
-  color: var(--bo-text);
-}
-
-.bo-icon-btn.is-on {
-  background: var(--bo-page);
-  color: var(--bo-brand);
-}
-
-.bo-pop {
-  position: relative;
-}
-
-.bo-pop--end .bo-pop__panel {
-  left: auto;
-  right: 0;
-}
-
-.bo-pop__panel {
-  position: absolute;
-  top: calc(100% + 8px);
-  left: 0;
-  z-index: 100;
-  min-width: 280px;
-  max-width: min(360px, 92vw);
-  padding: 14px 16px;
-  background: var(--bo-surface);
-  border: 1px solid var(--bo-border);
-  border-radius: 12px;
-  box-shadow: var(--bo-shadow);
-}
-
-.bo-pop__panel--wide {
-  min-width: 320px;
-  max-width: min(420px, 94vw);
-}
-
-.bo-pop__title {
-  margin: 0 0 10px;
-  font-size: 13px;
-  font-weight: 700;
-}
-
-.bo-pop__muted {
-  margin: 0 0 10px;
-  font-size: 13px;
-  color: var(--bo-text-secondary);
-  line-height: 1.45;
-}
-
-.bo-pop__list {
-  list-style: none;
-  margin: 0 0 10px;
-  padding: 0;
-  max-height: 220px;
-  overflow-y: auto;
-}
-
-.bo-pop__list--scroll {
-  max-height: 260px;
-}
-
-.bo-pop__li {
-  font-size: 13px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--bo-border);
-  line-height: 1.4;
-}
-
-.bo-pop__li--sm {
-  font-size: 12px;
-  color: var(--bo-text-secondary);
-}
-
-.bo-pop__time {
-  display: inline-block;
-  min-width: 42px;
-  font-weight: 600;
-  color: var(--bo-text);
-  margin-right: 6px;
-}
-
-.bo-pop__link {
-  display: block;
-  margin-top: 8px;
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--bo-brand);
-  text-decoration: none;
-}
-
-.bo-pop__link:hover {
-  text-decoration: underline;
-}
-
-.bo-topbar__search-wrap {
-  flex: 1;
-  max-width: 420px;
-  margin: 0 auto;
-  position: relative;
-}
-
-.bo-topbar__search-icon {
-  position: absolute;
-  left: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: var(--bo-text-secondary);
-  pointer-events: none;
-}
-
-.bo-topbar__search {
-  width: 100%;
-  height: 42px;
-  padding: 0 16px 0 44px;
-  border: 1px solid var(--bo-border);
-  border-radius: 10px;
-  background: var(--bo-page);
-  font-size: 14px;
-}
-
-.bo-topbar__search::placeholder {
-  color: #9ca3af;
-}
-
-.bo-topbar__search:focus {
-  outline: none;
-  border-color: var(--bo-brand-mid);
-  box-shadow: 0 0 0 3px rgba(27, 138, 74, 0.12);
-}
-
 .bo-breadcrumb-bar {
-  padding: 20px 28px 12px;
+  padding: 14px 28px;
   background: var(--bo-surface);
   border-bottom: 1px solid var(--bo-border);
-}
-
-.bo-page-title {
-  margin: 0 0 8px;
-  font-family: var(--bo-font-display);
-  font-size: 22px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
 }
 
 .bo-breadcrumb {
   display: flex;
   align-items: center;
   gap: 6px;
-  font-size: 13px;
+  font-size: 12.5px;
   color: var(--bo-text-secondary);
 }
 
+.bo-breadcrumb__home {
+  color: var(--bo-text-secondary);
+  font-weight: 500;
+  text-decoration: none;
+}
+
+.bo-breadcrumb__home:hover { color: var(--bo-brand); }
+
 .bo-breadcrumb__sep {
   flex-shrink: 0;
-  opacity: 0.5;
+  opacity: 0.45;
 }
 
 .bo-breadcrumb__link {
@@ -785,9 +565,62 @@ onMounted(async () => {
   font-weight: 600;
 }
 
+.bo-page-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  border-radius: 999px;
+  background: var(--bo-page);
+  border: 1px solid var(--bo-border);
+  font-size: 12px;
+  color: var(--bo-text-secondary);
+  font-weight: 600;
+}
+
+.bo-status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--bo-success);
+  position: relative;
+}
+
+.bo-status-dot::before {
+  content: '';
+  position: absolute;
+  inset: -3px;
+  border-radius: 50%;
+  border: 1px solid var(--bo-success);
+  opacity: 0.4;
+}
+
+.bo-status-dot.is-busy {
+  background: var(--bo-warning);
+}
+
+.bo-status-dot.is-busy::before {
+  border-color: var(--bo-warning);
+  animation: bo-pulse 1.4s ease-out infinite;
+}
+
+.bo-status-dot.is-offline {
+  background: var(--bo-text-secondary, #94a3b8);
+}
+
+.bo-status-dot.is-offline::before {
+  border-color: var(--bo-text-secondary, #94a3b8);
+  opacity: 0.3;
+}
+
+@keyframes bo-pulse {
+  0% { transform: scale(0.85); opacity: 0.7; }
+  100% { transform: scale(1.6); opacity: 0; }
+}
+
 .bo-content {
   flex: 1;
-  padding: 24px 28px 40px;
+  padding: 28px 28px 48px;
   overflow-x: auto;
 }
 

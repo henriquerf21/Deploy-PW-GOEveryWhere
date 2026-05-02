@@ -42,5 +42,8 @@ export default {
     { method: 'POST', path: '/bo/customers', handler: 'back-office.createCustomer', config: { auth: false } },
     { method: 'PATCH', path: '/bo/customers/:id', handler: 'back-office.updateCustomer', config: { auth: false } },
     { method: 'DELETE', path: '/bo/customers/:id', handler: 'back-office.deleteCustomer', config: { auth: false } },
+
+    // Real-time (Server-Sent Events). Auth via header `Authorization` ou `?token=...`.
+    { method: 'GET', path: '/bo/stream', handler: 'back-office.stream', config: { auth: false } },
   ],
 };

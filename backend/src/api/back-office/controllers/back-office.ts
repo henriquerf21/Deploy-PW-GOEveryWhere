@@ -1,3 +1,5 @@
+import { BO_BUS } from '../utils/bo-event-bus';
+
 type Ctx = {
   request: { body?: any; ip?: string; header?: Record<string, string | string[] | undefined> };
   params: Record<string, string>;
@@ -6,6 +8,11 @@ type Ctx = {
   unauthorized: () => any;
   badRequest: (msg: string) => any;
   send: (body: any) => any;
+  set?: (headers: Record<string, string>) => any;
+  status?: number;
+  res?: any;
+  req?: any;
+  respond?: boolean;
 };
 
 function getService(strapi: any) {
@@ -308,5 +315,75 @@ export default {
     const result = await service.deleteCustomer(ctx, ctx.params.id);
     if (!result.ok) return ctx.badRequest(result.error);
     return ctx.send({ data: result.data });
+  },
+
+  /**
+   * Server-Sent Events (SSE) — substitui o polling de 10s do BO.
+   * Aceita o JWT via header Authorization OU via query string `?token=...`
+   * porque o `EventSource` nativo do browser não permite headers customizados.
+   */
+  async stream(ctx: Ctx) {
+    const queryToken = (ctx.query as any)?.token ? String((ctx.query as any).token) : '';
+    if (queryToken && !ctx.state.user) {
+      try {
+        const payload = await strapi.plugin('users-permissions').service('jwt').verify(queryToken);
+        if (payload?.id) {
+          const user = await strapi.db.query('plugin::users-permissions.user').findOne({
+            where: { id: payload.id },
+            select: ['id', 'email', 'username', 'firstName', 'lastName', 'blocked'],
+          });
+          if (user && !user.blocked) ctx.state.user = user;
+        }
+      } catch {
+        /* ignore — falls through to header-based auth */
+      }
+    }
+    if (!(await ensureAdminSession(ctx, strapi))) return ctx.unauthorized();
+
+    const req: any = ctx.req;
+    const res: any = ctx.res;
+
+    try {
+      req.socket?.setTimeout?.(0);
+      req.socket?.setNoDelay?.(true);
+      req.socket?.setKeepAlive?.(true);
+    } catch { /* best effort */ }
+
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache, no-transform',
+      'Connection': 'keep-alive',
+      'X-Accel-Buffering': 'no',
+    });
+
+    const write = (event: string, data: any) => {
+      try {
+        res.write(`event: ${event}\n`);
+        res.write(`data: ${JSON.stringify(data)}\n\n`);
+      } catch { /* socket likely closed */ }
+    };
+
+    write('hello', { at: new Date().toISOString(), userId: ctx.state.user?.id ?? null });
+
+    const onChange = (payload: any) => write('change', payload);
+    BO_BUS.on('change', onChange);
+
+    // Heartbeat para evitar que proxies fechem a ligação por inactividade.
+    const hb = setInterval(() => {
+      try { res.write(': hb\n\n'); } catch { /* ignore */ }
+    }, 25000);
+
+    const cleanup = () => {
+      BO_BUS.off('change', onChange);
+      clearInterval(hb);
+      try { res.end(); } catch { /* ignore */ }
+    };
+
+    req.on('close', cleanup);
+    req.on('aborted', cleanup);
+    res.on('close', cleanup);
+    res.on('error', cleanup);
+
+    ctx.respond = false;
   },
 };

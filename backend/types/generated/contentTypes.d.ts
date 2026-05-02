@@ -107,43 +107,6 @@ export interface AdminApiTokenPermission extends Struct.CollectionTypeSchema {
   };
 }
 
-export interface AdminAuditLog extends Struct.CollectionTypeSchema {
-  collectionName: 'strapi_audit_logs';
-  info: {
-    displayName: 'Audit Log';
-    pluralName: 'audit-logs';
-    singularName: 'audit-log';
-  };
-  options: {
-    draftAndPublish: false;
-    timestamps: false;
-  };
-  pluginOptions: {
-    'content-manager': {
-      visible: false;
-    };
-    'content-type-builder': {
-      visible: false;
-    };
-  };
-  attributes: {
-    action: Schema.Attribute.String & Schema.Attribute.Required;
-    createdAt: Schema.Attribute.DateTime;
-    createdBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
-      Schema.Attribute.Private;
-    date: Schema.Attribute.DateTime & Schema.Attribute.Required;
-    locale: Schema.Attribute.String & Schema.Attribute.Private;
-    localizations: Schema.Attribute.Relation<'oneToMany', 'admin::audit-log'> &
-      Schema.Attribute.Private;
-    payload: Schema.Attribute.JSON;
-    publishedAt: Schema.Attribute.DateTime;
-    updatedAt: Schema.Attribute.DateTime;
-    updatedBy: Schema.Attribute.Relation<'oneToOne', 'admin::user'> &
-      Schema.Attribute.Private;
-    user: Schema.Attribute.Relation<'oneToOne', 'admin::user'>;
-  };
-}
-
 export interface AdminPermission extends Struct.CollectionTypeSchema {
   collectionName: 'admin_permissions';
   info: {
@@ -536,6 +499,7 @@ export interface ApiContinentStoreContinentStore
     district: Schema.Attribute.String & Schema.Attribute.Required;
     format: Schema.Attribute.Enumeration<['Hiper', 'Modelo', 'Bom Dia']> &
       Schema.Attribute.Required;
+    imageUrl: Schema.Attribute.String;
     inventoryItems: Schema.Attribute.Relation<
       'oneToMany',
       'api::store-inventory-item.store-inventory-item'
@@ -574,6 +538,7 @@ export interface ApiCourierEstafetaCourierEstafeta
   attributes: {
     accountHolder: Schema.Attribute.String;
     address: Schema.Attribute.String;
+    adminNotes: Schema.Attribute.Text;
     birthDate: Schema.Attribute.Date;
     cc: Schema.Attribute.String;
     city: Schema.Attribute.String;
@@ -595,8 +560,14 @@ export interface ApiCourierEstafetaCourierEstafeta
       'api::delivery.delivery'
     >;
     docCc: Schema.Attribute.Media<'images' | 'files'>;
+    docCcUrl: Schema.Attribute.String;
     docIban: Schema.Attribute.Media<'images' | 'files'>;
+    docIbanUrl: Schema.Attribute.String;
+    docInspectionUrl: Schema.Attribute.String;
+    docInsuranceUrl: Schema.Attribute.String;
+    docLicenseUrl: Schema.Attribute.String;
     docSelfie: Schema.Attribute.Media<'images'>;
+    docSelfieUrl: Schema.Attribute.String;
     drivingLicense: Schema.Attribute.Media<
       'images' | 'files' | 'videos' | 'audios'
     >;
@@ -606,10 +577,15 @@ export interface ApiCourierEstafetaCourierEstafeta
     inspection: Schema.Attribute.Media<
       'images' | 'files' | 'videos' | 'audios'
     >;
+    inspectionValidUntil: Schema.Attribute.Date;
     insurance: Schema.Attribute.Media<'images' | 'files' | 'videos' | 'audios'>;
+    insuranceRef: Schema.Attribute.String;
     isOnline: Schema.Attribute.Boolean;
     lastName: Schema.Attribute.String;
+    lat: Schema.Attribute.Decimal;
     licenseNo: Schema.Attribute.String;
+    licenseNumber: Schema.Attribute.String;
+    lng: Schema.Attribute.Decimal;
     locale: Schema.Attribute.String & Schema.Attribute.Private;
     localizations: Schema.Attribute.Relation<
       'oneToMany',
@@ -618,6 +594,7 @@ export interface ApiCourierEstafetaCourierEstafeta
       Schema.Attribute.Private;
     maxSimultaneousDeliveries: Schema.Attribute.Integer;
     nif: Schema.Attribute.String;
+    onTimePct: Schema.Attribute.Decimal;
     orders: Schema.Attribute.Relation<'oneToMany', 'api::order.order'>;
     phone: Schema.Attribute.String;
     postalCode: Schema.Attribute.String;
@@ -1477,7 +1454,6 @@ declare module '@strapi/strapi' {
     export interface ContentTypeSchemas {
       'admin::api-token': AdminApiToken;
       'admin::api-token-permission': AdminApiTokenPermission;
-      'admin::audit-log': AdminAuditLog;
       'admin::permission': AdminPermission;
       'admin::role': AdminRole;
       'admin::session': AdminSession;

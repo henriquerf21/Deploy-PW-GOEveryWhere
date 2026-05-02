@@ -164,6 +164,45 @@
     },
     "accountHolder": {
       "type": "string"
+    },
+    "licenseNumber": {
+      "type": "string"
+    },
+    "insuranceRef": {
+      "type": "string"
+    },
+    "inspectionValidUntil": {
+      "type": "date"
+    },
+    "adminNotes": {
+      "type": "text"
+    },
+    "docLicenseUrl": {
+      "type": "string"
+    },
+    "docInsuranceUrl": {
+      "type": "string"
+    },
+    "docInspectionUrl": {
+      "type": "string"
+    },
+    "docCcUrl": {
+      "type": "string"
+    },
+    "docSelfieUrl": {
+      "type": "string"
+    },
+    "docIbanUrl": {
+      "type": "string"
+    },
+    "lat": {
+      "type": "decimal"
+    },
+    "lng": {
+      "type": "decimal"
+    },
+    "onTimePct": {
+      "type": "decimal"
     }
   }
 }

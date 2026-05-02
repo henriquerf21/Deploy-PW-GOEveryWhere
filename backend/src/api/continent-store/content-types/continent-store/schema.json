@@ -23,6 +23,7 @@
     "phone": { "type": "string" },
     "format": { "type": "enumeration", "enum": ["Hiper", "Modelo", "Bom Dia"], "required": true },
     "isActive": { "type": "boolean", "default": true },
+    "imageUrl": { "type": "string" },
     "inventoryItems": {
       "type": "relation",
       "relation": "oneToMany",

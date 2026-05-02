@@ -6,6 +6,7 @@ import {
   validatePtPlate,
 } from '../utils/back-office-validation';
 import { CONTINENTE_STORES_SEED } from '../data/continent-stores-seed';
+import { emitBoChange } from '../utils/bo-event-bus';
 
 const STORE_CATALOG = CONTINENTE_STORES_SEED.slice(0, 3).map((s) => ({
   id: s.code,
@@ -170,10 +171,44 @@ function isActiveOrder(status: string) {
   return ['APPROVED', 'ASSIGNED', 'IN_TRANSIT', 'INFO_REQUESTED', 'PENDING'].includes(status);
 }
 
+/**
+ * Extrai uma representação compacta do utilizador autenticado para
+ * persistir no histórico de eventos de um pedido.
+ */
+function extractActor(ctx: any) {
+  const u = ctx?.state?.user;
+  if (!u) return { id: null, email: null, name: 'Sistema' };
+  const fn = (u.firstName || '').trim();
+  const ln = (u.lastName || '').trim();
+  const display = `${fn} ${ln}`.trim() || u.username || u.email || `Admin #${u.id}`;
+  return { id: u.id ?? null, email: u.email ?? null, name: display };
+}
+
+function buildOrderTimelineEvent(action: string, ctx: any, extra: Record<string, any> = {}) {
+  return {
+    at: new Date().toISOString(),
+    action,
+    actor: extractActor(ctx),
+    ...extra,
+  };
+}
+
+/**
+ * `items` na DB é um JSON que pode conter `list`, `boMeta`, `deliveryCoords`, etc.
+ * Em versões antigas vinha como array (apenas a lista de produtos). Esta função
+ * normaliza para o formato moderno preservando o que já existir.
+ */
+function normalizeRawItems(rawItems: any) {
+  if (Array.isArray(rawItems)) return { list: rawItems };
+  if (rawItems && typeof rawItems === 'object') return rawItems;
+  return {};
+}
+
 function buildPublicOrder(entry: any) {
   const attrs = entry ?? {};
   const items = attrs.items ?? {};
   const bo = items.boMeta ?? {};
+  const deliveryCoords = items.deliveryCoords ?? {};
   const user = attrs.user;
   const courier = attrs.courier;
   const status = mapOrderStatus(attrs.order_status);
@@ -184,10 +219,15 @@ function buildPublicOrder(entry: any) {
     clientId: user?.id ? idToPublic('CU', user.id) : 'CU-0',
     clientName: getUserName(user),
     clientEmail: user?.email ?? 'n/a',
+    clientPhone: user?.phone ?? '',
+    clientCity: user?.city ?? '',
+    clientAddress: user?.defaultAddress ?? '',
+    clientNif: user?.nif ?? '',
     city: bo.city || zone,
     zone,
     type: bo.type || 'STANDARD',
     priority: clampPriority(attrs.priority ?? 3),
+    is_urgent: !!attrs.is_urgent,
     status,
     createdAt: attrs.createdAt,
     pickupLat: toNum(attrs.storeLatitude, STORE_CATALOG[0].lat),
@@ -195,14 +235,52 @@ function buildPublicOrder(entry: any) {
     destLat: toNum(attrs.deliveryLatitude, STORE_CATALOG[0].lat),
     destLng: toNum(attrs.deliveryLongitude, STORE_CATALOG[0].lng),
     storeId: bo.storeId || null,
+    storeName: attrs.store_name || null,
     costEuro: attrs.total_price != null ? toNum(attrs.total_price, 0) : null,
     etaMinutes: attrs.estimatedTime != null ? toNum(attrs.estimatedTime, 0) : null,
     resources: bo.resources || null,
     courierId: courier?.documentId ? idToPublic('ST', courier.documentId) : (courier?.id ? idToPublic('ST', courier.id) : null),
+    courierName: courier ? `${courier.firstName ?? ''} ${courier.lastName ?? ''}`.trim() : null,
     rejectionReason: attrs.rejectionReason || null,
     infoRequestMessage: bo.infoRequestMessage || null,
     clientReply: attrs.clientReply || null,
+    deliveryAddress: deliveryCoords.address || attrs.deliveryAddress || '',
+    deliveryCity: deliveryCoords.city || '',
+    items: Array.isArray(items.list) ? items.list : (Array.isArray(items) ? items : []),
+    go_points_used: toNum(attrs.go_points_used, 0),
+    go_points_redemption: attrs.go_points_redemption || null,
+    rating: attrs.rating ?? null,
+    timeline: buildOrderTimeline(attrs, bo),
+    review: attrs.review ? {
+      rating: toNum(attrs.review.rating, 0),
+      comment: attrs.review.comment || '',
+      createdAt: attrs.review.createdAt || null,
+    } : null,
   };
+}
+
+function buildOrderTimeline(attrs: any, boMeta: any) {
+  const stored = Array.isArray(boMeta?.events) ? boMeta.events : [];
+  const synthesized: any[] = [];
+  if (attrs?.createdAt) {
+    const userName = getUserName(attrs?.user);
+    synthesized.push({
+      at: attrs.createdAt,
+      action: 'created',
+      actor: {
+        id: attrs?.user?.id ?? null,
+        email: attrs?.user?.email ?? null,
+        name: userName || 'Cliente',
+      },
+      meta: { source: 'front-office' },
+    });
+  }
+  const all = [...synthesized, ...stored];
+  return all.sort((a, b) => {
+    const ta = a?.at ? new Date(a.at).getTime() : 0;
+    const tb = b?.at ? new Date(b.at).getTime() : 0;
+    return ta - tb;
+  });
 }
 
 function buildPublicCourier(entry: any, assignedCount = 0) {
@@ -243,10 +321,18 @@ function buildPublicCourier(entry: any, assignedCount = 0) {
       inspectionValidUntil: attrs.inspectionValidUntil || '',
     },
     docs: {
-      idDoc: !!attrs.cc,
-      license: !!attrs.drivingLicense,
-      insurance: !!attrs.insurance,
-      inspection: !!attrs.inspection,
+      idDoc: !!attrs.docCcUrl || !!attrs.cc,
+      license: !!attrs.docLicenseUrl,
+      insurance: !!attrs.docInsuranceUrl,
+      inspection: !!attrs.docInspectionUrl,
+    },
+    docUrls: {
+      license: attrs.docLicenseUrl || '',
+      insurance: attrs.docInsuranceUrl || '',
+      inspection: attrs.docInspectionUrl || '',
+      cc: attrs.docCcUrl || '',
+      selfie: attrs.docSelfieUrl || '',
+      iban: attrs.docIbanUrl || '',
     },
     lat: toNum(attrs.lat, pseudoLat),
     lng: toNum(attrs.lng, pseudoLng),
@@ -258,7 +344,55 @@ function buildPublicCourier(entry: any, assignedCount = 0) {
     currentOrderId: null,
     etaMinutes: null,
     activeAssignments: assignedCount,
+    deliveries: buildCourierDeliverySummary(attrs.orders),
   };
+}
+
+/**
+ * Constrói uma listagem compacta das entregas concluídas de um estafeta para mostrar
+ * na ficha do estafeta. Mantém-se intencionalmente leve (apenas top 50 entregas).
+ */
+function buildCourierDeliverySummary(rawOrders: any) {
+  if (!Array.isArray(rawOrders)) return [];
+  return rawOrders
+    .filter((o: any) => mapOrderStatus(o?.order_status) === 'DELIVERED')
+    .sort((a: any, b: any) => {
+      const ta = a?.updatedAt || a?.createdAt || '';
+      const tb = b?.updatedAt || b?.createdAt || '';
+      return tb.localeCompare(ta);
+    })
+    .slice(0, 50)
+    .map((o: any) => ({
+      id: idToPublic('GE', o.documentId || o.id),
+      deliveredAt: o.updatedAt || o.createdAt || null,
+      createdAt: o.createdAt || null,
+      costEuro: o.total_price != null ? toNum(o.total_price, 0) : null,
+      etaMinutes: o.estimatedTime != null ? toNum(o.estimatedTime, 0) : null,
+      storeName: o.store_name || '',
+      clientName: getUserName(o.user) || '—',
+      clientEmail: o.user?.email || '',
+      rating: o.review?.rating != null ? toNum(o.review.rating, 0) : (o.rating != null ? toNum(o.rating, 0) : null),
+      reviewComment: o.review?.comment || '',
+    }));
+}
+
+/**
+ * Constrói a listagem dos pedidos de um cliente para a ficha de cliente. Top 50.
+ */
+function buildCustomerOrderSummary(rawOrders: any) {
+  if (!Array.isArray(rawOrders)) return [];
+  return [...rawOrders]
+    .sort((a: any, b: any) => String(b?.createdAt || '').localeCompare(String(a?.createdAt || '')))
+    .slice(0, 50)
+    .map((o: any) => ({
+      id: idToPublic('GE', o.documentId || o.id),
+      createdAt: o.createdAt || null,
+      status: mapOrderStatus(o?.order_status),
+      costEuro: o.total_price != null ? toNum(o.total_price, 0) : null,
+      storeName: o.store_name || '',
+      courierName: o.courier ? `${o.courier.firstName || ''} ${o.courier.lastName || ''}`.trim() : '',
+      rating: o.review?.rating != null ? toNum(o.review.rating, 0) : null,
+    }));
 }
 
 function parsePublicId(rawId: string, prefix: string) {
@@ -386,6 +520,7 @@ function mapContinentStore(entry: any) {
     openingHours: entry.openingHours || '',
     phone: entry.phone || '',
     format: entry.format || 'Hiper',
+    imageUrl: entry.imageUrl || '',
     isActive: entry.isActive !== false,
   };
 }
@@ -581,7 +716,11 @@ export default ({ strapi }: any) => ({
 
   async getCouriersRaw() {
     const rows = await strapi.db.query('api::courier-estafeta.courier-estafeta').findMany({
-      populate: ['orders'],
+      populate: {
+        orders: {
+          populate: { user: true, review: true },
+        },
+      },
       orderBy: { createdAt: 'desc' },
     });
     return dedupeByDocumentId(rows);
@@ -595,13 +734,27 @@ export default ({ strapi }: any) => ({
   async getCouriersMapped() {
     const orders = await this.getOrdersMapped();
     const activeByCourier: Record<string, number> = {};
+    const currentByCourier: Record<string, { id: string; etaMinutes: number | null; status: string }> = {};
     for (const o of orders) {
       if (!o.courierId) continue;
       if (!['ASSIGNED', 'IN_TRANSIT'].includes(o.status)) continue;
       activeByCourier[o.courierId] = (activeByCourier[o.courierId] || 0) + 1;
+      const existing = currentByCourier[o.courierId];
+      if (!existing || (existing.status !== 'IN_TRANSIT' && o.status === 'IN_TRANSIT')) {
+        currentByCourier[o.courierId] = { id: o.id, etaMinutes: o.etaMinutes ?? null, status: o.status };
+      }
     }
     const entries = await this.getCouriersRaw();
-    return entries.map((e: any) => buildPublicCourier(e, activeByCourier[idToPublic('ST', e.documentId || e.id)] || 0));
+    return entries.map((e: any) => {
+      const publicId = idToPublic('ST', e.documentId || e.id);
+      const built = buildPublicCourier(e, activeByCourier[publicId] || 0);
+      const cur = currentByCourier[publicId];
+      if (cur) {
+        built.currentOrderId = cur.id;
+        built.etaMinutes = cur.etaMinutes;
+      }
+      return built;
+    });
   },
 
   async ensureCatalogProductsSeeded() {
@@ -738,6 +891,7 @@ export default ({ strapi }: any) => ({
         openingHours: String(payload.openingHours || '').trim(),
         phone: String(payload.phone || '').trim(),
         format: payload.format || 'Hiper',
+        imageUrl: String(payload.imageUrl || '').trim(),
         isActive: payload.isActive !== false,
       },
       status: 'published',
@@ -776,6 +930,7 @@ export default ({ strapi }: any) => ({
         openingHours: payload.openingHours ?? target.openingHours,
         phone: payload.phone ?? target.phone,
         format: payload.format ?? target.format,
+        imageUrl: payload.imageUrl ?? target.imageUrl,
         isActive: payload.isActive != null ? !!payload.isActive : target.isActive,
       },
       status: 'published',
@@ -944,7 +1099,7 @@ export default ({ strapi }: any) => ({
     return { ...order, suggestedCouriers };
   },
 
-  async patchOrder(publicId: string, patch: any) {
+  async patchOrder(publicId: string, patch: any, eventInput?: { action: string; ctx?: any; from?: string; to?: string; meta?: Record<string, any> }) {
     const token = parsePublicToken(publicId, 'GE');
     const numericId = Number(token);
     let target = await strapi.db.query('api::order.order').findOne({
@@ -956,12 +1111,42 @@ export default ({ strapi }: any) => ({
       });
     }
     if (!target) return null;
+
+    // Preserva o JSON `items` existente (lista de produtos, deliveryCoords, boMeta)
+    // mesclando com o patch, caso contrário a atualização perdia os items do cliente.
+    const existingItems = normalizeRawItems(target.items);
+    const patchItems = (patch?.data?.items && typeof patch.data.items === 'object' && !Array.isArray(patch.data.items)) ? patch.data.items : null;
+    const existingBoMeta = (existingItems.boMeta && typeof existingItems.boMeta === 'object') ? existingItems.boMeta : {};
+    const patchBoMeta = (patchItems?.boMeta && typeof patchItems.boMeta === 'object') ? patchItems.boMeta : {};
+
+    const mergedBoMeta: Record<string, any> = { ...existingBoMeta, ...patchBoMeta };
+    if (eventInput) {
+      const event = buildOrderTimelineEvent(eventInput.action, eventInput.ctx, {
+        from: eventInput.from ?? null,
+        to: eventInput.to ?? null,
+        meta: eventInput.meta ?? null,
+      });
+      const events = Array.isArray(existingBoMeta.events) ? existingBoMeta.events : [];
+      mergedBoMeta.events = [...events, event];
+    }
+
+    const mergedItems = {
+      ...existingItems,
+      ...(patchItems || {}),
+      boMeta: mergedBoMeta,
+    };
+
+    const finalData = { ...(patch?.data || {}), items: mergedItems };
+
     const updated = await strapi.documents('api::order.order').update({
       documentId: target.documentId,
-      data: patch.data,
+      data: finalData,
       status: 'published',
       populate: { user: true, courier: true, review: true },
     });
+
+    emitBoChange({ entity: 'order', id: target.documentId, action: 'update', meta: { event: eventInput?.action } });
+
     return updated;
   },
 
@@ -1020,6 +1205,18 @@ export default ({ strapi }: any) => ({
           },
         },
       },
+    }, {
+      action: 'approve',
+      ctx,
+      from: order.status,
+      to: 'APPROVED',
+      meta: {
+        storeId: store?.id || payload.storeId || null,
+        storeName: store?.name || payload.storeId || null,
+        costEuro: toNum(payload.costEuro, 0),
+        etaMinutes: Math.max(1, toNum(payload.etaMinutes, 10)),
+        resources: payload.resources || '',
+      },
     });
     if (!updated) return { ok: false, error: 'Falha ao atualizar pedido.' };
     const after = buildPublicOrder(updated);
@@ -1040,7 +1237,6 @@ export default ({ strapi }: any) => ({
         courier: null,
         items: {
           boMeta: {
-            ...((order as any).items?.boMeta || {}),
             infoRequestMessage: null,
             type: order.type,
             zone: order.zone,
@@ -1048,6 +1244,12 @@ export default ({ strapi }: any) => ({
           },
         },
       },
+    }, {
+      action: 'reject',
+      ctx,
+      from: order.status,
+      to: 'REJECTED',
+      meta: { reason },
     });
     if (!updated) return { ok: false, error: 'Falha ao rejeitar pedido.' };
     await this.notify('order_rejected', `Pedido ${order.id} rejeitado: ${reason}`, parsePublicId(order.clientId, 'CU'));
@@ -1068,7 +1270,6 @@ export default ({ strapi }: any) => ({
         order_status: ORDER_STATE.INFO_REQUESTED,
         items: {
           boMeta: {
-            ...((order as any).items?.boMeta || {}),
             infoRequestMessage: message,
             type: order.type,
             zone: order.zone,
@@ -1076,6 +1277,12 @@ export default ({ strapi }: any) => ({
           },
         },
       },
+    }, {
+      action: 'request_info',
+      ctx,
+      from: order.status,
+      to: 'INFO_REQUESTED',
+      meta: { message },
     });
     if (!updated) return { ok: false, error: 'Falha ao atualizar pedido.' };
     await this.notify('order_info_requested', `Pedido ${order.id}: informação adicional solicitada.`, parsePublicId(order.clientId, 'CU'));
@@ -1116,6 +1323,15 @@ export default ({ strapi }: any) => ({
         order_status: ORDER_STATE.ASSIGNED,
         courier: courierEntity.id,
       },
+    }, {
+      action: 'assign_courier',
+      ctx,
+      from: order.status,
+      to: 'ASSIGNED',
+      meta: {
+        courierId: courier.id,
+        courierName: courier.name,
+      },
     });
     if (!updated) return { ok: false, error: 'Falha ao atribuir estafeta.' };
     await this.notify('order_assigned', `Pedido ${order.id} atribuído ao estafeta ${courier.name}.`);
@@ -1131,6 +1347,10 @@ export default ({ strapi }: any) => ({
     if (!order) return { ok: false, error: 'Pedido não encontrado.' };
     const updated = await this.patchOrder(publicId, {
       data: { priority, is_urgent: priority === 5 },
+    }, {
+      action: 'set_priority',
+      ctx,
+      meta: { from: order.priority, to: priority },
     });
     if (!updated) return { ok: false, error: 'Falha ao atualizar prioridade.' };
     if (priority === 5) {
@@ -1146,7 +1366,12 @@ export default ({ strapi }: any) => ({
     const order = before;
     if (!order) return { ok: false, error: 'Pedido não encontrado.' };
     if (order.status !== 'ASSIGNED') return { ok: false, error: 'Apenas pedidos atribuídos podem iniciar trânsito.' };
-    const updated = await this.patchOrder(publicId, { data: { order_status: ORDER_STATE.IN_TRANSIT } });
+    const updated = await this.patchOrder(publicId, { data: { order_status: ORDER_STATE.IN_TRANSIT } }, {
+      action: 'start_transit',
+      ctx,
+      from: 'ASSIGNED',
+      to: 'IN_TRANSIT',
+    });
     if (!updated) return { ok: false, error: 'Falha ao iniciar trânsito.' };
     const after = buildPublicOrder(updated);
 
@@ -1158,7 +1383,12 @@ export default ({ strapi }: any) => ({
     const order = before;
     if (!order) return { ok: false, error: 'Pedido não encontrado.' };
     if (order.status !== 'IN_TRANSIT') return { ok: false, error: 'Apenas pedidos em trânsito podem ser concluídos.' };
-    const updated = await this.patchOrder(publicId, { data: { order_status: ORDER_STATE.DELIVERED } });
+    const updated = await this.patchOrder(publicId, { data: { order_status: ORDER_STATE.DELIVERED } }, {
+      action: 'complete',
+      ctx,
+      from: 'IN_TRANSIT',
+      to: 'DELIVERED',
+    });
     if (!updated) return { ok: false, error: 'Falha ao concluir pedido.' };
     const after = buildPublicOrder(updated);
 
@@ -1209,6 +1439,17 @@ export default ({ strapi }: any) => ({
         vehicleBrand: payload.brand || '',
         vehicleModel: payload.model || '',
         vehiclePlate: plateRes.value,
+        vehicleColor: payload.vehicleColor || '',
+        licenseNumber: payload.licenseNumber || '',
+        insuranceRef: payload.insuranceRef || '',
+        inspectionValidUntil: payload.inspectionValidUntil || null,
+        docLicenseUrl: String(payload.docLicenseUrl || '').trim(),
+        docInsuranceUrl: String(payload.docInsuranceUrl || '').trim(),
+        docInspectionUrl: String(payload.docInspectionUrl || '').trim(),
+        docCcUrl: String(payload.docCcUrl || '').trim(),
+        docSelfieUrl: String(payload.docSelfieUrl || '').trim(),
+        docIbanUrl: String(payload.docIbanUrl || '').trim(),
+        adminNotes: '',
         rating: 0,
         totalDeliveries: 0,
       },
@@ -1216,6 +1457,7 @@ export default ({ strapi }: any) => ({
     });
     strapi.log.info(`[BO] createCourier ST-${created.id}`);
     const pub = buildPublicCourier(created);
+    emitBoChange({ entity: 'courier', id: created.documentId, action: 'create' });
 
     return { ok: true, data: pub };
   },
@@ -1272,11 +1514,23 @@ export default ({ strapi }: any) => ({
         vehicleBrand: payload.vehicle?.brand ?? payload.brand ?? target.vehicleBrand,
         vehicleModel: payload.vehicle?.model ?? payload.model ?? target.vehicleModel,
         vehiclePlate: plateRes.value,
+        vehicleColor: payload.vehicle?.color ?? payload.vehicleColor ?? target.vehicleColor,
+        licenseNumber: payload.vehicle?.licenseNumber ?? payload.licenseNumber ?? target.licenseNumber,
+        insuranceRef: payload.vehicle?.insuranceRef ?? payload.insuranceRef ?? target.insuranceRef,
+        inspectionValidUntil: payload.vehicle?.inspectionValidUntil ?? payload.inspectionValidUntil ?? target.inspectionValidUntil,
+        adminNotes: payload.adminNotes ?? target.adminNotes,
+        docLicenseUrl: payload.docLicenseUrl ?? target.docLicenseUrl,
+        docInsuranceUrl: payload.docInsuranceUrl ?? target.docInsuranceUrl,
+        docInspectionUrl: payload.docInspectionUrl ?? target.docInspectionUrl,
+        docCcUrl: payload.docCcUrl ?? target.docCcUrl,
+        docSelfieUrl: payload.docSelfieUrl ?? target.docSelfieUrl,
+        docIbanUrl: payload.docIbanUrl ?? target.docIbanUrl,
       },
       status: 'published',
     });
     strapi.log.info(`[BO] updateCourier ${publicId}`);
     const after = buildPublicCourier(updated);
+    emitBoChange({ entity: 'courier', id: target.documentId, action: 'update' });
 
     return { ok: true, data: after };
   },
@@ -1315,6 +1569,8 @@ export default ({ strapi }: any) => ({
       patch.courier_status = shouldOnline ? COURIER_STATE.E06 : COURIER_STATE.E05;
     } else if (action === 'set_max') {
       patch.maxSimultaneousDeliveries = Math.max(1, Math.min(10, toNum(payload.maxConcurrent, target.maxSimultaneousDeliveries || 1)));
+    } else if (action === 'save_notes') {
+      patch.adminNotes = String(payload.notes ?? payload.adminNotes ?? '').trim();
     } else {
       return { ok: false, error: 'Ação inválida.' };
     }
@@ -1328,6 +1584,7 @@ export default ({ strapi }: any) => ({
       : target;
     strapi.log.info(`[BO] courierAction ${publicId} => ${action}`);
     const after = buildPublicCourier(updated);
+    emitBoChange({ entity: 'courier', id: target.documentId, action: 'transition', meta: { action } });
 
     return { ok: true, data: after };
   },
@@ -1349,7 +1606,10 @@ export default ({ strapi }: any) => ({
       select: ['id', 'email', 'firstName', 'lastName', 'phone', 'username', 'city', 'zone', 'nif', 'notes', 'marketingOptIn'],
       populate: {
         orders: {
-          select: ['id', 'createdAt', 'total_price', 'order_status'],
+          populate: {
+            review: true,
+            courier: true,
+          },
         },
         reviews: {
           select: ['rating'],
@@ -1377,6 +1637,7 @@ export default ({ strapi }: any) => ({
         nif: u.nif || '',
         notes: u.notes || '',
         marketingOptIn: !!u.marketingOptIn,
+        orders: buildCustomerOrderSummary(orders),
       };
     });
   },
@@ -1425,6 +1686,7 @@ export default ({ strapi }: any) => ({
     });
     const rows = await this.getCustomers();
     const mapped = rows.find((r: any) => r.id === idToPublic('CU', created.id));
+    emitBoChange({ entity: 'customer', id: created.id, action: 'create' });
 
     return { ok: true, data: mapped || null };
   },
@@ -1496,6 +1758,7 @@ export default ({ strapi }: any) => ({
 
     const rows = await this.getCustomers();
     const mapped = rows.find((r: any) => r.id === idToPublic('CU', userId));
+    emitBoChange({ entity: 'customer', id: userId, action: 'update' });
 
     return { ok: true, data: mapped || null };
   },
@@ -1516,6 +1779,7 @@ export default ({ strapi }: any) => ({
     await strapi.db.query('plugin::users-permissions.user').delete({
       where: { id: userId },
     });
+    emitBoChange({ entity: 'customer', id: userId, action: 'delete' });
 
     return { ok: true, data: { id: idToPublic('CU', userId) } };
   },

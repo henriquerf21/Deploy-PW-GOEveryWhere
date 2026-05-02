@@ -1,195 +1,336 @@
 <template>
-  <div v-if="!order" class="missing card">Pedido não encontrado.</div>
-  <div v-else class="detail">
-    <RouterLink to="/orders" class="back">← Lista de pedidos</RouterLink>
+  <div v-if="!order" class="bo-card bo-card--padded">
+    <div class="bo-empty">
+      <h3 class="bo-empty__title">Pedido não encontrado</h3>
+      <p class="bo-empty__hint">Volta à lista para escolher um pedido válido.</p>
+      <RouterLink to="/orders" class="bo-btn bo-btn--outline" style="margin-top: 12px;">Voltar à lista</RouterLink>
+    </div>
+  </div>
 
-    <header class="head card">
-      <div>
-        <h2 class="title">{{ order.id }}</h2>
-        <p class="sub">{{ order.clientName }} · {{ order.clientEmail }} · {{ order.zone }}</p>
+  <div v-else class="bo-page">
+    <RouterLink to="/orders" class="back-link"><ArrowLeft :size="14" /> Voltar à lista de pedidos</RouterLink>
+
+    <header class="bo-page-head">
+      <div class="bo-page-head__main">
+        <p class="bo-page-head__eyebrow">Pedido · {{ orderTypeLabels[order.type] }}</p>
+        <h1 class="bo-page-head__title">{{ order.id }}</h1>
+        <p class="bo-page-head__sub">
+          Cliente <strong>{{ order.clientName }}</strong> · {{ order.clientEmail }} · zona {{ order.zone }}
+        </p>
       </div>
-      <div class="badges">
-        <span class="pill">{{ orderStatusLabels[order.status] }}</span>
-        <span class="pill pill--pri">P{{ order.priority }} — {{ priorityLabels[order.priority] }}</span>
-        <span class="pill">{{ orderTypeLabels[order.type] }}</span>
+      <div class="bo-page-head__actions">
+        <span class="bo-badge" :class="statusBadgeClass(order.status)">{{ orderStatusLabels[order.status] }}</span>
+        <span class="bo-badge bo-badge--neutral">P{{ order.priority }} · {{ priorityLabels[order.priority] }}</span>
+        <span v-if="order.is_urgent" class="bo-badge bo-badge--danger">Urgente</span>
       </div>
     </header>
 
-    <div v-if="order.priority === 5" class="urgent card" role="alert">
-      Prioridade máxima (5 — Urgente): tratamento imediato obrigatório.
+    <div v-if="order.priority === 5" class="urgent-banner" role="alert">
+      <strong>Prioridade máxima (5 — Urgente).</strong> Tratamento imediato obrigatório.
     </div>
 
-    <div class="grid">
-      <div
-        v-if="order.storeId && order.courierId && [ORDER_STATUS.ASSIGNED, ORDER_STATUS.IN_TRANSIT].includes(order.status)"
-        class="card block wide"
-      >
-        <div class="row-links">
-          <RouterLink class="map-link" :to="{ name: 'map', query: { order: order.id } }">
-            Ver rota no mapa →
-          </RouterLink>
-        </div>
+    <div class="layout">
+      <div class="layout__main bo-stack--lg">
+        <section class="bo-card">
+          <header class="bo-card__head">
+            <div>
+              <h3 class="bo-card__title">Resumo do pedido</h3>
+              <p class="bo-card__sub">Dados de cliente, encomenda e morada de entrega.</p>
+            </div>
+          </header>
+          <div class="bo-card__body">
+            <div class="info-grid">
+              <div>
+                <h4 class="info-grid__h">Cliente</h4>
+                <dl class="bo-dl">
+                  <dt>Nome</dt><dd>{{ order.clientName }}</dd>
+                  <dt>Email</dt><dd>{{ order.clientEmail }}</dd>
+                  <dt>Telefone</dt><dd>{{ order.clientPhone || '—' }}</dd>
+                  <dt>NIF</dt><dd class="bo-mono">{{ order.clientNif || '—' }}</dd>
+                  <dt>Cidade</dt><dd>{{ order.clientCity || order.city || '—' }}</dd>
+                  <dt>Morada</dt><dd>{{ order.clientAddress || '—' }}</dd>
+                </dl>
+              </div>
+              <div>
+                <h4 class="info-grid__h">Encomenda</h4>
+                <dl class="bo-dl">
+                  <dt>Tipo</dt><dd>{{ orderTypeLabels[order.type] }}</dd>
+                  <dt>Zona</dt><dd>{{ order.zone }}</dd>
+                  <dt>Loja</dt><dd>{{ order.storeName || '—' }}</dd>
+                  <dt>Custo</dt><dd>{{ order.costEuro != null ? order.costEuro.toFixed(2) + ' €' : '—' }}</dd>
+                  <dt>ETA</dt><dd>{{ order.etaMinutes ? order.etaMinutes + ' min' : '—' }}</dd>
+                  <dt>Recursos</dt><dd>{{ order.resources || '—' }}</dd>
+                  <dt>Estafeta</dt><dd>{{ order.courierName || '—' }}</dd>
+                  <dt>Data</dt><dd class="bo-mono">{{ order.createdAt?.slice(0,16).replace('T',' ') }}</dd>
+                  <dt>GO Points</dt><dd>{{ order.go_points_used || 0 }}</dd>
+                  <dt>Avaliação</dt><dd>{{ order.rating != null ? order.rating + ' / 5' : '—' }}</dd>
+                </dl>
+              </div>
+              <div>
+                <h4 class="info-grid__h">Produtos</h4>
+                <ul v-if="order.items && order.items.length" class="items-list">
+                  <li v-for="(item, idx) in order.items" :key="idx" class="items-list__row">
+                    <span>{{ item.name }}</span>
+                    <span class="items-list__qty">x{{ item.qty }}</span>
+                  </li>
+                </ul>
+                <p v-else class="bo-muted" style="font-size: 13px;">Sem itens detalhados.</p>
+
+                <h4 class="info-grid__h" style="margin-top: 16px;">Entrega</h4>
+                <dl class="bo-dl">
+                  <dt>Morada</dt><dd>{{ order.deliveryAddress || '—' }}</dd>
+                  <dt>Cidade</dt><dd>{{ order.deliveryCity || '—' }}</dd>
+                </dl>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <section class="bo-card">
+          <header class="bo-card__head">
+            <div>
+              <h3 class="bo-card__title">Mapa do pedido</h3>
+              <p class="bo-card__sub">Loja Continente, cliente e estafeta (quando atribuído).</p>
+            </div>
+          </header>
+          <div class="bo-card__body" style="padding: 0;">
+            <div ref="mapContainer" class="order-map"></div>
+          </div>
+        </section>
+
+        <section v-if="order.clientReply || order.infoRequestMessage" class="bo-card s03-card">
+          <header class="bo-card__head">
+            <div>
+              <h3 class="bo-card__title">Esclarecimento (S-03)</h3>
+              <p class="bo-card__sub">Diálogo com o cliente sobre informação adicional solicitada.</p>
+            </div>
+          </header>
+          <div class="bo-card__body bo-stack">
+            <div v-if="order.infoRequestMessage" class="s03-block">
+              <span class="bo-eyebrow">Mensagem enviada ao cliente</span>
+              <p class="s03-block__text">{{ order.infoRequestMessage }}</p>
+            </div>
+            <div v-if="order.clientReply" class="s03-block s03-block--reply">
+              <span class="bo-eyebrow">Resposta do cliente</span>
+              <p class="s03-block__text">{{ order.clientReply }}</p>
+            </div>
+            <p v-else-if="order.status === ORDER_STATUS.INFO_REQUESTED" class="bo-muted" style="font-weight: 600; color: #92400e;">
+              Aguarda resposta do cliente.
+            </p>
+          </div>
+        </section>
+
+        <section class="bo-card">
+          <header class="bo-card__head">
+            <div>
+              <h3 class="bo-card__title">Histórico do pedido</h3>
+              <p class="bo-card__sub">Sequência de transições, com quem fez cada ação e quando.</p>
+            </div>
+          </header>
+          <div class="bo-card__body">
+            <ol v-if="timelineEntries.length" class="timeline">
+              <li v-for="(ev, idx) in timelineEntries" :key="idx" class="timeline__row" :class="`timeline__row--${ev.kind}`">
+                <span class="timeline__dot" aria-hidden="true" />
+                <div class="timeline__content">
+                  <div class="timeline__head">
+                    <span class="timeline__title">{{ ev.title }}</span>
+                    <span class="timeline__when bo-mono">{{ formatTimelineDate(ev.at) }}</span>
+                  </div>
+                  <p class="timeline__sub">
+                    <span class="timeline__actor">{{ ev.actorName }}</span>
+                    <template v-if="ev.transition"> · <span class="bo-mono">{{ ev.transition }}</span></template>
+                  </p>
+                  <p v-if="ev.detail" class="timeline__detail">{{ ev.detail }}</p>
+                </div>
+              </li>
+            </ol>
+            <p v-else class="bo-muted" style="font-size: 13px;">Sem registos de transição.</p>
+          </div>
+        </section>
+
+        <section class="bo-card">
+          <header class="bo-card__head">
+            <div>
+              <h3 class="bo-card__title">Notificações por email</h3>
+              <p class="bo-card__sub">Histórico das comunicações automáticas associadas a este pedido.</p>
+            </div>
+          </header>
+          <div class="bo-card__body">
+            <ul class="mail-list">
+              <li v-for="m in orderMails" :key="m.id" class="mail-list__row">
+                <div class="mail-list__head">
+                  <span class="bo-badge bo-badge--info">{{ m.kind }}</span>
+                  <span class="bo-mono bo-muted">{{ m.to }}</span>
+                  <span class="bo-mono bo-muted">{{ m.at.slice(0, 16).replace('T', ' ') }}</span>
+                </div>
+                <p class="mail-list__body">{{ m.body.slice(0, 240) }}{{ m.body.length > 240 ? '…' : '' }}</p>
+              </li>
+              <li v-if="!orderMails.length" class="bo-muted" style="font-size: 13px;">Nenhum email registado para este pedido.</li>
+            </ul>
+          </div>
+        </section>
       </div>
 
-      <section v-if="canApprove" class="card block">
-        <h3>Aprovar pedido</h3>
-        <p class="hint">Loja Continente de recolha, custo, tempo estimado e recursos necessários.</p>
-        <form class="form" @submit.prevent="doApprove">
-          <label>Loja Continente</label>
-          <select v-model="ap.storeId" class="inp" required>
-            <option disabled value="">Selecionar…</option>
-            <option v-for="s in logistics.continentStores" :key="s.id" :value="s.id">{{ s.name }}</option>
-          </select>
-          <label>Custo (€)</label>
-          <input v-model.number="ap.costEuro" type="number" step="0.01" min="0" class="inp" required />
-          <label>Tempo estimado (min)</label>
-          <input v-model.number="ap.etaMinutes" type="number" min="1" class="inp" required />
-          <label>Recursos necessários</label>
-          <textarea v-model="ap.resources" class="inp ta" rows="2" required placeholder="Ex.: Mota, caixa isotérmica M" />
-          <button type="submit" class="btn btn--go">Aprovar</button>
-        </form>
-      </section>
-
-      <section class="card block">
-        <h3>Prioridade</h3>
-        <p class="hint">Escala 1 (baixa) a 5 (urgente). Prioridade máxima gera alerta imediato no painel.</p>
-        <fieldset class="fieldset" :disabled="!canEditPriority">
-        <div class="pri-row">
-          <input v-model.number="pri" type="range" min="1" max="5" step="1" class="range" />
-          <span class="pri-val">{{ pri }} — {{ priorityLabels[pri] }}</span>
-        </div>
-        <button type="button" class="btn btn--sec" @click="doPriority">Atualizar prioridade</button>
-        </fieldset>
-      </section>
-
-      <section class="card block">
-        <h3>Rejeitar pedido</h3>
-        <p class="hint">Justificação obrigatória. É enviada notificação por email ao cliente (simulação).</p>
-        <fieldset class="fieldset" :disabled="!canReject">
-        <textarea v-model="rejectText" class="inp ta" rows="3" placeholder="Motivo da rejeição…" />
-        <button type="button" class="btn btn--danger" :disabled="!rejectText.trim()" @click="doReject">Rejeitar pedido</button>
-        </fieldset>
-      </section>
-
-      <section class="card block">
-        <h3>Pedir mais informações</h3>
-        <p class="hint">Email ao cliente e estado «Info adicional solicitada».</p>
-        <fieldset class="fieldset" :disabled="!canRequestInfo">
-        <textarea v-model="infoText" class="inp ta" rows="3" placeholder="O que precisas do cliente?" />
-        <button type="button" class="btn btn--sec" :disabled="!infoText.trim()" @click="doInfo">Enviar pedido de info</button>
-        </fieldset>
-      </section>
-
-      <!-- S-03: Resposta do Cliente ao Pedido de Info -->
-      <section v-if="order.clientReply || order.infoRequestMessage" class="card block wide s03-admin-card">
-        <h3 class="s03-admin-title">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
-            <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>
-          </svg>
-          Esclarecimento S-03
-        </h3>
-
-        <div v-if="order.infoRequestMessage" class="s03-admin-sent">
-          <span class="s03-label">Mensagem enviada ao cliente:</span>
-          <p class="s03-text">{{ order.infoRequestMessage }}</p>
-        </div>
-
-        <div v-if="order.clientReply" class="s03-admin-reply">
-          <span class="s03-label s03-label--reply">Resposta do Cliente:</span>
-          <p class="s03-text s03-text--reply">{{ order.clientReply }}</p>
-        </div>
-
-        <div v-else-if="order.status === ORDER_STATUS.INFO_REQUESTED" class="s03-admin-waiting">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#d97706" stroke-width="2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-          <span>Aguardando resposta do cliente…</span>
-        </div>
-      </section>
-
-      <section class="card block wide">
-        <h3>Atribuir estafeta</h3>
-        <p class="hint">Apenas estafetas online na zona do pedido, dentro do limite de entregas simultâneas.</p>
-        <fieldset class="fieldset" :disabled="!canAssignSection">
-        <div v-if="suggested.length" class="suggest">
-          <h4 class="suggest__title">Sugestão assistida (score)</h4>
-          <p class="hint">Ordenado por zona, disponibilidade, carga e distância à loja. A decisão final é sempre tua.</p>
-          <ul class="suggest-list">
-            <li v-for="s in suggested" :key="s.id" class="suggest-li">
-              <div class="suggest-top">
-                <strong>{{ s.name }}</strong>
-                <span class="suggest-score">score {{ s.score }}</span>
+      <aside class="layout__side bo-stack">
+        <section v-if="canApprove" class="bo-card">
+          <header class="bo-card__head">
+            <div>
+              <h3 class="bo-card__title">Aprovar pedido</h3>
+              <p class="bo-card__sub">Confirma loja de recolha, custo e ETA.</p>
+            </div>
+          </header>
+          <div class="bo-card__body">
+            <form class="bo-stack" @submit.prevent="doApprove">
+              <div class="bo-field">
+                <label class="bo-field__label">Loja Continente <span class="bo-required">*</span></label>
+                <select v-model="ap.storeId" class="bo-select" required>
+                  <option disabled value="">Selecionar...</option>
+                  <option v-for="s in logistics.continentStores" :key="s.id" :value="s.id">{{ s.name }}</option>
+                </select>
+                <span v-if="order.storeName" class="bo-field__hint">Loja original (Front-Office): {{ order.storeName }}</span>
               </div>
-              <div class="muted small">
-                {{ (s.reasons || []).join(' · ') }}
-                <template v-if="s.distanceKm != null"> · ~{{ s.distanceKm }} km à loja</template>
+              <div class="bo-row" style="gap: 12px;">
+                <div class="bo-field" style="flex: 1;">
+                  <label class="bo-field__label">Custo (€)</label>
+                  <input v-model.number="ap.costEuro" type="number" step="0.01" min="0" class="bo-input" required />
+                </div>
+                <div class="bo-field" style="flex: 1;">
+                  <label class="bo-field__label">ETA (min)</label>
+                  <input v-model.number="ap.etaMinutes" type="number" min="1" class="bo-input" required />
+                </div>
               </div>
-              <button type="button" class="btn btn--sec btn--xs" @click="pickCourier = s.id">Pré-selecionar</button>
-            </li>
-          </ul>
-        </div>
-        <ul v-if="!available.length" class="muted">Sem estafetas elegíveis para esta zona.</ul>
-        <div v-else class="assign-list">
-          <label v-for="c in available" :key="c.id" class="radio-line">
-            <input v-model="pickCourier" type="radio" :value="c.id" />
-            <span>{{ c.name }} · {{ c.vehicle?.type }} · max {{ c.maxConcurrent }} simult.</span>
-          </label>
-        </div>
-        <button type="button" class="btn btn--go" :disabled="!pickCourier" @click="doAssign">Atribuir</button>
-        <button
-          v-if="order.status === ORDER_STATUS.ASSIGNED"
-          type="button"
-          class="btn btn--sec btn--mt"
-          @click="doStartTransit"
-        >
-          Marcar em trânsito
-        </button>
-        </fieldset>
-      </section>
+              <div class="bo-field">
+                <label class="bo-field__label">Recursos necessários</label>
+                <textarea v-model="ap.resources" class="bo-textarea" rows="2" placeholder="Mota, caixa isotérmica..." required />
+              </div>
+              <button type="submit" class="bo-btn bo-btn--primary">Aprovar pedido</button>
+            </form>
+          </div>
+        </section>
 
-      <section v-if="order.status === ORDER_STATUS.IN_TRANSIT" class="card block wide">
-        <h3>Concluir entrega</h3>
-        <p class="hint">Marca o pedido como entregue, liberta o estafeta e atualiza a posição do estafeta para a morada do cliente (demo).</p>
-        <button type="button" class="btn btn--go" @click="doComplete">Marcar entregue</button>
-      </section>
+        <section class="bo-card">
+          <header class="bo-card__head">
+            <div>
+              <h3 class="bo-card__title">Prioridade</h3>
+              <p class="bo-card__sub">Ajusta a prioridade entre 1 (baixa) e 5 (urgente).</p>
+            </div>
+          </header>
+          <div class="bo-card__body">
+            <fieldset class="bo-stack" :disabled="!canEditPriority" style="border: none; padding: 0; margin: 0;">
+              <div class="priority-row">
+                <input v-model.number="pri" type="range" min="1" max="5" step="1" class="priority-row__range" />
+                <span class="bo-badge" :class="['bo-badge', 'priority-row__pill', 'p' + pri]">P{{ pri }} · {{ priorityLabels[pri] }}</span>
+              </div>
+              <button type="button" class="bo-btn bo-btn--outline" @click="doPriority">Atualizar prioridade</button>
+            </fieldset>
+          </div>
+        </section>
 
-      <section class="card block wide">
-        <h3>Notificações por email</h3>
-        <ul class="mail-list">
-          <li v-for="m in orderMails" :key="m.id" class="mail-li">
-            <strong>{{ m.kind }}</strong> → {{ m.to }} · {{ m.at.slice(0, 16).replace('T', ' ') }}
-            <div class="mail-body">{{ m.body.slice(0, 120) }}{{ m.body.length > 120 ? '…' : '' }}</div>
-          </li>
-          <li v-if="!orderMails.length" class="muted">Nenhum email registado para este pedido.</li>
-        </ul>
-      </section>
+        <section class="bo-card">
+          <header class="bo-card__head">
+            <div>
+              <h3 class="bo-card__title">Atribuir estafeta</h3>
+              <p class="bo-card__sub">Apenas estafetas online na zona, dentro do limite de simultâneos.</p>
+            </div>
+          </header>
+          <div class="bo-card__body bo-stack">
+            <fieldset class="bo-stack" :disabled="!canAssignSection" style="border: none; padding: 0; margin: 0;">
+              <div v-if="suggested.length" class="suggest">
+                <span class="bo-eyebrow">Sugestão assistida</span>
+                <ul class="suggest__list">
+                  <li v-for="s in suggested" :key="s.id" class="suggest__row" :class="{ 'is-selected': pickCourier === s.id }" @click="pickCourier = s.id">
+                    <div>
+                      <strong>{{ s.name }}</strong>
+                      <span class="suggest__score">score {{ s.score }}</span>
+                    </div>
+                    <p class="suggest__meta">
+                      {{ (s.reasons || []).join(' · ') }}<template v-if="s.distanceKm != null"> · ~{{ s.distanceKm }} km</template>
+                    </p>
+                  </li>
+                </ul>
+              </div>
+              <p v-if="!available.length" class="bo-muted" style="font-size: 13px;">Sem estafetas elegíveis para esta zona.</p>
+              <div v-else class="assign-list">
+                <label v-for="c in available" :key="c.id" class="assign-row" :class="{ 'is-selected': pickCourier === c.id }">
+                  <input v-model="pickCourier" type="radio" :value="c.id" />
+                  <span>
+                    <strong>{{ c.name }}</strong>
+                    <span class="assign-row__meta">{{ c.vehicle?.type || '—' }} · max {{ c.maxConcurrent }} simult.</span>
+                  </span>
+                </label>
+              </div>
+              <div class="bo-row">
+                <button type="button" class="bo-btn bo-btn--primary" :disabled="!pickCourier" @click="doAssign">Atribuir</button>
+                <button v-if="order.status === ORDER_STATUS.ASSIGNED" type="button" class="bo-btn bo-btn--outline" @click="doStartTransit">Marcar em trânsito</button>
+              </div>
+            </fieldset>
+          </div>
+        </section>
+
+        <section v-if="order.status === ORDER_STATUS.IN_TRANSIT" class="bo-card">
+          <header class="bo-card__head">
+            <div>
+              <h3 class="bo-card__title">Concluir entrega</h3>
+              <p class="bo-card__sub">Marca como entregue após a confirmação do estafeta.</p>
+            </div>
+          </header>
+          <div class="bo-card__body">
+            <button type="button" class="bo-btn bo-btn--success" @click="doComplete">Marcar como entregue</button>
+          </div>
+        </section>
+
+        <section class="bo-card">
+          <header class="bo-card__head">
+            <div>
+              <h3 class="bo-card__title">Pedir informação adicional</h3>
+              <p class="bo-card__sub">Email enviado ao cliente; estado passa a "Info adicional solicitada".</p>
+            </div>
+          </header>
+          <div class="bo-card__body bo-stack">
+            <fieldset class="bo-stack" :disabled="!canRequestInfo" style="border: none; padding: 0; margin: 0;">
+              <textarea v-model="infoText" class="bo-textarea" rows="3" placeholder="O que precisas do cliente?" />
+              <button type="button" class="bo-btn bo-btn--outline" :disabled="!infoText.trim()" @click="doInfo">Enviar pedido de info</button>
+            </fieldset>
+          </div>
+        </section>
+
+        <section class="bo-card">
+          <header class="bo-card__head">
+            <div>
+              <h3 class="bo-card__title">Rejeitar pedido</h3>
+              <p class="bo-card__sub">Justificação obrigatória. Cliente é notificado.</p>
+            </div>
+          </header>
+          <div class="bo-card__body bo-stack">
+            <fieldset class="bo-stack" :disabled="!canReject" style="border: none; padding: 0; margin: 0;">
+              <textarea v-model="rejectText" class="bo-textarea" rows="3" placeholder="Motivo da rejeição..." />
+              <button type="button" class="bo-btn bo-btn--danger" :disabled="!rejectText.trim()" @click="doReject">Rejeitar pedido</button>
+            </fieldset>
+          </div>
+        </section>
+      </aside>
     </div>
   </div>
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue';
+import { computed, onMounted, reactive, ref, watch, nextTick } from 'vue';
 import { useRoute } from 'vue-router';
+import { ArrowLeft } from 'lucide-vue-next';
 import {
-  logistics,
-  getOrderById,
-  approveOrder,
-  rejectOrder,
-  requestOrderInfo,
-  assignCourierToOrder,
-  setOrderPriority,
-  availableCouriersForOrder,
-  startTransit,
-  completeDelivery,
-  refreshOrderFromServer,
-  ORDER_STATUS,
-  orderStatusLabels,
+  logistics, getOrderById, getCourierById, approveOrder, rejectOrder, requestOrderInfo,
+  assignCourierToOrder, setOrderPriority, availableCouriersForOrder,
+  startTransit, completeDelivery, refreshOrderFromServer,
+  ORDER_STATUS, orderStatusLabels,
 } from '../stores/logisticsStore.js';
 import { orderTypeLabels, priorityLabels } from '../constants/logistics.js';
 import { toast } from '../utils/notify.js';
 
 const route = useRoute();
 const orderId = computed(() => route.params.id);
-
 const order = computed(() => getOrderById(orderId.value));
+const mapContainer = ref(null);
+let mapInstance = null;
 
 const ap = reactive({ storeId: '', costEuro: 6.5, etaMinutes: 35, resources: 'Mota, caixa isotérmica' });
 const pri = ref(3);
@@ -202,104 +343,203 @@ const suggested = computed(() => {
   return Array.isArray(list) ? list : [];
 });
 
-watch(
-  order,
-  (o) => {
-    if (o) {
-      pri.value = o.priority;
-      pickCourier.value = '';
+watch(order, (o) => {
+  if (o) {
+    pri.value = o.priority;
+    pickCourier.value = '';
+    if (o.storeName && !ap.storeId) {
+      const match = logistics.continentStores.find(s => s.name === o.storeName);
+      if (match) ap.storeId = match.id;
     }
-  },
-  { immediate: true }
-);
+    if (o.costEuro) ap.costEuro = o.costEuro;
+    nextTick(() => initMap());
+  }
+}, { immediate: true });
+
+function initMap() {
+  if (!mapContainer.value || !order.value) return;
+  if (typeof L === 'undefined') {
+    const link = document.createElement('link');
+    link.rel = 'stylesheet';
+    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
+    document.head.appendChild(link);
+    const script = document.createElement('script');
+    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
+    script.onload = () => buildMap();
+    document.head.appendChild(script);
+  } else {
+    buildMap();
+  }
+}
+
+function buildIcon(url, size) {
+  return L.icon({
+    iconUrl: url,
+    iconSize: [size, size],
+    iconAnchor: [size / 2, size],
+    popupAnchor: [0, -size],
+  });
+}
+
+function buildMap() {
+  if (!mapContainer.value || !order.value) return;
+  if (mapInstance) { mapInstance.remove(); mapInstance = null; }
+  const o = order.value;
+  const pLat = o.pickupLat || 41.15;
+  const pLng = o.pickupLng || -8.61;
+  const dLat = o.destLat || pLat;
+  const dLng = o.destLng || pLng;
+
+  const base = (import.meta.env.BASE_URL || '/');
+  const continenteIcon = buildIcon(`${base}media/map/continente-pin.png`, 28);
+  const customerIcon = buildIcon(`${base}media/map/customer-house-pin.png`, 26);
+  const courierIcon = buildIcon(`${base}media/map/courier-pin.png`, 40);
+
+  const points = [[pLat, pLng], [dLat, dLng]];
+  const courier = o.courierId ? getCourierById(o.courierId) : null;
+  if (courier && Number.isFinite(courier.lat) && Number.isFinite(courier.lng)) {
+    points.push([courier.lat, courier.lng]);
+  }
+
+  mapInstance = L.map(mapContainer.value).fitBounds(points, { padding: [40, 40], maxZoom: 15 });
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OSM' }).addTo(mapInstance);
+
+  L.marker([pLat, pLng], { icon: continenteIcon })
+    .addTo(mapInstance)
+    .bindPopup('<b>Loja Continente (recolha)</b><br>' + (o.storeName || 'Recolha'));
+
+  L.marker([dLat, dLng], { icon: customerIcon })
+    .addTo(mapInstance)
+    .bindPopup('<b>Cliente (entrega)</b><br>' + (o.deliveryAddress || 'Destino'));
+
+  if (courier && Number.isFinite(courier.lat) && Number.isFinite(courier.lng)) {
+    L.marker([courier.lat, courier.lng], { icon: courierIcon })
+      .addTo(mapInstance)
+      .bindPopup('<b>Estafeta</b><br>' + (courier.name || o.courierName || ''));
+    L.polyline([[courier.lat, courier.lng], [pLat, pLng]], { color: '#e8ff00', weight: 4, opacity: 0.85 }).addTo(mapInstance);
+  }
+
+  L.polyline([[pLat, pLng], [dLat, dLng]], { color: '#00ff66', weight: 4, opacity: 0.9, dashArray: '8,6' }).addTo(mapInstance);
+}
 
 async function syncOrderDetail() {
   const id = orderId.value;
   if (!id) return;
+  try { await refreshOrderFromServer(id); } catch { /* silently fail */ }
+}
+onMounted(() => { void syncOrderDetail(); });
+watch(orderId, () => { void syncOrderDetail(); });
+
+const TIMELINE_LABELS = {
+  created: { title: 'Pedido criado', kind: 'created' },
+  approve: { title: 'Pedido aprovado', kind: 'approved' },
+  reject: { title: 'Pedido rejeitado', kind: 'rejected' },
+  request_info: { title: 'Informação solicitada ao cliente', kind: 'info' },
+  assign_courier: { title: 'Estafeta atribuído', kind: 'assigned' },
+  start_transit: { title: 'Em trânsito', kind: 'transit' },
+  complete: { title: 'Entrega concluída', kind: 'delivered' },
+  set_priority: { title: 'Prioridade alterada', kind: 'priority' },
+};
+
+const timelineEntries = computed(() => {
+  const list = order.value?.timeline;
+  if (!Array.isArray(list)) return [];
+  return list.map((ev) => {
+    const cfg = TIMELINE_LABELS[ev.action] || { title: ev.action || '—', kind: 'generic' };
+    const meta = ev.meta || {};
+    let detail = '';
+    switch (ev.action) {
+      case 'approve':
+        detail = [meta.storeName ? `Loja: ${meta.storeName}` : null, meta.costEuro != null ? `Custo: ${Number(meta.costEuro).toFixed(2)}€` : null, meta.etaMinutes != null ? `ETA: ${meta.etaMinutes} min` : null]
+          .filter(Boolean).join(' · ');
+        break;
+      case 'reject':
+        detail = meta.reason ? `Motivo: ${meta.reason}` : '';
+        break;
+      case 'request_info':
+        detail = meta.message ? `Mensagem: ${meta.message}` : '';
+        break;
+      case 'assign_courier':
+        detail = meta.courierName ? `Estafeta: ${meta.courierName}` : '';
+        break;
+      case 'set_priority':
+        detail = (meta.from != null && meta.to != null) ? `P${meta.from} → P${meta.to}` : '';
+        break;
+      default:
+        detail = '';
+    }
+    return {
+      title: cfg.title,
+      kind: cfg.kind,
+      at: ev.at,
+      actorName: ev.actor?.name || 'Sistema',
+      transition: (ev.from && ev.to) ? `${ev.from} → ${ev.to}` : null,
+      detail,
+    };
+  });
+});
+
+function formatTimelineDate(iso) {
+  if (!iso) return '—';
   try {
-    await refreshOrderFromServer(id);
-  } catch (e) {
-    toast(e?.message || 'Não foi possível carregar o pedido.', 'error');
+    const d = new Date(iso);
+    return d.toLocaleString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+  } catch {
+    return String(iso).slice(0, 16).replace('T', ' ');
   }
 }
 
-onMounted(() => {
-  void syncOrderDetail();
-});
-
-watch(orderId, () => {
-  void syncOrderDetail();
-});
-
-const canApprove = computed(() => {
-  const o = order.value;
-  return o && (o.status === ORDER_STATUS.PENDING || o.status === ORDER_STATUS.INFO_REQUESTED);
-});
-
-const canEditPriority = computed(() => {
-  const o = order.value;
-  return o && ![ORDER_STATUS.REJECTED, ORDER_STATUS.DELIVERED].includes(o.status);
-});
-
-const canReject = computed(() => {
-  const o = order.value;
-  return o && ![ORDER_STATUS.REJECTED, ORDER_STATUS.DELIVERED].includes(o.status);
-});
-
-const canRequestInfo = computed(() => {
-  const o = order.value;
-  return o && ![ORDER_STATUS.REJECTED, ORDER_STATUS.DELIVERED].includes(o.status);
-});
-
-const canAssignSection = computed(() => {
-  const o = order.value;
-  return o && [ORDER_STATUS.APPROVED, ORDER_STATUS.ASSIGNED].includes(o.status);
-});
-
+const canApprove = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].includes(order.value.status));
+const canEditPriority = computed(() => order.value && !['REJECTED', 'DELIVERED'].includes(order.value.status));
+const canReject = computed(() => order.value && !['REJECTED', 'DELIVERED'].includes(order.value.status));
+const canRequestInfo = computed(() => order.value && !['REJECTED', 'DELIVERED'].includes(order.value.status));
+const canAssignSection = computed(() => order.value && ['APPROVED', 'ASSIGNED'].includes(order.value.status));
 const available = computed(() => (order.value ? availableCouriersForOrder(order.value.id) : []));
+const orderMails = computed(() => logistics.emailLog.filter((e) => e.orderId === orderId.value));
 
-const orderMails = computed(() =>
-  logistics.emailLog.filter((e) => e.orderId === orderId.value)
-);
+function statusBadgeClass(status) {
+  switch (status) {
+    case ORDER_STATUS.PENDING: return 'bo-badge--warn';
+    case ORDER_STATUS.INFO_REQUESTED: return 'bo-badge--purple';
+    case ORDER_STATUS.REJECTED: return 'bo-badge--danger';
+    case ORDER_STATUS.APPROVED: return 'bo-badge--info';
+    case ORDER_STATUS.ASSIGNED: return 'bo-badge--info';
+    case ORDER_STATUS.IN_TRANSIT: return 'bo-badge--brand';
+    case ORDER_STATUS.DELIVERED: return 'bo-badge--success';
+    default: return 'bo-badge--neutral';
+  }
+}
 
 async function doApprove() {
   const r = await approveOrder(order.value.id, { ...ap });
   toast(r.ok ? 'Pedido aprovado.' : r.error, r.ok ? 'success' : 'error');
   if (r.ok) void syncOrderDetail();
 }
-
 async function doReject() {
   const r = await rejectOrder(order.value.id, rejectText.value);
-  toast(r.ok ? 'Pedido rejeitado. Email enviado ao cliente (sim.).' : r.error, r.ok ? 'success' : 'error');
-  if (r.ok) rejectText.value = '';
-  if (r.ok) void syncOrderDetail();
+  toast(r.ok ? 'Pedido rejeitado.' : r.error, r.ok ? 'success' : 'error');
+  if (r.ok) { rejectText.value = ''; void syncOrderDetail(); }
 }
-
 async function doInfo() {
   const r = await requestOrderInfo(order.value.id, infoText.value);
   toast(r.ok ? 'Pedido de informação enviado.' : r.error, r.ok ? 'success' : 'error');
-  if (r.ok) infoText.value = '';
-  if (r.ok) void syncOrderDetail();
+  if (r.ok) { infoText.value = ''; void syncOrderDetail(); }
 }
-
 async function doAssign() {
   const r = await assignCourierToOrder(order.value.id, pickCourier.value);
   toast(r.ok ? 'Estafeta atribuído.' : r.error, r.ok ? 'success' : 'error');
   if (r.ok) void syncOrderDetail();
 }
-
 async function doPriority() {
   const r = await setOrderPriority(order.value.id, pri.value);
   toast(r.ok ? 'Prioridade atualizada.' : r.error, r.ok ? 'success' : 'error');
   if (r.ok) void syncOrderDetail();
 }
-
 async function doStartTransit() {
   const r = await startTransit(order.value.id);
   toast(r.ok ? 'Pedido em trânsito.' : 'Não aplicável', r.ok ? 'success' : 'error');
   if (r.ok) void syncOrderDetail();
 }
-
 async function doComplete() {
   const r = await completeDelivery(order.value.id);
   toast(r.ok ? 'Pedido marcado como entregue.' : r.error, r.ok ? 'success' : 'error');
@@ -308,361 +548,319 @@ async function doComplete() {
 </script>
 
 <style scoped>
-.missing {
-  padding: 24px;
-}
-
-.detail {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-}
-
-.back {
+.back-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   font-size: 13px;
   font-weight: 600;
   color: var(--bo-brand);
   text-decoration: none;
+  width: fit-content;
 }
 
-.card {
-  background: var(--bo-surface);
-  border-radius: var(--bo-radius-lg);
-  border: 1px solid var(--bo-border);
-  box-shadow: var(--bo-shadow);
+.back-link:hover { opacity: 0.75; }
+
+.urgent-banner {
+  padding: 14px 18px;
+  background: var(--bo-danger-soft);
+  border: 1px solid #fecaca;
+  border-left: 4px solid var(--bo-danger);
+  border-radius: var(--bo-radius);
+  color: #991b1b;
+  font-size: 14px;
 }
 
-.head {
-  padding: 20px 24px;
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: space-between;
-  gap: 12px;
+.layout {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 380px;
+  gap: 22px;
   align-items: flex-start;
 }
 
-.title {
-  margin: 0 0 6px;
-  font-family: var(--bo-font-display);
-  font-size: 22px;
+@media (max-width: 1100px) {
+  .layout { grid-template-columns: 1fr; }
+  .layout__side { position: static; }
 }
 
-.sub {
-  margin: 0;
-  font-size: 14px;
-  color: var(--bo-text-secondary);
+.layout__side {
+  position: sticky;
+  top: 16px;
 }
 
-.badges {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-}
-
-.pill {
-  font-size: 12px;
-  font-weight: 600;
-  padding: 6px 12px;
-  border-radius: 999px;
-  background: var(--bo-page);
-  color: var(--bo-text-secondary);
-}
-
-.pill--pri {
-  background: #fef3c7;
-  color: #b45309;
-}
-
-.urgent {
-  padding: 14px 18px;
-  background: #fef2f2;
-  border-color: #fecaca;
-  color: #991b1b;
-  font-weight: 600;
-}
-
-.grid {
+.info-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 16px;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 22px;
 }
 
-.block {
-  padding: 20px;
-}
-
-.block.wide {
-  grid-column: 1 / -1;
-}
-
-.block h3 {
-  margin: 0 0 8px;
-  font-size: 16px;
-}
-
-.hint {
-  margin: 0 0 14px;
-  font-size: 13px;
+.info-grid__h {
+  margin: 0 0 10px;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
   color: var(--bo-text-secondary);
 }
 
-.form {
+.items-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 6px;
 }
 
-label {
-  font-size: 12px;
-  font-weight: 600;
-  margin-top: 6px;
-}
-
-.inp {
-  border: 1px solid var(--bo-border);
-  border-radius: var(--bo-radius-sm);
-  padding: 10px 12px;
-  font-size: 14px;
-}
-
-.ta {
-  resize: vertical;
-}
-
-.pri-row {
+.items-list__row {
   display: flex;
+  justify-content: space-between;
   align-items: center;
-  gap: 14px;
-  margin-bottom: 12px;
-}
-
-.range {
-  flex: 1;
-}
-
-.pri-val {
+  padding: 8px 12px;
+  background: var(--bo-page);
+  border-radius: 8px;
   font-size: 13px;
-  font-weight: 600;
-  min-width: 140px;
 }
 
-.btn {
-  margin-top: 10px;
-  padding: 10px 16px;
-  border-radius: var(--bo-radius-sm);
-  border: none;
-  font-weight: 600;
-  font-size: 14px;
-  cursor: pointer;
+.items-list__qty {
+  font-weight: 700;
+  color: var(--bo-brand);
+  font-variant-numeric: tabular-nums;
 }
 
-.btn--go {
-  background: var(--bo-brand);
-  color: #fff;
+.order-map {
+  width: 100%;
+  height: 320px;
+  border-top: 1px solid var(--bo-border);
 }
 
-.btn--sec {
+.s03-card { border-left: 3px solid var(--bo-warning); }
+
+.s03-block {
+  padding: 12px 14px;
   background: var(--bo-page);
   border: 1px solid var(--bo-border);
+  border-radius: 10px;
+}
+
+.s03-block--reply {
+  background: var(--bo-success-soft);
+  border-color: #a7f3d0;
+}
+
+.s03-block__text {
+  margin: 6px 0 0;
+  font-size: 13.5px;
+  line-height: 1.55;
   color: var(--bo-text);
 }
 
-.btn--danger {
-  background: #dc2626;
-  color: #fff;
-}
-
-.btn--mt {
-  margin-left: 8px;
-}
-
-.btn--xs {
-  margin-top: 8px;
-  padding: 6px 10px;
-  font-size: 12px;
-}
-
-.suggest {
-  margin: 12px 0 14px;
-  padding: 12px 14px;
-  border-radius: var(--bo-radius-sm);
-  background: var(--bo-page);
-  border: 1px dashed var(--bo-border);
-}
-
-.suggest__title {
-  margin: 0 0 6px;
-  font-size: 13px;
-}
-
-.suggest-list {
-  list-style: none;
-  margin: 10px 0 0;
-  padding: 0;
+.priority-row {
   display: flex;
-  flex-direction: column;
-  gap: 10px;
-}
-
-.suggest-li {
-  padding-bottom: 10px;
-  border-bottom: 1px solid var(--bo-border);
-}
-
-.suggest-li:last-child {
-  border-bottom: none;
-  padding-bottom: 0;
-}
-
-.suggest-top {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-
-.suggest-score {
-  font-size: 12px;
-  font-weight: 700;
-  color: var(--bo-brand-hover);
-}
-
-.small {
-  font-size: 12px;
-  line-height: 1.35;
-}
-
-.assign-list {
+  align-items: center;
+  gap: 12px;
   margin-bottom: 12px;
 }
 
-.radio-line {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 14px;
-  margin-bottom: 8px;
+.priority-row__range { flex: 1; accent-color: var(--bo-brand); }
+
+.priority-row__pill {
+  font-variant-numeric: tabular-nums;
 }
 
-.mail-list {
+.priority-row__pill.p1 { background: #f3f4f6; color: #6b7280; border-color: #e5e7eb; }
+.priority-row__pill.p2 { background: #dbeafe; color: #1d4ed8; border-color: #bfdbfe; }
+.priority-row__pill.p3 { background: var(--bo-success-soft); color: var(--bo-success); border-color: #a7f3d0; }
+.priority-row__pill.p4 { background: var(--bo-warning-soft); color: #b45309; border-color: #fde68a; }
+.priority-row__pill.p5 { background: var(--bo-danger-soft); color: var(--bo-danger); border-color: #fecaca; }
+
+.suggest {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 12px 14px;
+  border-radius: 10px;
+  background: var(--bo-brand-soft);
+  border: 1px dashed var(--bo-brand-mid);
+}
+
+.suggest__list {
   list-style: none;
   margin: 0;
   padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
-.mail-li {
-  padding: 12px 0;
-  border-bottom: 1px solid var(--bo-border);
-  font-size: 13px;
+.suggest__row {
+  padding: 10px 12px;
+  border-radius: 8px;
+  background: var(--bo-surface);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: border-color var(--bo-transition-fast);
 }
 
-.mail-body {
-  margin-top: 6px;
+.suggest__row:hover { border-color: var(--bo-brand-mid); }
+
+.suggest__row.is-selected {
+  border-color: var(--bo-brand);
+  box-shadow: 0 0 0 3px rgba(27, 138, 74, 0.12);
+}
+
+.suggest__row > div { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.suggest__score { font-size: 11px; font-weight: 700; color: var(--bo-brand-hover); background: var(--bo-brand-soft); padding: 2px 8px; border-radius: 999px; }
+.suggest__meta { margin: 4px 0 0; font-size: 11.5px; color: var(--bo-text-secondary); line-height: 1.4; }
+
+.assign-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.assign-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  border: 1px solid var(--bo-border);
+  background: var(--bo-surface);
+  font-size: 13.5px;
+  cursor: pointer;
+  transition: border-color var(--bo-transition-fast);
+}
+
+.assign-row:hover { border-color: var(--bo-brand-mid); background: var(--bo-brand-soft); }
+
+.assign-row.is-selected {
+  border-color: var(--bo-brand);
+  box-shadow: 0 0 0 3px rgba(27, 138, 74, 0.12);
+}
+
+.assign-row input { accent-color: var(--bo-brand); }
+
+.assign-row__meta {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
   color: var(--bo-text-secondary);
+}
+
+.mail-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+
+.mail-list__row {
+  padding: 12px 14px;
+  border: 1px solid var(--bo-border);
+  border-radius: 10px;
+  background: var(--bo-surface);
+}
+
+.mail-list__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-bottom: 6px;
+}
+
+.mail-list__body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--bo-text);
   white-space: pre-wrap;
 }
 
-.muted {
-  color: var(--bo-text-secondary);
-  font-size: 14px;
-}
-
-.row-links {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 8px;
-}
-
-.map-link {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--bo-brand);
-  text-decoration: none;
-}
-
-.map-link:hover {
-  text-decoration: underline;
-}
-
-.fieldset {
+.timeline {
+  list-style: none;
   margin: 0;
-  padding: 0;
-  border: none;
-  min-width: 0;
+  padding: 4px 0 4px 8px;
+  position: relative;
 }
 
-.fieldset:disabled .inp,
-.fieldset:disabled .btn {
-  opacity: 0.55;
-  cursor: not-allowed;
+.timeline::before {
+  content: '';
+  position: absolute;
+  top: 6px;
+  bottom: 6px;
+  left: 13px;
+  width: 2px;
+  background: var(--bo-border, #e2e8f0);
+  border-radius: 2px;
 }
 
-/* S-03: Esclarecimento — Admin View */
-.s03-admin-card {
-  border-left: 4px solid #f59e0b;
-  background: #fffdf5;
+.timeline__row {
+  position: relative;
+  padding-left: 30px;
+  padding-bottom: 16px;
 }
 
-.s03-admin-title {
+.timeline__row:last-child { padding-bottom: 0; }
+
+.timeline__dot {
+  position: absolute;
+  left: 6px;
+  top: 4px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #94a3b8;
+  border: 3px solid var(--bo-surface, #fff);
+  box-shadow: 0 0 0 1px var(--bo-border, #e2e8f0);
+}
+
+.timeline__row--created .timeline__dot { background: #6366f1; }
+.timeline__row--approved .timeline__dot { background: #10b981; }
+.timeline__row--rejected .timeline__dot { background: #ef4444; }
+.timeline__row--info .timeline__dot { background: #a855f7; }
+.timeline__row--assigned .timeline__dot { background: #0ea5e9; }
+.timeline__row--transit .timeline__dot { background: #f59e0b; }
+.timeline__row--delivered .timeline__dot { background: #22c55e; }
+.timeline__row--priority .timeline__dot { background: #ec4899; }
+
+.timeline__content {
   display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0 0 14px;
-  font-size: 15px;
-  color: #92400e;
+  flex-direction: column;
+  gap: 2px;
 }
 
-.s03-admin-sent {
-  margin-bottom: 14px;
-  padding: 12px 14px;
-  background: var(--bo-page);
-  border: 1px solid var(--bo-border);
-  border-radius: var(--bo-radius-sm);
+.timeline__head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  flex-wrap: wrap;
 }
 
-.s03-label {
-  display: block;
-  font-size: 11px;
+.timeline__title {
+  font-size: 13.5px;
   font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-  color: var(--bo-text-secondary);
-  margin-bottom: 4px;
+  color: var(--bo-text, #0f172a);
 }
 
-.s03-label--reply {
-  color: #065f46;
+.timeline__when {
+  font-size: 11.5px;
+  color: var(--bo-text-secondary, #64748b);
+  white-space: nowrap;
 }
 
-.s03-text {
+.timeline__sub {
   margin: 0;
-  font-size: 14px;
+  font-size: 12.5px;
+  color: var(--bo-text-secondary, #64748b);
+}
+
+.timeline__actor {
+  font-weight: 600;
+  color: var(--bo-text, #0f172a);
+}
+
+.timeline__detail {
+  margin: 4px 0 0;
+  font-size: 12.5px;
+  color: var(--bo-text-secondary, #475569);
   line-height: 1.5;
-  color: var(--bo-text);
-}
-
-.s03-admin-reply {
-  padding: 14px 16px;
-  background: #ecfdf5;
-  border: 1px solid #a7f3d0;
-  border-radius: var(--bo-radius-sm);
-}
-
-.s03-text--reply {
-  font-weight: 600;
-  color: #065f46;
-}
-
-.s03-admin-waiting {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 14px;
-  background: #fffbeb;
-  border: 1px solid #fde68a;
-  border-radius: var(--bo-radius-sm);
-  font-size: 13px;
-  font-weight: 600;
-  color: #92400e;
 }
 </style>
