@@ -254,6 +254,7 @@ function statusBadgeClass(status) {
     case ORDER_STATUS.ASSIGNED: return 'bo-badge--info';
     case ORDER_STATUS.IN_TRANSIT: return 'bo-badge--brand';
     case ORDER_STATUS.DELIVERED: return 'bo-badge--success';
+    case ORDER_STATUS.CANCELLED_ADMIN: return 'bo-badge--danger';
     default: return 'bo-badge--neutral';
   }
 }

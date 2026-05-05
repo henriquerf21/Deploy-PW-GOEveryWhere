@@ -9,6 +9,9 @@
         </p>
       </div>
       <div class="bo-page-head__actions">
+        <button type="button" class="bo-btn bo-btn--outline" :disabled="reportsBusy" @click="syncReports">
+          {{ reportsBusy ? 'A sincronizar…' : 'Sincronizar com servidor' }}
+        </button>
         <button type="button" class="bo-btn bo-btn--outline" @click="exportOrders">Exportar pedidos</button>
         <button type="button" class="bo-btn bo-btn--primary" @click="exportFull">Exportar relatório completo</button>
       </div>
@@ -101,15 +104,34 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, onMounted, ref } from 'vue';
 import {
   logistics,
   monthlyRevenueFromOrders,
   cancellationRatePct,
   exportOrdersCsv,
   exportFullReportCsv,
+  refreshServerReports,
 } from '../stores/logisticsStore.js';
 import { toast } from '../utils/notify.js';
+
+const reportsBusy = ref(false);
+
+async function syncReports() {
+  reportsBusy.value = true;
+  try {
+    await refreshServerReports();
+    toast('Indicadores alinhados com GET /bo/reports.', 'success');
+  } catch (e) {
+    toast(e?.message || 'Falha ao sincronizar.', 'error');
+  } finally {
+    reportsBusy.value = false;
+  }
+}
+
+onMounted(() => {
+  void syncReports();
+});
 
 const cancelPct = computed(() => cancellationRatePct());
 

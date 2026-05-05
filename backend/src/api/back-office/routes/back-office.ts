@@ -6,6 +6,8 @@ export default {
 
     { method: 'GET', path: '/bo/orders', handler: 'back-office.listOrders', config: { auth: false } },
     { method: 'GET', path: '/bo/orders/:id', handler: 'back-office.getOrder', config: { auth: false } },
+    { method: 'PATCH', path: '/bo/orders/:id', handler: 'back-office.patchOrder', config: { auth: false } },
+    { method: 'POST', path: '/bo/orders/:id/cancel', handler: 'back-office.cancelOrder', config: { auth: false } },
     { method: 'POST', path: '/bo/orders/:id/approve', handler: 'back-office.approveOrder', config: { auth: false } },
     { method: 'POST', path: '/bo/orders/:id/reject', handler: 'back-office.rejectOrder', config: { auth: false } },
     { method: 'POST', path: '/bo/orders/:id/request-info', handler: 'back-office.requestOrderInfo', config: { auth: false } },
@@ -38,6 +40,9 @@ export default {
     { method: 'GET', path: '/bo/map', handler: 'back-office.operationsMap', config: { auth: false } },
     { method: 'GET', path: '/bo/dashboard', handler: 'back-office.dashboard', config: { auth: false } },
     { method: 'GET', path: '/bo/reports', handler: 'back-office.reports', config: { auth: false } },
+    { method: 'GET', path: '/bo/app-notifications', handler: 'back-office.appNotifications', config: { auth: false } },
+    { method: 'POST', path: '/bo/app-notifications/:documentId/read', handler: 'back-office.markAppNotificationRead', config: { auth: false } },
+
     { method: 'GET', path: '/bo/customers', handler: 'back-office.customers', config: { auth: false } },
     { method: 'POST', path: '/bo/customers', handler: 'back-office.createCustomer', config: { auth: false } },
     { method: 'PATCH', path: '/bo/customers/:id', handler: 'back-office.updateCustomer', config: { auth: false } },

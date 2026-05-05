@@ -31,6 +31,7 @@ const ORDER_STATE = {
   ACCEPTED: 'S-07 Aceite pelo Estafeta',
   IN_TRANSIT: 'S-09 Em Trânsito',
   DELIVERED: 'S-11 Entregue',
+  CANCELLED_ADMIN: 'S-14 Cancelado pelo Admin',
 };
 
 const COURIER_STATE = {
@@ -156,6 +157,7 @@ function mapOrderStatus(strapiStatus?: string) {
   if (strapiStatus === ORDER_STATE.ASSIGNED) return 'ASSIGNED';
   if (strapiStatus === ORDER_STATE.IN_TRANSIT) return 'IN_TRANSIT';
   if (strapiStatus === ORDER_STATE.DELIVERED) return 'DELIVERED';
+  if (strapiStatus === ORDER_STATE.CANCELLED_ADMIN) return 'CANCELLED_ADMIN';
   return 'PENDING';
 }
 
@@ -246,6 +248,9 @@ function buildPublicOrder(entry: any) {
       ? (`${courier.firstName ?? ''} ${courier.lastName ?? ''}`.trim() || courier.fullName || null)
       : null,
     rejectionReason: attrs.rejectionReason || null,
+    cancelReason: attrs.cancelReason || null,
+    communicationLog: Array.isArray(bo.communicationLog) ? bo.communicationLog : [],
+    adminInternalNote: bo.adminInternalNote || null,
     infoRequestMessage: bo.infoRequestMessage || null,
     clientReply: attrs.clientReply || null,
     deliveryAddress: deliveryCoords.address || attrs.deliveryAddress || '',
@@ -1064,7 +1069,16 @@ export default ({ strapi }: any) => ({
 
   async listOrders(filters: any) {
     const rows = await this.getOrdersMapped();
-    const allowedBoStatuses = new Set(['PENDING', 'INFO_REQUESTED', 'REJECTED', 'APPROVED', 'ASSIGNED', 'IN_TRANSIT', 'DELIVERED']);
+    const allowedBoStatuses = new Set([
+      'PENDING',
+      'INFO_REQUESTED',
+      'REJECTED',
+      'APPROVED',
+      'ASSIGNED',
+      'IN_TRANSIT',
+      'DELIVERED',
+      'CANCELLED_ADMIN',
+    ]);
     const requestedStatus = String(filters.status || '').trim();
     const byStatus = allowedBoStatuses.has(requestedStatus) ? requestedStatus : '';
     return rows.filter((o: any) => {
@@ -1105,7 +1119,18 @@ export default ({ strapi }: any) => ({
     return { ...order, suggestedCouriers };
   },
 
-  async patchOrder(publicId: string, patch: any, eventInput?: { action: string; ctx?: any; from?: string; to?: string; meta?: Record<string, any> }) {
+  async patchOrder(
+    publicId: string,
+    patch: any,
+    eventInput?: {
+      action: string;
+      ctx?: any;
+      from?: string;
+      to?: string;
+      meta?: Record<string, any>;
+      communication?: Record<string, any>;
+    }
+  ) {
     const token = parsePublicToken(publicId, 'GE');
     const numericId = Number(token);
     let target = await strapi.db.query('api::order.order').findOne({
@@ -1134,6 +1159,18 @@ export default ({ strapi }: any) => ({
       });
       const events = Array.isArray(existingBoMeta.events) ? existingBoMeta.events : [];
       mergedBoMeta.events = [...events, event];
+    }
+    const comm = eventInput?.communication;
+    if (comm && typeof comm === 'object') {
+      const prevLog = Array.isArray(mergedBoMeta.communicationLog) ? mergedBoMeta.communicationLog : [];
+      mergedBoMeta.communicationLog = [
+        ...prevLog,
+        {
+          id: `cm-${Date.now()}-${Math.random().toString(36).slice(2, 7)}`,
+          at: new Date().toISOString(),
+          ...comm,
+        },
+      ];
     }
 
     const mergedItems = {
@@ -1173,13 +1210,13 @@ export default ({ strapi }: any) => ({
   },
 
   async trySendEmail(to: string, subject: string, text: string) {
-    try {
-      const emailService = strapi.plugin('email')?.service('email');
-      if (!emailService) return;
-      await emailService.send({ to, subject, text });
-    } catch {
-      // email provider is optional in dev
+    const emailService = strapi.plugin('email')?.service('email');
+    if (!emailService) {
+      const err = new Error('email_plugin_unavailable');
+      (err as any).code = 'no_provider';
+      throw err;
     }
+    await emailService.send({ to, subject, text });
   },
 
   async approveOrder(ctx: BoCtx | undefined, publicId: string, payload: any) {
@@ -1236,6 +1273,17 @@ export default ({ strapi }: any) => ({
     const before = auditSnapshotOrder(await this.getOrder(ctx, publicId));
     const order = before;
     if (!order) return { ok: false, error: 'Pedido não encontrado.' };
+    const subject = `Pedido ${order.id} rejeitado`;
+    const bodyText = `Motivo: ${reason}`;
+    let emailSent = false;
+    let emailError: string | null = null;
+    try {
+      await this.trySendEmail(order.clientEmail, subject, bodyText);
+      emailSent = true;
+    } catch (e: any) {
+      emailError = e?.message ? String(e.message) : 'smtp_error';
+    }
+
     const updated = await this.patchOrder(publicId, {
       data: {
         order_status: ORDER_STATE.REJECTED,
@@ -1256,10 +1304,18 @@ export default ({ strapi }: any) => ({
       from: order.status,
       to: 'REJECTED',
       meta: { reason },
+      communication: {
+        channel: 'email',
+        kind: 'rejeição',
+        to: order.clientEmail,
+        subject,
+        body: bodyText,
+        emailSent,
+        emailError,
+      },
     });
     if (!updated) return { ok: false, error: 'Falha ao rejeitar pedido.' };
     await this.notify('order_rejected', `Pedido ${order.id} rejeitado: ${reason}`, parsePublicId(order.clientId, 'CU'));
-    await this.trySendEmail(order.clientEmail, `Pedido ${order.id} rejeitado`, `Motivo: ${reason}`);
     const after = buildPublicOrder(updated);
 
     return { ok: true, data: after };
@@ -1271,6 +1327,16 @@ export default ({ strapi }: any) => ({
     const before = auditSnapshotOrder(await this.getOrder(ctx, publicId));
     const order = before;
     if (!order) return { ok: false, error: 'Pedido não encontrado.' };
+    const subject = `Pedido ${order.id} - informação adicional`;
+    let emailSent = false;
+    let emailError: string | null = null;
+    try {
+      await this.trySendEmail(order.clientEmail, subject, message);
+      emailSent = true;
+    } catch (e: any) {
+      emailError = e?.message ? String(e.message) : 'smtp_error';
+    }
+
     const updated = await this.patchOrder(publicId, {
       data: {
         order_status: ORDER_STATE.INFO_REQUESTED,
@@ -1289,10 +1355,18 @@ export default ({ strapi }: any) => ({
       from: order.status,
       to: 'INFO_REQUESTED',
       meta: { message },
+      communication: {
+        channel: 'email',
+        kind: 'info_adicional',
+        to: order.clientEmail,
+        subject,
+        body: message,
+        emailSent,
+        emailError,
+      },
     });
     if (!updated) return { ok: false, error: 'Falha ao atualizar pedido.' };
     await this.notify('order_info_requested', `Pedido ${order.id}: informação adicional solicitada.`, parsePublicId(order.clientId, 'CU'));
-    await this.trySendEmail(order.clientEmail, `Pedido ${order.id} - informação adicional`, message);
     const after = buildPublicOrder(updated);
 
     return { ok: true, data: after };
@@ -1442,6 +1516,188 @@ export default ({ strapi }: any) => ({
     const after = buildPublicOrder(updated);
 
     return { ok: true, data: after };
+  },
+
+  async cancelOrderByAdmin(ctx: BoCtx | undefined, publicId: string, payload: any) {
+    const reason = String(payload.reason || payload.justification || '').trim();
+    if (!reason) return { ok: false, error: 'Motivo obrigatório.' };
+    const before = auditSnapshotOrder(await this.getOrder(ctx, publicId));
+    const order = before;
+    if (!order) return { ok: false, error: 'Pedido não encontrado.' };
+    if (['REJECTED', 'DELIVERED', 'CANCELLED_ADMIN'].includes(order.status)) {
+      return { ok: false, error: 'Este pedido já está encerrado.' };
+    }
+
+    const subject = `Pedido ${order.id} cancelado`;
+    const bodyText = `A tua encomenda foi cancelada pela operação.\n\nMotivo: ${reason}\n\nGoEverywhere`;
+    let emailSent = false;
+    let emailError: string | null = null;
+    try {
+      await this.trySendEmail(order.clientEmail, subject, bodyText);
+      emailSent = true;
+    } catch (e: any) {
+      emailError = e?.message ? String(e.message) : 'smtp_error';
+    }
+
+    const updated = await this.patchOrder(
+      publicId,
+      {
+        data: {
+          order_status: ORDER_STATE.CANCELLED_ADMIN,
+          cancelReason: reason,
+          courier: null,
+        },
+      },
+      {
+        action: 'cancel_admin',
+        ctx,
+        from: order.status,
+        to: 'CANCELLED_ADMIN',
+        meta: { reason },
+        communication: {
+          channel: 'email',
+          kind: 'cancelamento_admin',
+          to: order.clientEmail,
+          subject,
+          body: bodyText,
+          emailSent,
+          emailError,
+        },
+      }
+    );
+    if (!updated) return { ok: false, error: 'Falha ao cancelar pedido.' };
+
+    const uid = parsePublicId(order.clientId, 'CU');
+    if (Number.isFinite(uid) && uid > 0) {
+      await this.notify('order_cancelled_admin', `Pedido ${order.id} cancelado pela operação: ${reason}`, uid);
+    }
+
+    return { ok: true, data: buildPublicOrder(updated) };
+  },
+
+  async patchOrderAdmin(ctx: BoCtx | undefined, publicId: string, payload: any) {
+    const before = auditSnapshotOrder(await this.getOrder(ctx, publicId));
+    const order = before;
+    if (!order) return { ok: false, error: 'Pedido não encontrado.' };
+    if (['REJECTED', 'DELIVERED', 'CANCELLED_ADMIN'].includes(order.status)) {
+      return { ok: false, error: 'Estado não permite correção administrativa.' };
+    }
+
+    const token = parsePublicToken(publicId, 'GE');
+    const numericId = Number(token);
+    let raw = await strapi.db.query('api::order.order').findOne({
+      where: { documentId: token },
+      populate: { user: true, courier: true, review: true },
+    });
+    if (!raw && Number.isFinite(numericId)) {
+      raw = await strapi.db.query('api::order.order').findOne({
+        where: { id: numericId },
+        populate: { user: true, courier: true, review: true },
+      });
+    }
+    if (!raw) return { ok: false, error: 'Pedido não encontrado.' };
+
+    const baseItems = normalizeRawItems(raw.items);
+    const newItems: Record<string, any> = { ...baseItems };
+    const data: Record<string, any> = {};
+    let touched = false;
+
+    if (payload.deliveryAddress != null) {
+      const v = String(payload.deliveryAddress).trim();
+      data.deliveryAddress = v;
+      newItems.deliveryCoords = { ...(newItems.deliveryCoords || {}), address: v };
+      touched = true;
+    }
+    if (payload.deliveryCity != null) {
+      const v = String(payload.deliveryCity).trim();
+      newItems.deliveryCoords = { ...(newItems.deliveryCoords || {}), city: v };
+      touched = true;
+    }
+    if (payload.deliveryLatitude != null && payload.deliveryLatitude !== '') {
+      const lat = toNum(payload.deliveryLatitude, NaN);
+      if (Number.isFinite(lat)) {
+        data.deliveryLatitude = lat;
+        touched = true;
+      }
+    }
+    if (payload.deliveryLongitude != null && payload.deliveryLongitude !== '') {
+      const lng = toNum(payload.deliveryLongitude, NaN);
+      if (Number.isFinite(lng)) {
+        data.deliveryLongitude = lng;
+        touched = true;
+      }
+    }
+    if (payload.priority != null && payload.priority !== '') {
+      const p = clampPriority(payload.priority);
+      data.priority = p;
+      data.is_urgent = p === 5;
+      touched = true;
+    }
+    if (Array.isArray(payload.items)) {
+      newItems.list = payload.items;
+      touched = true;
+    }
+    const note = payload.internalNote != null ? String(payload.internalNote).trim() : '';
+    if (note) {
+      newItems.boMeta = {
+        ...(newItems.boMeta || {}),
+        adminInternalNote: note,
+        adminInternalNoteAt: new Date().toISOString(),
+      };
+      touched = true;
+    }
+
+    if (!touched) return { ok: false, error: 'Nada para atualizar.' };
+
+    data.items = newItems;
+
+    const updated = await this.patchOrder(
+      publicId,
+      { data },
+      {
+        action: 'admin_patch',
+        ctx,
+        meta: { fields: Object.keys(payload || {}) },
+      }
+    );
+    if (!updated) return { ok: false, error: 'Falha ao atualizar pedido.' };
+    return { ok: true, data: buildPublicOrder(updated) };
+  },
+
+  async listAppNotifications(_ctx: BoCtx | undefined, query: any) {
+    const limit = Math.min(200, Math.max(1, toNum(query?.limit, 80)));
+    const rows = await strapi.db.query('api::notification.notification').findMany({
+      orderBy: { sentAt: 'desc' },
+      limit,
+      populate: { user: true },
+    });
+    return rows.map((n: any) => ({
+      id: idToPublic('NT', n.documentId || n.id),
+      documentId: n.documentId,
+      type: n.type || '',
+      message: n.message || '',
+      isRead: !!n.isRead,
+      sentAt: n.sentAt || n.createdAt,
+      userEmail: n.user?.email || null,
+      userId: n.user?.id ? idToPublic('CU', n.user.id) : null,
+    }));
+  },
+
+  async markAppNotificationRead(_ctx: BoCtx | undefined, documentId: string) {
+    const token = parsePublicToken(documentId, 'NT');
+    const clean = token || String(documentId || '').trim();
+    if (!clean) return { ok: false, error: 'Notificação inválida.' };
+    try {
+      await strapi.documents('api::notification.notification').update({
+        documentId: clean,
+        data: { isRead: true },
+        status: 'published',
+      });
+      emitBoChange({ entity: 'notification', id: clean, action: 'read' });
+      return { ok: true };
+    } catch {
+      return { ok: false, error: 'Notificação não encontrada.' };
+    }
   },
 
   async listCouriers() {
@@ -1603,7 +1859,15 @@ export default ({ strapi }: any) => ({
       patch.isOnline = false;
       if (payload.reason) patch.rejectionReason = payload.reason;
     } else if (action === 'request_info') {
-      await this.trySendEmail(target.email, 'Informação adicional necessária', String(payload.message || 'Completa a documentação.'));
+      try {
+        await this.trySendEmail(
+          target.email,
+          'Informação adicional necessária',
+          String(payload.message || 'Completa a documentação.')
+        );
+      } catch {
+        /* opcional em dev */
+      }
     } else if (action === 'suspend') {
       patch.courier_status = COURIER_STATE.E04;
       patch.isOnline = false;
@@ -1988,7 +2252,7 @@ Responde apenas com a tua próxima fala.
     }
 
     const totalOrders = orders.length || 1;
-    const cancelled = orders.filter((o: any) => o.status === 'REJECTED').length;
+    const cancelled = orders.filter((o: any) => o.status === 'REJECTED' || o.status === 'CANCELLED_ADMIN').length;
     const packSales = collectPackSales(rawOrders);
 
     return {

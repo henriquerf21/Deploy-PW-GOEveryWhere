@@ -8,9 +8,9 @@
 import { EventEmitter } from 'events';
 
 export type BoChangePayload = {
-  entity: 'order' | 'courier' | 'customer' | 'store' | 'product' | 'inventory' | 'review';
+  entity: 'order' | 'courier' | 'customer' | 'store' | 'product' | 'inventory' | 'review' | 'notification';
   id?: string | number | null;
-  action?: 'create' | 'update' | 'delete' | 'transition';
+  action?: 'create' | 'update' | 'delete' | 'transition' | 'read';
   meta?: Record<string, any>;
 };
 
