@@ -205,7 +205,7 @@ async function handleRegister() {
     });
 
     if (result && result.success) {
-      router.push('/dashboard');
+      router.push('/about');
     } else {
       globalError.value = result?.error || 'Erro ao criar conta.';
     }

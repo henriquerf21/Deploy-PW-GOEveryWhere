@@ -1,3 +1,5 @@
+import { Server } from 'socket.io';
+
 export default {
   register({ strapi }: { strapi: any }) {
     const authController = strapi.plugin('users-permissions').controller('auth');
@@ -35,6 +37,55 @@ export default {
   },
 
   async bootstrap({ strapi }: { strapi: any }) {
+    const io = new Server(strapi.server.httpServer, {
+      cors: { origin: '*', methods: ['GET', 'POST', 'PUT'] }
+    });
+
+    io.on('connection', (socket) => {
+      strapi.log.info(`[Socket.io] User connected: ${socket.id}`);
+
+      socket.on('join_room', (room) => {
+        socket.join(room);
+        strapi.log.info(`[Socket.io] Socket ${socket.id} joined room ${room}`);
+      });
+
+      socket.on('chat_message', (data) => {
+        io.to(data.room).emit('chat_message', data);
+      });
+
+      socket.on('gps_update', (data) => {
+        io.to(data.room).emit('gps_update', data);
+      });
+
+      socket.on('order_status_update', (data) => {
+        io.to(data.room).emit('order_status_update', data);
+        io.emit('global_order_status_update', data); // broadcast to BO
+      });
+
+      socket.on('disconnect', () => {
+        strapi.log.info(`[Socket.io] User disconnected: ${socket.id}`);
+      });
+    });
+
+    strapi.io = io;
+
+    // Sincronização Global via Lifecycles (RF16-RF20)
+    strapi.db.lifecycles.subscribe({
+      models: ['api::order.order', 'api::courier-estafeta.courier-estafeta'],
+      afterCreate(event) {
+        strapi.io?.emit('global_order_status_update', { 
+          action: 'create', 
+          model: event.model.singularName 
+        });
+      },
+      afterUpdate(event) {
+        strapi.io?.emit('global_order_status_update', { 
+          action: 'update', 
+          model: event.model.singularName 
+        });
+      },
+    });
+
     try {
       await ensureUploadPermissions(strapi);
     } catch (err) {

@@ -62,6 +62,15 @@
             <span class="order-total">€{{ order.total?.toFixed(2) }}</span>
           </div>
 
+          <!-- Motivo de cancelamento ou rejeição (RF) -->
+          <div v-if="((order.status === 'S-13' || order.status === 'S-14') && order.cancelReason) || (order.status === 'S-04' && order.rejectionReason)" class="order-cancel-info">
+            <div class="cancel-reason-box">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+              <span v-if="order.status === 'S-04'"><strong>Motivo Rejeição:</strong> {{ order.rejectionReason }}</span>
+              <span v-else><strong>Motivo:</strong> {{ order.cancelReason }}</span>
+            </div>
+          </div>
+
           <div class="order-bottom">
             <div class="delivery-info">
               <span v-if="order.store" class="info-item">
@@ -425,6 +434,28 @@ function repeatOrder(order) {
 .status.pending {
   background: var(--cf-warn-soft);
   color: var(--cf-warn);
+}
+
+.order-cancel-info {
+  padding: 0.75rem 0;
+  border-bottom: 1px solid var(--cf-line);
+}
+
+.cancel-reason-box {
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--cf-radius);
+  padding: 0.75rem 1rem;
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  font-size: 0.8125rem;
+  color: #991b1b;
+  line-height: 1.4;
+}
+
+.cancel-reason-box svg {
+  flex-shrink: 0;
 }
 
 .order-items {

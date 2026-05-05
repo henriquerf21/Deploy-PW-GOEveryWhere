@@ -42,6 +42,9 @@
     "confirmationGps": {
       "type": "json"
     },
+    "timestamps": {
+      "type": "json"
+    },
     "notes": {
       "type": "string"
     },

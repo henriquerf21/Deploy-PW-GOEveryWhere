@@ -162,6 +162,13 @@ onMounted(async () => {
     return;
   }
 
+  // Se o estafeta arrancar com estado Offline, passamos a Em Pausa para que possa ficar online depois
+  if (store.profile.state === 'E-05' || store.profile.state === 'E-05 Offline') {
+    store.profile.state = 'E-07'; // Forçar E-07 Em Pausa localmente
+    // Em alternativa podemos já chamar o togglePause(), mas forçar localmente é suficiente
+    // pois a lógica de togglePause vai tratar de passar de E-07 para E-06.
+  }
+
   // Refresh deliveries from Strapi
   await fetchDeliveries();
 
@@ -192,7 +199,6 @@ watch([mapDeliveries, active], () => renderMap(), { deep: true });
 onBeforeUnmount(() => {
   if (pollInterval) clearInterval(pollInterval);
   map?.remove(); map = null; layer = null; leaflet = null;
-  stopGpsTracking(); // Cleanup GPS on page leave
 });
 
 function renderMap() {

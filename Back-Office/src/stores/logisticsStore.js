@@ -1,9 +1,18 @@
 import { reactive, computed } from 'vue';
+import { io } from 'socket.io-client';
 import {
   ORDER_STATUS,
   COURIER_STATE,
   orderStatusLabels,
 } from '../constants/logistics.js';
+
+const SOCKET_URL = 'http://localhost:1337';
+export const socket = io(SOCKET_URL, { autoConnect: true });
+
+socket.on('global_order_status_update', () => {
+  // Sempre que um cliente ou estafeta altera um pedido, atualizamos o painel
+  initLogistics({ force: true });
+});
 import {
   boBootstrap,
   boGetOrder,
@@ -401,6 +410,7 @@ export async function approveOrder(orderId, { storeId, costEuro, etaMinutes, res
     upsertOrder(order);
     logAct(`Pedido ${orderId} aprovado (loja ${storeId}).`);
     syncOperationalAggregatesFromOrders();
+    socket.emit('global_order_status_update', { status: 'S-05' });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao aprovar pedido.' };
@@ -416,6 +426,7 @@ export async function rejectOrder(orderId, justification) {
     upsertOrder(order);
     logAct(`Pedido ${orderId} rejeitado.`);
     syncOperationalAggregatesFromOrders();
+    socket.emit('global_order_status_update', { status: 'S-04' });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao rejeitar pedido.' };
@@ -444,6 +455,7 @@ export async function assignCourierToOrder(orderId, courierId) {
     upsertOrder(order);
     logAct(`Pedido ${orderId} atribuído a ${courierId}.`);
     syncOperationalAggregatesFromOrders();
+    socket.emit('global_order_status_update', { status: 'S-07' });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao atribuir estafeta.' };
@@ -471,6 +483,7 @@ export async function startTransit(orderId) {
     upsertOrder(order);
     logAct(`Pedido ${orderId} em trânsito.`);
     syncOperationalAggregatesFromOrders();
+    socket.emit('global_order_status_update', { status: 'S-09' });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao iniciar trânsito.' };
@@ -498,6 +511,7 @@ export async function cancelOrderByAdmin(orderId, reason) {
     upsertOrder(order);
     logAct(`Pedido ${orderId} cancelado pela operação.`);
     syncOperationalAggregatesFromOrders();
+    socket.emit('global_order_status_update', { status: 'S-14' });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao cancelar.' };
@@ -568,12 +582,21 @@ export async function deleteProduct(idOrSku) {
 export function availableCouriersForOrder(orderId) {
   const o = getOrderById(orderId);
   if (!o) return [];
+  
+  const orderZone = String(o.zone || 'Outro').trim().toLowerCase();
+  
   return logistics.couriers.filter((c) => {
+    // Verificar estado e online (Apenas E-06 Disponível)
     if (c.state !== COURIER_STATE.E06 || !c.online) return false;
-    if (!c.zones.includes(o.zone)) return false;
+    
+    // Verificação de Zona (Robusta: case-insensitive e trim)
+    const courierZones = (c.zones || []).map(z => String(z).trim().toLowerCase());
+    if (!courierZones.includes(orderZone)) return false;
+    
     const active = logistics.orders.filter(
       (x) => x.courierId === c.id && [ORDER_STATUS.ASSIGNED, ORDER_STATUS.IN_TRANSIT].includes(x.status)
     ).length;
+    
     return active < c.maxConcurrent;
   });
 }

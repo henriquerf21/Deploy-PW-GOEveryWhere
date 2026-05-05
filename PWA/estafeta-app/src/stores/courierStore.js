@@ -1,9 +1,18 @@
 import { reactive, computed, ref, watch } from 'vue';
+import { io } from 'socket.io-client';
 import { DELIVERY_STATE, COURIER_STATE, NEXT_STATE } from '../constants.js';
 
 // ── Config ───────────────────────────────────────────────────────
 const API_URL = 'http://localhost:1337/api';
+const SOCKET_URL = 'http://localhost:1337';
 const STORAGE_KEY = 'ge-estafeta';
+
+// Global GPS coords for distances
+let lastGpsCoords = null;
+
+export const socket = io(SOCKET_URL, {
+    autoConnect: true // PWA is always connected
+});
 
 // ── Helpers: persistence ─────────────────────────────────────────
 function loadState() {
@@ -82,6 +91,18 @@ function strapiStatusToCode(strapiStatus) {
     return strapiStatus.substring(0, 4); // "E-08 Pedido Recebido" → "E-08"
 }
 
+// ── Helpers: Distance (Haversine) ────────────────────────────────
+function haversineKm(lat1, lng1, lat2, lng2) {
+    if (!lat1 || !lng1 || !lat2 || !lng2) return null;
+    const R = 6371;
+    const dLat = ((lat2 - lat1) * Math.PI) / 180;
+    const dLng = ((lng2 - lng1) * Math.PI) / 180;
+    const a = Math.sin(dLat / 2) ** 2 +
+              Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) *
+              Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
 // ── Map Strapi delivery+order to local format ────────────────────
 function mapDelivery(d) {
     const attrs = d.attributes || d;
@@ -97,21 +118,65 @@ function mapDelivery(d) {
     // Mapeamento extra para User/Cliente
     const userData = order.user?.data?.attributes || order.user?.attributes || order.user || {};
 
+    // Resolve orderDocumentId: Strapi v5 flat vs v4 nested
+    const orderDocId = attrs.order?.data?.documentId
+        || attrs.order?.documentId
+        || order.documentId
+        || null;
+
+    // Resolve items from JSON or Array structures
+    const rawItems = order.items;
+    let itemsList = [{ name: 'GoGummies', qty: 1, unit: 'frasco' }];
+    if (rawItems) {
+        if (rawItems.list && Array.isArray(rawItems.list)) {
+            itemsList = rawItems.list;
+        } else if (rawItems.items && Array.isArray(rawItems.items)) {
+            itemsList = rawItems.items;
+        } else if (Array.isArray(rawItems)) {
+            itemsList = rawItems;
+        }
+    }
+
+    // Compute real distance if we have GPS
+    let distPickup = null;
+    let distDest = null;
+    if (lastGpsCoords) {
+        const p = haversineKm(lastGpsCoords.lat, lastGpsCoords.lng, pickupLat, pickupLng);
+        const d = haversineKm(lastGpsCoords.lat, lastGpsCoords.lng, destLat, destLng);
+        if (p !== null) distPickup = parseFloat(p.toFixed(1));
+        if (d !== null) distDest = parseFloat(d.toFixed(1));
+    } else {
+        // Fallback for initial load
+        distPickup = parseFloat((Math.random() * 2 + 0.5).toFixed(1));
+        distDest = parseFloat((Math.random() * 5 + 1).toFixed(1));
+    }
+
     return {
         id: String(d.id),
         documentId: attrs.documentId || d.documentId,
         orderId: order.publicId || `#ORD-${d.id}`,
-        orderStrapiId: attrs.order?.data?.id || null,
-        orderDocumentId: attrs.order?.data?.documentId || null,
+        orderStrapiId: attrs.order?.data?.id || attrs.order?.id || null,
+        orderDocumentId: orderDocId,
         type: order.priority >= 4 ? 'EXPRESS' : 'STANDARD',
         priority: order.priority || 3,
-        state: strapiStatusToCode(attrs.delivery_status) || DELIVERY_STATE.E08,
+        state: (function() {
+            let s = strapiStatusToCode(attrs.delivery_status) || DELIVERY_STATE.E08;
+            if (!order || !order.id) return DELIVERY_STATE.E14; // Orfão / Pedido eliminado
+            
+            const oStatus = String(attrs.order?.data?.attributes?.order_status || attrs.order?.order_status || order.order_status || '').toUpperCase();
+            if (['DELIVERED', 'S-11'].includes(oStatus) || oStatus.includes('ENTREGUE')) {
+                return DELIVERY_STATE.E13;
+            } else if (['REJECTED', 'CANCELLED_ADMIN', 'CANCELLED_CLIENT', 'S-12', 'S-13'].includes(oStatus) || oStatus.includes('CANCEL') || oStatus.includes('REJEIT')) {
+                return DELIVERY_STATE.E14;
+            }
+            return s;
+        })(),
         pickup: {
             name: order.store_name || 'Continente Braga',
             address: order.pickupAddress || 'Braga Parque',
             lat: parseFloat(pickupLat),
             lng: parseFloat(pickupLng),
-            distance: parseFloat((Math.random() * 2 + 0.5).toFixed(1)),
+            distance: distPickup,
         },
         destination: {
             name: userData.fullName || userData.username || 'Cliente',
@@ -119,12 +184,11 @@ function mapDelivery(d) {
             phone: userData.phone || '',
             lat: parseFloat(destLat),
             lng: parseFloat(destLng),
-            distance: parseFloat((Math.random() * 5 + 1).toFixed(1)),
+            distance: distDest,
         },
-        // Extrair items da estrutura JSON ou Array
-        items: order.items?.items || (Array.isArray(order.items) ? order.items : [{ name: 'GoGummies', qty: 1, unit: 'frasco' }]),
-        weight: order.items?.weight || '0.5kg',
-        size: order.items?.size || 'Médio',
+        items: itemsList,
+        weight: rawItems?.weight || '0.5kg',
+        size: rawItems?.size || 'Médio',
         instructions: order.notes || '',
         costEuro: parseFloat(order.total_price) || 6.50,
         etaMinutes: order.estimatedTime || 30,
@@ -140,7 +204,7 @@ function mapDelivery(d) {
         notes: attrs.notes || '',
         photos: [],
         timerStart: attrs.createdAt || null,
-        chatHistory: order.chatHistory || [],
+        chatHistory: Array.isArray(order.chatHistory) ? order.chatHistory : [],
     };
 }
 
@@ -354,10 +418,7 @@ export async function login(phone, countryCode, password) {
         saveState();
 
         // 4. Load deliveries
-        // Se a entrega foi concluída ou cancelada, limpamos o ID ativo
-        if (['E-13', 'E-14'].includes(next)) {
-            store.activeDeliveryId = null;
-        }
+        store.activeDeliveryId = null; // will be repopulated by fetchDeliveries if active
         
         await fetchDeliveries();
 
@@ -471,6 +532,9 @@ async function updateDeliveryOnStrapi(delivery, newState, extraData = {}) {
         };
         await apiPut(`/deliveries/${delivery.documentId}`, payload);
         // O estado da Order é agora sincronizado automaticamente pelo backend (Lifecycle Hook)
+        
+        // Emit Socket.io events for Real-Time UI updates across apps
+        socket.emit('order_status_update', { room: delivery.orderDocumentId, status: newState });
     } catch (err) {
         console.error('Error syncing state to Strapi:', err.message);
     }
@@ -652,11 +716,30 @@ export function isPaused() {
     return store.profile.state === 'E-07' || store.profile.state === COURIER_STATE.E05;
 }
 
+// ── Lifecycle Hooks ───────────────────────────────────────────────
+if (typeof window !== 'undefined') {
+    window.addEventListener('beforeunload', () => {
+        if (store.auth.loggedIn && store.profile.documentId) {
+            const url = `${API_URL}/courier-estafetas/${store.profile.documentId}`;
+            const payload = JSON.stringify({
+                data: { courier_status: 'E-05 Offline', isOnline: false }
+            });
+            // Usamos fetch com keepalive para garantir que o pedido sai antes da app morrer, suportando headers
+            fetch(url, {
+                method: 'PUT',
+                headers: authHeaders(),
+                body: payload,
+                keepalive: true
+            }).catch(() => {});
+        }
+    });
+}
+
+
 // ── Actions: GPS Tracking (RNF02 — every 10s) ───────────────────
 
 let gpsWatchId = null;
 let gpsIntervalId = null;
-let lastGpsCoords = null;
 
 export function startGpsTracking() {
     if (gpsWatchId !== null) return; // already tracking
@@ -677,20 +760,30 @@ export function startGpsTracking() {
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
     );
 
-    // Send to Strapi every 10 seconds
+    // Send to Strapi via API every 30 seconds for persistence, but emit to Socket every 5 seconds for real-time tracking
     gpsIntervalId = setInterval(() => {
         if (lastGpsCoords && store.activeDeliveryId) {
             const d = store.deliveries.find(x => x.id === store.activeDeliveryId);
             if (d && d.documentId && ['E-09', 'E-10', 'E-11', 'E-12'].includes(d.state)) {
-                apiPut(`/deliveries/${d.documentId}`, {
-                    data: {
-                        courierLatitude: lastGpsCoords.lat,
-                        courierLongitude: lastGpsCoords.lng,
-                    }
-                }).catch(err => console.warn('GPS sync error:', err.message));
+                // Emit via WebSocket for real-time tracking (Front-Office)
+                socket.emit('gps_update', {
+                    room: d.orderDocumentId,
+                    lat: lastGpsCoords.lat,
+                    lng: lastGpsCoords.lng
+                });
+
+                // Persist to DB occasionally (every 30s instead of 10s to reduce DB load)
+                if (Date.now() % 30000 < 5000) {
+                    apiPut(`/deliveries/${d.documentId}`, {
+                        data: {
+                            courierLatitude: lastGpsCoords.lat,
+                            courierLongitude: lastGpsCoords.lng,
+                        }
+                    }).catch(err => console.warn('GPS sync error:', err.message));
+                }
             }
         }
-    }, 10000);
+    }, 5000);
 }
 
 export function stopGpsTracking() {
@@ -730,6 +823,8 @@ export async function declineDeliveryTimeout(deliveryId) {
                 await apiPut(`/orders/${d.orderDocumentId}`, {
                     data: { order_status: 'S-06 Aguardando Aceitação' }
                 });
+                socket.emit('order_status_update', { room: d.orderDocumentId, status: 'E-08' });
+                socket.emit('global_order_status_update', { status: 'S-06' });
             }
         } catch (err) {
             console.error('declineDeliveryTimeout sync error:', err);

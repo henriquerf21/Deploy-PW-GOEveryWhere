@@ -23,6 +23,8 @@
               :store-lng="trackingMapCoords.storeLng"
               :dest-lat="trackingMapCoords.destLat"
               :dest-lng="trackingMapCoords.destLng"
+              :courier-lat="courierGps.lat"
+              :courier-lng="courierGps.lng"
               :courier-progress="displayProgress"
               height="300px"
             />
@@ -31,6 +33,10 @@
             <span class="transit-badge" :style="{ background: currentStateData?.color + '18', color: currentStateData?.color }">
               {{ currentStateData?.label }}
             </span>
+            <div v-if="dynamicEta > 0 && isInTransitPhase" class="eta-info">
+              <span class="eta-label">ETA</span>
+              <span class="eta-time">~{{ dynamicEta }} min</span>
+            </div>
           </div>
         </div>
 
@@ -140,6 +146,61 @@
             </div>
           </div>
 
+          <!-- S-14: Cancelado pelo Admin — Alerta com Motivo -->
+          <!-- S-04: Rejeitado — Alerta com Motivo -->
+          <div v-if="order.status === 'S-04'" class="s14-card s04-theme">
+            <div class="s14-header">
+              <div class="s14-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="15" y1="9" x2="9" y2="15"/>
+                  <line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+              </div>
+              <div>
+                <h4 class="s14-title">Encomenda Rejeitada</h4>
+                <p class="s14-subtitle">A tua encomenda não foi aceite pela operação.</p>
+              </div>
+            </div>
+
+            <div v-if="order.rejectionReason" class="s14-reason">
+              <span class="s14-reason-label">Motivo da Rejeição:</span>
+              <p class="s14-reason-text">{{ order.rejectionReason }}</p>
+            </div>
+
+            <div class="s14-actions">
+              <button @click="handleAcknowledgeAndGo('/order/select')" class="s14-btn-new">Tentar Nova Encomenda</button>
+              <button @click="handleAcknowledgeAndGo('/order/history')" class="s14-btn-history">Ver no Histórico</button>
+            </div>
+          </div>
+
+          <!-- S-14: Cancelado pelo Admin — Alerta com Motivo -->
+          <div v-if="order.status === 'S-14'" class="s14-card">
+            <div class="s14-header">
+              <div class="s14-icon">
+                <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2">
+                  <circle cx="12" cy="12" r="10"/>
+                  <line x1="15" y1="9" x2="9" y2="15"/>
+                  <line x1="9" y1="9" x2="15" y2="15"/>
+                </svg>
+              </div>
+              <div>
+                <h4 class="s14-title">Encomenda Cancelada pela Operação</h4>
+                <p class="s14-subtitle">A tua encomenda não pôde ser processada.</p>
+              </div>
+            </div>
+
+            <div v-if="order.cancelReason" class="s14-reason">
+              <span class="s14-reason-label">Motivo do Cancelamento:</span>
+              <p class="s14-reason-text">{{ order.cancelReason }}</p>
+            </div>
+
+            <div class="s14-actions">
+              <button @click="handleAcknowledgeAndGo('/order/select')" class="s14-btn-new">Tentar Nova Encomenda</button>
+              <button @click="handleAcknowledgeAndGo('/order/history')" class="s14-btn-history">Ver no Histórico</button>
+            </div>
+          </div>
+
           <!-- Botão de cancelamento — só aparece nos estados S-01 a S-06 -->
           <div v-if="['S-01', 'S-02', 'S-03', 'S-05', 'S-06'].includes(order.status)" class="cancel-zone">
             <button class="btn-cancel-active" @click="openCancelModal(order)">
@@ -244,9 +305,9 @@ import SiteHeader from '../components/SiteHeader.vue';
 import SiteFooter from '../components/SiteFooter.vue';
 import DeliveryRouteMap from '../components/DeliveryRouteMap.vue';
 import { getDestinationLatLng } from '../utils/mapCoords.js';
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue';
+import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { useOrderStore, ORDER_STATES, fetchUserOrders, cancelActiveOrder, replyToInfoRequest, sendChatMessage } from '../stores/orderStore.js';
+import { useOrderStore, ORDER_STATES, fetchUserOrders, cancelActiveOrder, replyToInfoRequest, sendChatMessage, socket, acknowledgeActiveOrder } from '../stores/orderStore.js';
 import { requestNotificationPermission, notifyOrderStateChange } from '../utils/notifications.js';
 
 const router = useRouter();
@@ -255,6 +316,55 @@ const store = useOrderStore();
 const order = computed(() => store.activeOrder);
 const toastMessage = ref('');
 let pollingTimer = null;
+
+// ── GPS REAL DO ESTAFETA ────────────────────────────────────────────
+const courierGps = reactive({ lat: null, lng: null });
+const dynamicEta = ref(0);
+
+const isInTransitPhase = computed(() => {
+  if (!order.value) return false;
+  return ['S-07', 'S-08', 'S-09', 'S-10'].includes(order.value.status);
+});
+
+function haversineKm(lat1, lng1, lat2, lng2) {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2 + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function fetchCourierGps() {
+  if (!order.value?.documentId) return;
+  try {
+    const res = await fetch(`http://localhost:1337/api/deliveries?filters[order][documentId][$eq]=${order.value.documentId}&fields[0]=courierLatitude&fields[1]=courierLongitude&status=published`);
+    const json = await res.json();
+    const deliveryData = json.data?.[0];
+    const attrs = deliveryData?.attributes || deliveryData || {};
+    const lat = parseFloat(attrs.courierLatitude);
+    const lng = parseFloat(attrs.courierLongitude);
+    updateGpsCoords(lat, lng);
+  } catch (err) {
+    // Silently fail — fallback to progress-based position
+  }
+}
+
+function updateGpsCoords(lat, lng) {
+  if (Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0) {
+    courierGps.lat = lat;
+    courierGps.lng = lng;
+    const coords = trackingMapCoords.value;
+    if (coords) {
+      const distKm = haversineKm(lat, lng, coords.destLat, coords.destLng);
+      dynamicEta.value = Math.max(1, Math.round(5 + distKm * 2.5));
+    }
+  }
+}
+
+function handleAcknowledgeAndGo(path) {
+  acknowledgeActiveOrder();
+  router.push(path);
+}
 
 // --- Chat ---
 const openChat = ref(false);
@@ -305,7 +415,7 @@ const courierInfo = ref(null);
 
 const showCourierCard = computed(() => {
   if (!order.value) return false;
-  const statusFlow = ['S-05','S-06','S-07','S-08','S-09','S-10','S-11'];
+  const statusFlow = ['S-07','S-08','S-09','S-10','S-11','S-15','S-16'];
   return statusFlow.includes(order.value.status);
 });
 
@@ -412,6 +522,23 @@ onMounted(async () => {
   if (order.value && showCourierCard.value) {
     fetchCourierInfo();
   }
+  // Fetch GPS real do estafeta se já em trânsito
+  if (order.value && isInTransitPhase.value) {
+    fetchCourierGps();
+  }
+
+  // Ligar aos websockets para atualizações imediatas
+  if (order.value?.documentId) {
+    socket.connect();
+    socket.emit('join_room', order.value.documentId);
+    
+    socket.on('gps_update', (data) => {
+      if (data.lat && data.lng) {
+        updateGpsCoords(data.lat, data.lng);
+      }
+    });
+  }
+
   pollingTimer = setInterval(async () => {
     if (order.value && !ORDER_STATES[order.value.status]?.terminal) {
       const oldStatus = order.value.status;
@@ -426,11 +553,13 @@ onMounted(async () => {
         }
       }
     }
-  }, 10000); // RNF02: Atualização a cada 10 segundos
+  }, 30000); // RNF02 relaxed: Polling de estado cai para 30s pois o GPS agora usa WebSockets (5s)
 });
 
 onUnmounted(() => {
   clearInterval(pollingTimer);
+  socket.off('gps_update');
+  socket.disconnect();
 });
 
 // ── COMPUTED ────────────────────────────────────────────────────────
@@ -765,6 +894,10 @@ import authState from '../stores/authStore';
   align-items: center;
   padding: 1.25rem 1.5rem;
   border-top: 1px solid var(--cf-line);
+}
+
+.eta-info {
+  text-align: right;
 }
 
 .eta-label {
@@ -1568,6 +1701,103 @@ import authState from '../stores/authStore';
 .s03-btn-send:disabled {
   opacity: 0.5;
   cursor: not-allowed;
+}
+
+/* ══════════════════════════════════════════
+   S-14: CANCELADO PELO ADMIN
+   ══════════════════════════════════════════ */
+.s14-card {
+  margin-top: 1.5rem;
+  background: #fef2f2;
+  border: 1px solid #fecaca;
+  border-radius: var(--cf-radius-lg);
+  padding: 1.5rem;
+  animation: s03FadeIn 0.4s ease;
+}
+
+.s14-header {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.85rem;
+  margin-bottom: 1rem;
+}
+
+.s14-icon {
+  flex-shrink: 0;
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  background: rgba(239, 68, 68, 0.12);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.s14-title {
+  margin: 0;
+  font-family: var(--cf-display);
+  font-size: 1rem;
+  font-weight: 700;
+  color: #991b1b;
+}
+
+.s14-subtitle {
+  margin: 0.2rem 0 0;
+  font-size: 0.8125rem;
+  color: #b91c1c;
+  line-height: 1.4;
+}
+
+.s14-reason {
+  background: #fee2e2;
+  border: 1px solid #fecaca;
+  border-radius: var(--cf-radius);
+  padding: 1rem;
+  margin-bottom: 1rem;
+}
+
+.s14-reason-label {
+  display: block;
+  font-size: 0.6875rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: #991b1b;
+  margin-bottom: 0.4rem;
+}
+
+.s14-reason-text {
+  margin: 0;
+  font-size: 0.875rem;
+  line-height: 1.55;
+  color: #7f1d1d;
+  font-weight: 500;
+}
+
+.s14-actions {
+  display: flex;
+  gap: 0.75rem;
+}
+
+.s14-btn-new, .s14-btn-history {
+  flex: 1;
+  text-align: center;
+  padding: 0.65rem 1rem;
+  border-radius: var(--cf-radius);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.s14-btn-new {
+  background: var(--cf-cta);
+  color: #fff;
+}
+
+.s14-btn-history {
+  background: #fff;
+  color: #b91c1c;
+  border: 1px solid #fecaca;
 }
 
 /* ------------------- Chat Modal & Button ------------------- */

@@ -31,6 +31,7 @@ const ORDER_STATE = {
   ACCEPTED: 'S-07 Aceite pelo Estafeta',
   IN_TRANSIT: 'S-09 Em Trânsito',
   DELIVERED: 'S-11 Entregue',
+  CANCELLED_CLIENT: 'S-13 Cancelado pelo Cliente',
   CANCELLED_ADMIN: 'S-14 Cancelado pelo Admin',
 };
 
@@ -77,14 +78,14 @@ function splitCourierName(fullName: string) {
   return { firstName: parts[0], lastName: parts.slice(1).join(' ') };
 }
 
-function zoneFromAddress(address?: string | null) {
-  if (!address) return 'Outro';
-  const normalized = address.toLowerCase();
-  if (normalized.includes('porto')) return 'Porto Centro';
-  if (normalized.includes('matosinhos')) return 'Matosinhos';
-  if (normalized.includes('gaia')) return 'Vila Nova de Gaia';
-  if (normalized.includes('maia')) return 'Maia';
-  if (normalized.includes('braga')) return 'Braga';
+function zoneFromAddress(address?: string | null, city?: string | null) {
+  const combined = `${address || ''} ${city || ''}`.toLowerCase();
+  if (!combined.trim()) return 'Outro';
+  if (combined.includes('porto')) return 'Porto Centro';
+  if (combined.includes('matosinhos')) return 'Matosinhos';
+  if (combined.includes('gaia')) return 'Vila Nova de Gaia';
+  if (combined.includes('maia')) return 'Maia';
+  if (combined.includes('braga')) return 'Braga';
   return 'Outro';
 }
 
@@ -157,6 +158,7 @@ function mapOrderStatus(strapiStatus?: string) {
   if (strapiStatus === ORDER_STATE.ASSIGNED) return 'ASSIGNED';
   if (strapiStatus === ORDER_STATE.IN_TRANSIT) return 'IN_TRANSIT';
   if (strapiStatus === ORDER_STATE.DELIVERED) return 'DELIVERED';
+  if (strapiStatus === ORDER_STATE.CANCELLED_CLIENT) return 'CANCELLED_CLIENT';
   if (strapiStatus === ORDER_STATE.CANCELLED_ADMIN) return 'CANCELLED_ADMIN';
   return 'PENDING';
 }
@@ -216,7 +218,7 @@ function buildPublicOrder(entry: any) {
   const user = attrs.user;
   const courier = attrs.courier;
   const status = mapOrderStatus(attrs.order_status);
-  const zone = bo.zone || zoneFromAddress(attrs.deliveryAddress);
+  const zone = bo.zone || zoneFromAddress(attrs.deliveryAddress, deliveryCoords.city || attrs.user?.city);
   return {
     id: idToPublic('GE', attrs.documentId || attrs.id),
     _documentId: attrs.documentId,
@@ -852,26 +854,30 @@ export default ({ strapi }: any) => ({
   },
 
   async ensureContinentStoresSeeded() {
-    const existing = await strapi.db.query('api::continent-store.continent-store').count();
-    if (existing > 0) return;
     for (const row of CONTINENTE_STORES_SEED) {
-      await strapi.documents('api::continent-store.continent-store').create({
-        data: {
-          code: row.code,
-          name: row.name,
-          city: row.city,
-          district: row.district,
-          address: row.address,
-          postalCode: row.postalCode,
-          lat: row.lat,
-          lng: row.lng,
-          openingHours: row.openingHours,
-          phone: row.phone || '',
-          format: row.format,
-          isActive: true,
-        },
-        status: 'published',
+      const existing = await strapi.db.query('api::continent-store.continent-store').findOne({
+        where: { code: row.code }
       });
+      if (!existing) {
+        await strapi.documents('api::continent-store.continent-store').create({
+          data: {
+            code: row.code,
+            name: row.name,
+            city: row.city,
+            district: row.district,
+            address: row.address,
+            postalCode: row.postalCode,
+            lat: row.lat,
+            lng: row.lng,
+            openingHours: row.openingHours,
+            phone: row.phone || '',
+            format: row.format,
+            isActive: true,
+          },
+          status: 'published',
+        });
+        console.log(`[Seed] Loja adicionada: ${row.name} (${row.code})`);
+      }
     }
   },
 

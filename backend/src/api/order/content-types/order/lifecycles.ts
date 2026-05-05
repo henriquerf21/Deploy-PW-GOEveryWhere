@@ -44,6 +44,19 @@ export default {
     const { result } = event;
     console.log('[GoPoints] lifecycle carregado! status:', result?.order_status);
 
+    // Notificar Back-Office via SSE
+    try {
+      const { emitBoChange } = require('../../../back-office/utils/bo-event-bus');
+      emitBoChange({
+        entity: 'order',
+        id: result.documentId || result.id,
+        action: 'transition',
+        meta: { status: result.order_status }
+      });
+    } catch (e) {
+      console.warn('[BO-Bus] falha ao emitir mudança no lifecycle:', e.message);
+    }
+
     if (!result?.order_status) return;
     const status = result.order_status;
     if (!status.startsWith('S-11')) return;

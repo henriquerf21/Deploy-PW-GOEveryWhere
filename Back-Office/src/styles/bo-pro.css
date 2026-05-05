@@ -491,7 +491,8 @@ a:hover { text-decoration: underline; }
   border-radius: var(--bo-radius-lg);
   background: var(--bo-surface);
   box-shadow: var(--bo-shadow);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 
 .bo-table {

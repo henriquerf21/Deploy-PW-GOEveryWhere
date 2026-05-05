@@ -1,16 +1,17 @@
 import { reactive, computed } from 'vue';
 import authState from './authStore';
+import { io } from 'socket.io-client';
 
 const API_URL = 'http://localhost:1337/api';
+const SOCKET_URL = 'http://localhost:1337';
+
+// Initialize socket connection
+export const socket = io(SOCKET_URL, {
+  autoConnect: false // Connect only when an order is active
+});
 
 // ── DATA TABLES ──────────────────────────────────────────────────
-export const CONTINENTE_STORES = [
-  { id: 1, name: 'Continente Nova Arcada', address: 'Nova Arcada, Av. Cávado, 4700-084 Braga', lat: 41.5472, lng: -8.4057 },
-  { id: 2, name: 'Continente Braga Parque', address: 'Braga Parque, R. do Carmo, 4700-309 Braga', lat: 41.5518, lng: -8.4229 },
-  { id: 3, name: 'Continente Bom Dia Gualtar', address: 'R. dos Peões, 4710-057 Braga', lat: 41.5614, lng: -8.3960 },
-  { id: 4, name: 'Continente Bom Dia São Vicente', address: 'R. de São Vicente, 4710-331 Braga', lat: 41.5536, lng: -8.4335 },
-  { id: 5, name: 'Continente Guimarães Shopping', address: 'Guimarães Shopping, 4810-000 Guimarães', lat: 41.4425, lng: -8.2918 },
-];
+export const CONTINENTE_STORES = [];
 
 export const ORDER_STATES = {
   'S-01': { label: 'Submetido',                  color: '#6b7280', icon: '📩' },
@@ -53,6 +54,7 @@ const store = reactive({
     goPointsRedemption: null,
   },
   activeOrder: null,
+  acknowledgedOrders: JSON.parse(localStorage.getItem('go_acknowledged_orders') || '[]'),
   orderHistory: [],
   loading: false
 });
@@ -141,13 +143,20 @@ export function toggleGoPointsRedemption(type) {
 }
 
 export function findNearestStore(lat, lng) {
+  if (!CONTINENTE_STORES.length) return;
   let nearest = CONTINENTE_STORES[0];
   let minDist = Infinity;
   for (const s of CONTINENTE_STORES) {
+    // Cálculo simples de distância (Haversine seria melhor, mas isto serve para proximidade local)
     const dist = Math.sqrt((s.lat - lat) ** 2 + (s.lng - lng) ** 2);
-    if (dist < minDist) { minDist = dist; nearest = s; }
+    if (dist < minDist) {
+      minDist = dist;
+      nearest = s;
+    }
   }
   store.delivery.assignedStore = nearest;
+  store.delivery.gpsLat = lat; // Guardar para recalculcar se a lista de lojas mudar
+  store.delivery.gpsLng = lng;
   store.delivery.estimatedDistance = Math.round(minDist * 111 * 10) / 10;
 }
 
@@ -226,6 +235,33 @@ export async function fetchCatalogProducts() {
   }
 }
 
+export async function fetchStores() {
+  try {
+    const response = await fetch(`${API_URL}/bo/public-stores`);
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(json?.error?.message || 'Erro ao carregar lojas.');
+    const rows = Array.isArray(json?.data) ? json.data : [];
+    if (rows.length) {
+      // Mapear para o formato esperado pelo FO
+      const mapped = rows.map(s => ({
+        id: s.id,
+        name: s.name,
+        address: s.address,
+        lat: s.lat,
+        lng: s.lng,
+        city: s.city
+      }));
+      CONTINENTE_STORES.splice(0, CONTINENTE_STORES.length, ...mapped);
+      // Se já houver um cálculo de proximidade feito com a lista antiga, refazemos
+      if (store.delivery.gpsLat) {
+        findNearestStore(store.delivery.gpsLat, store.delivery.gpsLng);
+      }
+    }
+  } catch (error) {
+    console.warn('Lista de lojas dinâmica indisponível, a usar fallback estático.', error?.message || error);
+  }
+}
+
 export async function refreshUserProfile() {
   if (!authState.token) return;
   try {
@@ -298,6 +334,8 @@ export async function fetchUserOrders() {
         rating: attr.rating,
         store: attr.store_name,
         adminMessage: adminMsg,
+        cancelReason: attr.cancelReason || null,
+        rejectionReason: attr.rejectionReason || null,
         clientReply: clientRep,
         deliveryCoords,
         chatHistory: attr.chatHistory || [],
@@ -307,14 +345,24 @@ export async function fetchUserOrders() {
     // 1. Ordenação crucial: Mais recente primeiro
     allOrders.sort((a, b) => b.id - a.id);
 
-    // 2. Estados que encerram uma encomenda
-    const terminalStates = ['S-04', 'S-11', 'S-12', 'S-13', 'S-14', 'S-15', 'S-16'];
+    // 2. Estados que encerram uma encomenda definitivamente
+    const terminalStates = ['S-11', 'S-12', 'S-13', 'S-15', 'S-16'];
 
     // 3. CORREÇÃO DA LÓGICA:
     // Olhamos APENAS para a encomenda mais recente (index 0).
-    // Se ela não for terminal, é a ativa. Caso contrário, não há nenhuma ativa.
-    if (allOrders.length > 0 && !terminalStates.includes(allOrders[0].status)) {
-      store.activeOrder = allOrders[0];
+    const mostRecent = allOrders[0];
+
+    if (mostRecent && !terminalStates.includes(mostRecent.status)) {
+      // Se for S-04 ou S-14, só é ativa se NÃO tiver sido "limpa" (acknowledged) pelo user
+      if (['S-04', 'S-14'].includes(mostRecent.status)) {
+        if (store.acknowledgedOrders.includes(mostRecent.id)) {
+          store.activeOrder = null;
+        } else {
+          store.activeOrder = mostRecent;
+        }
+      } else {
+        store.activeOrder = mostRecent;
+      }
     } else {
       store.activeOrder = null;
     }
@@ -376,6 +424,7 @@ export async function submitOrder() {
     if (response.ok) {
       // Atualiza o histórico imediatamente após a compra
       await fetchUserOrders();
+      socket.emit('global_order_status_update', { status: 'S-01' });
       return { success: true };
     } else {
       return { success: false, error: result.error?.message || 'Erro na criação da encomenda' };
@@ -417,6 +466,8 @@ export async function cancelActiveOrder(orderId, reason) {
 
     if (response.ok) {
       await fetchUserOrders();
+      socket.emit('order_status_update', { room: orderId, status: 'S-13' });
+      socket.emit('global_order_status_update', { status: 'S-13' });
       return { success: true };
     }
 
@@ -426,6 +477,20 @@ export async function cancelActiveOrder(orderId, reason) {
     console.error(err);
     return { success: false, error: err.message };
   }
+}
+
+/**
+ * Marca a encomenda atual (cancelada ou rejeitada) como "vista" pelo utilizador,
+ * permitindo que ela saia do estado ativo para que possa fazer novas encomendas.
+ */
+export function acknowledgeActiveOrder() {
+  if (!store.activeOrder) return;
+  const id = store.activeOrder.id;
+  if (!store.acknowledgedOrders.includes(id)) {
+    store.acknowledgedOrders.push(id);
+    localStorage.setItem('go_acknowledged_orders', JSON.stringify(store.acknowledgedOrders));
+  }
+  store.activeOrder = null;
 }
 
 export async function replyToInfoRequest(documentId, reply) {
@@ -447,6 +512,8 @@ export async function replyToInfoRequest(documentId, reply) {
 
     if (response.ok) {
       await fetchUserOrders();
+      socket.emit('order_status_update', { room: documentId, status: 'S-02' });
+      socket.emit('global_order_status_update', { status: 'S-02' });
       return { success: true };
     }
 
