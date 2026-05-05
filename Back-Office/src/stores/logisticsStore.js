@@ -8,6 +8,8 @@ import {
   boBootstrap,
   boGetOrder,
   boOrderAction,
+  boPatchOrder,
+  boReports,
   boCreateCourier,
   boUpdateCourier,
   boCourierAction,
@@ -56,6 +58,8 @@ export const logistics = reactive({
   /** Catálogo (bootstrap + refresh de produtos) */
   products: [],
   slaMetrics: null,
+  /** Agregados de relatório vindos do servidor (GET /bo/reports) */
+  serverAnalytics: null,
   stores: [],
   selectedStoreId: '',
   storeInventory: [],
@@ -97,6 +101,12 @@ function applyBootstrap(data) {
   logistics.recentReviews = data.recentReviews || [];
   logistics.products = Array.isArray(data.products) ? data.products : [];
   logistics.slaMetrics = data.slaMetrics ?? logistics.slaMetrics;
+  logistics.serverAnalytics = data.analytics
+    ? {
+        monthlyRevenueFromOrders: data.analytics.monthlyRevenueFromOrders || [],
+        cancellationRatePct: data.analytics.cancellationRatePct ?? null,
+      }
+    : logistics.serverAnalytics;
   logistics.storeInventory = Array.isArray(data.storeInventory) ? data.storeInventory : logistics.storeInventory;
   logistics.initialized = true;
 }
@@ -124,6 +134,7 @@ export async function initLogistics({ force = false } = {}) {
     logistics.recentReviews = [];
     logistics.products = [];
     logistics.slaMetrics = null;
+    logistics.serverAnalytics = null;
     logistics.stores = [];
     logistics.selectedStoreId = '';
     logistics.storeInventory = [];
@@ -270,7 +281,7 @@ function pushUrgentAlert(msg) {
 export function syncOperationalAggregatesFromOrders() {
   const zoneMap = {};
   for (const o of logistics.orders) {
-    if (o.status === ORDER_STATUS.REJECTED) continue;
+    if (o.status === ORDER_STATUS.REJECTED || o.status === ORDER_STATUS.CANCELLED_ADMIN) continue;
     zoneMap[o.zone] = (zoneMap[o.zone] || 0) + 1;
   }
   logistics.deliveriesByZone = Object.entries(zoneMap)
@@ -403,13 +414,6 @@ export async function rejectOrder(orderId, justification) {
   try {
     const order = await withBusy(() => boOrderAction(orderId, 'reject', { justification: j }));
     upsertOrder(order);
-    sendClientEmail({
-      to: order.clientEmail,
-      subject: `Pedido ${order.id} — atualização`,
-      body: `O teu pedido foi rejeitado.\n\nMotivo: ${j}\n\nEquipa GoEverywhere`,
-      orderId,
-      kind: 'rejeição',
-    });
     logAct(`Pedido ${orderId} rejeitado.`);
     syncOperationalAggregatesFromOrders();
     return { ok: true };
@@ -425,13 +429,6 @@ export async function requestOrderInfo(orderId, message) {
   try {
     const order = await withBusy(() => boOrderAction(orderId, 'request-info', { message: m }));
     upsertOrder(order);
-    sendClientEmail({
-      to: order.clientEmail,
-      subject: `Pedido ${order.id} — precisamos de mais informações`,
-      body: `${m}\n\nResponde via app ou email.\nGoEverywhere`,
-      orderId,
-      kind: 'info_adicional',
-    });
     logAct(`Pedido ${orderId}: pedido de informação ao cliente.`);
     syncOperationalAggregatesFromOrders();
     return { ok: true };
@@ -493,11 +490,51 @@ export async function completeDelivery(orderId) {
   }
 }
 
+export async function cancelOrderByAdmin(orderId, reason) {
+  const r = String(reason || '').trim();
+  if (!r) return { ok: false, error: 'Motivo obrigatório.' };
+  try {
+    const order = await withBusy(() => boOrderAction(orderId, 'cancel', { reason: r }));
+    upsertOrder(order);
+    logAct(`Pedido ${orderId} cancelado pela operação.`);
+    syncOperationalAggregatesFromOrders();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao cancelar.' };
+  }
+}
+
+export async function patchOrderAdmin(orderId, payload) {
+  try {
+    const order = await withBusy(() => boPatchOrder(orderId, payload));
+    upsertOrder(order);
+    logAct(`Pedido ${orderId}: correção administrativa.`);
+    syncOperationalAggregatesFromOrders();
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, error: err.message || 'Falha ao guardar correções.' };
+  }
+}
+
 export async function refreshProducts() {
   return withBusy(async () => {
     const rows = await boProducts();
     logistics.products = Array.isArray(rows) ? rows : [];
     return logistics.products;
+  });
+}
+
+/** Sincroniza packs, zonas e KPIs de relatório com GET /bo/reports (fonte servidor). */
+export async function refreshServerReports() {
+  return withBusy(async () => {
+    const r = await boReports();
+    logistics.packSales = Array.isArray(r?.packSales) ? r.packSales : [];
+    logistics.deliveriesByZone = Array.isArray(r?.deliveriesByZone) ? r.deliveriesByZone : [];
+    logistics.serverAnalytics = {
+      monthlyRevenueFromOrders: Array.isArray(r?.monthlyRevenueFromOrders) ? r.monthlyRevenueFromOrders : [],
+      cancellationRatePct: typeof r?.cancellationRatePct === 'number' ? r.cancellationRatePct : null,
+    };
+    return { ok: true };
   });
 }
 
@@ -782,7 +819,9 @@ export const kpiSummary = computed(() => {
     return Number(p.stock) <= th;
   }).length;
   const totalOrders = logistics.orders.length;
-  const rejectedCount = logistics.orders.filter((o) => o.status === ORDER_STATUS.REJECTED).length;
+  const rejectedCount = logistics.orders.filter(
+    (o) => o.status === ORDER_STATUS.REJECTED || o.status === ORDER_STATUS.CANCELLED_ADMIN
+  ).length;
   const rejectionRatePct = totalOrders > 0 ? Math.round((rejectedCount / totalOrders) * 1000) / 10 : 0;
   return {
     ordersToday,
@@ -830,13 +869,17 @@ export function getMonthlyDeliveredKiloEuroSeries() {
   }));
 }
 
-export const monthlyRevenueFromOrders = computed(() => getMonthlyDeliveredKiloEuroSeries());
+export const monthlyRevenueFromOrders = computed(() => {
+  const srv = logistics.serverAnalytics?.monthlyRevenueFromOrders;
+  if (Array.isArray(srv) && srv.length) return srv;
+  return getMonthlyDeliveredKiloEuroSeries();
+});
 
 /** Pedidos não rejeitados com loja atribuída, por ponto de recolha. */
 export const pickupsByStore = computed(() => {
   const map = {};
   for (const o of logistics.orders) {
-    if (o.status === ORDER_STATUS.REJECTED || !o.storeId) continue;
+    if (o.status === ORDER_STATUS.REJECTED || o.status === ORDER_STATUS.CANCELLED_ADMIN || !o.storeId) continue;
     map[o.storeId] = (map[o.storeId] || 0) + 1;
   }
   return Object.entries(map)
@@ -849,9 +892,14 @@ export const pickupsByStore = computed(() => {
 });
 
 export function cancellationRatePct() {
+  if (logistics.serverAnalytics && typeof logistics.serverAnalytics.cancellationRatePct === 'number') {
+    return logistics.serverAnalytics.cancellationRatePct;
+  }
   const t = logistics.orders.length;
   if (!t) return 0;
-  const c = logistics.orders.filter((o) => o.status === ORDER_STATUS.REJECTED).length;
+  const c = logistics.orders.filter(
+    (o) => o.status === ORDER_STATUS.REJECTED || o.status === ORDER_STATUS.CANCELLED_ADMIN
+  ).length;
   return Math.round((c / t) * 1000) / 10;
 }
 

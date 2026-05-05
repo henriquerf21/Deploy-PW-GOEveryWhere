@@ -40,12 +40,17 @@
         <p class="login-panel__sub">Acesso restrito a administradores</p>
 
         <div v-if="googleClientId" ref="googleBtnRef" class="google-host" />
-        <button v-else type="button" class="login-btn login-btn--google" @click="loginGoogleDemo">
-          Entrar com Google (demo OAuth)
-          <span class="login-btn__arrow" aria-hidden="true">→</span>
-        </button>
-        <p v-if="!googleClientId" class="login-google-hint">
-          Para OAuth 2.0 real, define <code>VITE_GOOGLE_CLIENT_ID</code> no ficheiro <code>.env</code> (Google Identity Services).
+        <template v-else-if="isDev">
+          <button type="button" class="login-btn login-btn--google" @click="loginGoogleDemo">
+            Entrar com Google (demo — só em dev)
+            <span class="login-btn__arrow" aria-hidden="true">→</span>
+          </button>
+          <p class="login-google-hint">
+            Em produção define <code>VITE_GOOGLE_CLIENT_ID</code> no <code>.env</code> (Google Identity Services). O botão demo não aparece em build de produção.
+          </p>
+        </template>
+        <p v-else class="login-google-hint">
+          OAuth Google: define <code>VITE_GOOGLE_CLIENT_ID</code> no ficheiro <code>.env</code>.
         </p>
 
         <div class="login-divider">
@@ -112,6 +117,8 @@ const remember = ref(true);
 const showPw = ref(false);
 const googleBtnRef = ref(null);
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
+const isDev = import.meta.env.DEV;
+const supportEmail = import.meta.env.VITE_BO_SUPPORT_EMAIL || '';
 
 const barHeights = [32, 48, 40, 62, 55, 70, 45, 58, 75, 68, 82, 60];
 
@@ -138,7 +145,11 @@ async function loginGoogleDemo() {
 }
 
 function onRecoverAccess() {
-  toast('Recuperação de password: em produção liga ao serviço de identidade. Contacta o administrador da plataforma.', 'success');
+  if (supportEmail) {
+    window.location.href = `mailto:${encodeURIComponent(supportEmail)}?subject=${encodeURIComponent('Acesso Back-Office GoEverywhere')}`;
+    return;
+  }
+  toast('Define VITE_BO_SUPPORT_EMAIL no .env do Back-Office para abrir o cliente de email, ou contacta o administrador.', 'info');
 }
 
 async function onSubmit() {

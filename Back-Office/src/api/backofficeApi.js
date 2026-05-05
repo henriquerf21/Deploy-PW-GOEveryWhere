@@ -66,6 +66,27 @@ export async function boOrderAction(id, action, payload = {}) {
   });
 }
 
+export async function boPatchOrder(id, payload = {}) {
+  return request(`/bo/orders/${encodeURIComponent(id)}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function boAppNotifications(params = {}) {
+  const q = new URLSearchParams();
+  if (params.limit != null) q.set('limit', String(params.limit));
+  const suffix = q.toString() ? `?${q.toString()}` : '';
+  return request(`/bo/app-notifications${suffix}`);
+}
+
+export async function boMarkAppNotificationRead(documentId) {
+  return request(`/bo/app-notifications/${encodeURIComponent(documentId)}/read`, {
+    method: 'POST',
+    body: JSON.stringify({}),
+  });
+}
+
 export async function boCreateCourier(payload) {
   return request('/bo/couriers', {
     method: 'POST',

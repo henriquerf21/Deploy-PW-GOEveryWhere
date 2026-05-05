@@ -61,6 +61,10 @@
                   <dt>ETA</dt><dd>{{ order.etaMinutes ? order.etaMinutes + ' min' : '—' }}</dd>
                   <dt>Recursos</dt><dd>{{ order.resources || '—' }}</dd>
                   <dt>Estafeta</dt><dd>{{ order.courierName || '—' }}</dd>
+                  <dt v-if="order.cancelReason">Motivo cancelamento (op.)</dt>
+                  <dd v-if="order.cancelReason">{{ order.cancelReason }}</dd>
+                  <dt v-if="order.adminInternalNote">Nota interna (última)</dt>
+                  <dd v-if="order.adminInternalNote">{{ order.adminInternalNote }}</dd>
                   <dt>Data</dt><dd class="bo-mono">{{ order.createdAt?.slice(0,16).replace('T',' ') }}</dd>
                   <dt>GO Points</dt><dd>{{ order.go_points_used || 0 }}</dd>
                   <dt>Avaliação</dt><dd>{{ order.rating != null ? order.rating + ' / 5' : '—' }}</dd>
@@ -151,8 +155,11 @@
         <section class="bo-card">
           <header class="bo-card__head">
             <div>
-              <h3 class="bo-card__title">Notificações por email</h3>
-              <p class="bo-card__sub">Histórico das comunicações automáticas associadas a este pedido.</p>
+              <h3 class="bo-card__title">Comunicações ao cliente</h3>
+              <p class="bo-card__sub">
+                Registo persistido no Strapi (rejeição, pedido de informação, cancelamento operacional).
+                O envio real depende do plugin de email configurado no backend.
+              </p>
             </div>
           </header>
           <div class="bo-card__body">
@@ -160,12 +167,14 @@
               <li v-for="m in orderMails" :key="m.id" class="mail-list__row">
                 <div class="mail-list__head">
                   <span class="bo-badge bo-badge--info">{{ m.kind }}</span>
+                  <span v-if="m.emailSent === false" class="bo-badge bo-badge--warn">SMTP não confirmado</span>
                   <span class="bo-mono bo-muted">{{ m.to }}</span>
-                  <span class="bo-mono bo-muted">{{ m.at.slice(0, 16).replace('T', ' ') }}</span>
+                  <span class="bo-mono bo-muted">{{ (m.at || '').slice(0, 16).replace('T', ' ') }}</span>
                 </div>
-                <p class="mail-list__body">{{ m.body.slice(0, 240) }}{{ m.body.length > 240 ? '…' : '' }}</p>
+                <p v-if="m.emailError" class="bo-muted" style="font-size: 12px; margin: 0 0 6px;">{{ m.emailError }}</p>
+                <p class="mail-list__body">{{ (m.body || '').slice(0, 240) }}{{ (m.body || '').length > 240 ? '…' : '' }}</p>
               </li>
-              <li v-if="!orderMails.length" class="bo-muted" style="font-size: 13px;">Nenhum email registado para este pedido.</li>
+              <li v-if="!orderMails.length" class="bo-muted" style="font-size: 13px;">Nenhuma comunicação registada para este pedido.</li>
             </ul>
           </div>
         </section>
@@ -312,6 +321,43 @@
             </fieldset>
           </div>
         </section>
+
+        <section v-if="canAdminCorrect" class="bo-card">
+          <header class="bo-card__head">
+            <div>
+              <h3 class="bo-card__title">Correção administrativa</h3>
+              <p class="bo-card__sub">Ajusta morada de entrega ou deixa nota interna (suporte). Não substitui aprovação ou atribuição.</p>
+            </div>
+          </header>
+          <div class="bo-card__body bo-stack">
+            <div class="bo-field">
+              <label class="bo-field__label">Morada de entrega</label>
+              <input v-model="adminPatch.deliveryAddress" type="text" class="bo-input" />
+            </div>
+            <div class="bo-field">
+              <label class="bo-field__label">Cidade (entrega)</label>
+              <input v-model="adminPatch.deliveryCity" type="text" class="bo-input" />
+            </div>
+            <div class="bo-field">
+              <label class="bo-field__label">Nota interna</label>
+              <textarea v-model="adminPatch.internalNote" class="bo-textarea" rows="2" placeholder="Visível na ficha do pedido (equipa)" />
+            </div>
+            <button type="button" class="bo-btn bo-btn--outline" @click="doAdminPatch">Guardar correções</button>
+          </div>
+        </section>
+
+        <section v-if="canCancelAdmin" class="bo-card">
+          <header class="bo-card__head">
+            <div>
+              <h3 class="bo-card__title">Cancelar pela operação</h3>
+              <p class="bo-card__sub">Estado S-14. O cliente recebe notificação na app e tentativa de email, se SMTP estiver ativo.</p>
+            </div>
+          </header>
+          <div class="bo-card__body bo-stack">
+            <textarea v-model="cancelReasonText" class="bo-textarea" rows="3" placeholder="Motivo do cancelamento (obrigatório)…" />
+            <button type="button" class="bo-btn bo-btn--danger" :disabled="!cancelReasonText.trim()" @click="doCancelAdmin">Cancelar pedido</button>
+          </div>
+        </section>
       </aside>
     </div>
   </div>
@@ -325,6 +371,7 @@ import {
   logistics, getOrderById, getCourierById, approveOrder, rejectOrder, requestOrderInfo,
   assignCourierToOrder, setOrderPriority, availableCouriersForOrder,
   startTransit, completeDelivery, refreshOrderFromServer,
+  cancelOrderByAdmin, patchOrderAdmin,
   ORDER_STATUS, orderStatusLabels,
 } from '../stores/logisticsStore.js';
 import { orderTypeLabels, priorityLabels } from '../constants/logistics.js';
@@ -341,6 +388,8 @@ const pri = ref(3);
 const rejectText = ref('');
 const infoText = ref('');
 const pickCourier = ref('');
+const adminPatch = reactive({ deliveryAddress: '', deliveryCity: '', internalNote: '' });
+const cancelReasonText = ref('');
 
 const suggested = computed(() => {
   const list = order.value?.suggestedCouriers;
@@ -351,6 +400,9 @@ watch(order, (o) => {
   if (o) {
     pri.value = o.priority;
     pickCourier.value = '';
+    adminPatch.deliveryAddress = o.deliveryAddress || '';
+    adminPatch.deliveryCity = o.deliveryCity || '';
+    adminPatch.internalNote = '';
     if (o.storeName && !ap.storeId) {
       const match = logistics.continentStores.find(s => s.name === o.storeName);
       if (match) ap.storeId = match.id;
@@ -443,6 +495,8 @@ const TIMELINE_LABELS = {
   start_transit: { title: 'Em trânsito', kind: 'transit' },
   complete: { title: 'Entrega concluída', kind: 'delivered' },
   set_priority: { title: 'Prioridade alterada', kind: 'priority' },
+  cancel_admin: { title: 'Cancelado pela operação', kind: 'rejected' },
+  admin_patch: { title: 'Correção administrativa', kind: 'info' },
 };
 
 const timelineEntries = computed(() => {
@@ -469,6 +523,12 @@ const timelineEntries = computed(() => {
       case 'set_priority':
         detail = (meta.from != null && meta.to != null) ? `P${meta.from} → P${meta.to}` : '';
         break;
+      case 'cancel_admin':
+        detail = meta.reason ? `Motivo: ${meta.reason}` : '';
+        break;
+      case 'admin_patch':
+        detail = Array.isArray(meta.fields) ? `Campos: ${meta.fields.join(', ')}` : '';
+        break;
       default:
         detail = '';
     }
@@ -493,13 +553,32 @@ function formatTimelineDate(iso) {
   }
 }
 
+const terminalStatuses = ['REJECTED', 'DELIVERED', 'CANCELLED_ADMIN'];
+
 const canApprove = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].includes(order.value.status));
-const canEditPriority = computed(() => order.value && !['REJECTED', 'DELIVERED'].includes(order.value.status));
-const canReject = computed(() => order.value && !['REJECTED', 'DELIVERED'].includes(order.value.status));
-const canRequestInfo = computed(() => order.value && !['REJECTED', 'DELIVERED'].includes(order.value.status));
+const canEditPriority = computed(() => order.value && !terminalStatuses.includes(order.value.status));
+const canReject = computed(() => order.value && !terminalStatuses.includes(order.value.status));
+const canRequestInfo = computed(() => order.value && !terminalStatuses.includes(order.value.status));
 const canAssignSection = computed(() => order.value && ['APPROVED', 'ASSIGNED'].includes(order.value.status));
+const canAdminCorrect = computed(() => order.value && !terminalStatuses.includes(order.value.status));
+const canCancelAdmin = computed(() => order.value && !terminalStatuses.includes(order.value.status));
 const available = computed(() => (order.value ? availableCouriersForOrder(order.value.id) : []));
-const orderMails = computed(() => logistics.emailLog.filter((e) => e.orderId === orderId.value));
+const orderMails = computed(() => {
+  const o = order.value;
+  const fromServer = o?.communicationLog;
+  if (Array.isArray(fromServer) && fromServer.length) {
+    return fromServer.map((c) => ({
+      id: c.id || `${c.at}-${c.kind}`,
+      kind: c.kind || c.channel || 'registo',
+      to: c.to || '',
+      at: c.at || '',
+      body: c.body || '',
+      emailSent: c.emailSent,
+      emailError: c.emailError || '',
+    }));
+  }
+  return logistics.emailLog.filter((e) => e.orderId === orderId.value);
+});
 
 function statusBadgeClass(status) {
   switch (status) {
@@ -510,6 +589,7 @@ function statusBadgeClass(status) {
     case ORDER_STATUS.ASSIGNED: return 'bo-badge--info';
     case ORDER_STATUS.IN_TRANSIT: return 'bo-badge--brand';
     case ORDER_STATUS.DELIVERED: return 'bo-badge--success';
+    case ORDER_STATUS.CANCELLED_ADMIN: return 'bo-badge--danger';
     default: return 'bo-badge--neutral';
   }
 }
@@ -548,6 +628,35 @@ async function doComplete() {
   const r = await completeDelivery(order.value.id);
   toast(r.ok ? 'Pedido marcado como entregue.' : r.error, r.ok ? 'success' : 'error');
   if (r.ok) void syncOrderDetail();
+}
+
+async function doAdminPatch() {
+  const p = {};
+  const addr = adminPatch.deliveryAddress.trim();
+  const city = adminPatch.deliveryCity.trim();
+  const note = adminPatch.internalNote.trim();
+  if (addr) p.deliveryAddress = addr;
+  if (city) p.deliveryCity = city;
+  if (note) p.internalNote = note;
+  if (!Object.keys(p).length) {
+    toast('Sem alterações para guardar.', 'error');
+    return;
+  }
+  const r = await patchOrderAdmin(order.value.id, p);
+  toast(r.ok ? 'Correções guardadas.' : r.error, r.ok ? 'success' : 'error');
+  if (r.ok) {
+    adminPatch.internalNote = '';
+    void syncOrderDetail();
+  }
+}
+
+async function doCancelAdmin() {
+  const r = await cancelOrderByAdmin(order.value.id, cancelReasonText.value);
+  toast(r.ok ? 'Pedido cancelado pela operação.' : r.error, r.ok ? 'success' : 'error');
+  if (r.ok) {
+    cancelReasonText.value = '';
+    void syncOrderDetail();
+  }
 }
 </script>
 

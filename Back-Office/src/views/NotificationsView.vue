@@ -25,6 +25,10 @@
             Estafetas · PWA
             <span class="bo-tab__counter">{{ pwaAlerts.length }}</span>
           </button>
+          <button type="button" class="bo-tab" :class="{ 'is-active': activeTab === 'app' }" role="tab" :aria-selected="activeTab === 'app'" @click="activeTab = 'app'; loadAppNotifs()">
+            App · Clientes
+            <span class="bo-tab__counter">{{ appUnreadCount }}</span>
+          </button>
         </div>
       </header>
 
@@ -71,6 +75,45 @@
           </div>
         </div>
 
+        <div v-if="activeTab === 'app'">
+          <div class="bo-row" style="margin-bottom: 14px; justify-content: flex-end;">
+            <button type="button" class="bo-btn bo-btn--outline bo-btn--sm" @click="loadAppNotifs">Atualizar lista</button>
+          </div>
+          <div v-if="appNotifsLoading" class="bo-muted" style="font-size: 13px;">A carregar notificações…</div>
+          <div v-else-if="!appNotifs.length" class="bo-empty">
+            <h3 class="bo-empty__title">Sem notificações</h3>
+            <p class="bo-empty__hint">Não há registos na coleção Notification do Strapi.</p>
+          </div>
+          <div v-else class="bo-stack--sm">
+            <article
+              v-for="n in appNotifs"
+              :key="n.documentId"
+              class="alert-card"
+              :class="{ 'alert-card--muted': n.isRead }"
+            >
+              <div class="alert-card__main">
+                <div class="bo-row" style="gap: 8px; flex-wrap: wrap;">
+                  <span class="bo-mono bo-muted">{{ formatAppTime(n.sentAt) }}</span>
+                  <span class="bo-badge bo-badge--info">{{ n.type || 'aviso' }}</span>
+                  <span v-if="!n.isRead" class="bo-badge bo-badge--warn">Não lida</span>
+                </div>
+                <h5 class="alert-card__title">{{ n.userEmail || 'Cliente' }}</h5>
+                <p class="alert-card__msg">{{ n.message }}</p>
+              </div>
+              <div class="alert-actions">
+                <button
+                  v-if="!n.isRead"
+                  type="button"
+                  class="action-btn"
+                  @click="markAppRead(n.documentId)"
+                >
+                  Marcar lida
+                </button>
+              </div>
+            </article>
+          </div>
+        </div>
+
         <div v-if="activeTab === 'pwa'">
           <div v-if="!pwaAlerts.length" class="bo-empty">
             <h3 class="bo-empty__title">Sem candidaturas</h3>
@@ -99,11 +142,49 @@
 import { ref, computed, onMounted } from 'vue';
 import { logistics, initLogistics } from '../stores/logisticsStore.js';
 import { ORDER_STATUS, COURIER_STATE } from '../constants/logistics.js';
+import { boAppNotifications, boMarkAppNotificationRead } from '../api/backofficeApi.js';
+import { toast } from '../utils/notify.js';
 
 const activeTab = ref('front-office');
+const appNotifs = ref([]);
+const appNotifsLoading = ref(false);
+
+const appUnreadCount = computed(() => appNotifs.value.filter((n) => !n.isRead).length);
+
+async function loadAppNotifs() {
+  appNotifsLoading.value = true;
+  try {
+    appNotifs.value = await boAppNotifications({ limit: 100 });
+  } catch (e) {
+    toast(e?.message || 'Falha ao carregar notificações.', 'error');
+    appNotifs.value = [];
+  } finally {
+    appNotifsLoading.value = false;
+  }
+}
+
+async function markAppRead(documentId) {
+  try {
+    await boMarkAppNotificationRead(documentId);
+    await loadAppNotifs();
+    toast('Marcada como lida.', 'success');
+  } catch (e) {
+    toast(e?.message || 'Falha ao atualizar.', 'error');
+  }
+}
+
+function formatAppTime(iso) {
+  if (!iso) return '—';
+  try {
+    return new Date(iso).toLocaleString('pt-PT', { dateStyle: 'short', timeStyle: 'short' });
+  } catch {
+    return String(iso).slice(0, 16);
+  }
+}
 
 onMounted(() => {
   initLogistics({ force: true });
+  void loadAppNotifs();
 });
 
 const formatTime = (isoString) => {
@@ -173,6 +254,10 @@ const pwaAlerts = computed(() => {
 .alert-card--warn {
   border-left: 4px solid var(--bo-warning);
   background: linear-gradient(90deg, var(--bo-warning-soft), var(--bo-surface) 60%);
+}
+
+.alert-card--muted {
+  opacity: 0.72;
 }
 
 .alert-card__main {

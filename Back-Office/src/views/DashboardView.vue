@@ -9,6 +9,9 @@
         </p>
       </div>
       <div class="bo-page-head__actions">
+        <button type="button" class="bo-btn bo-btn--outline" :disabled="reportsBusy" @click="syncReports">
+          {{ reportsBusy ? 'Relatórios…' : 'Atualizar relatórios' }}
+        </button>
         <RouterLink to="/orders" class="bo-btn bo-btn--outline">Ir para pedidos</RouterLink>
         <RouterLink to="/map" class="bo-btn bo-btn--primary">Abrir mapa</RouterLink>
       </div>
@@ -195,15 +198,31 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, ref } from 'vue';
 import {
   logistics,
   kpiSummary,
   monthlyRevenueFromOrders,
   pickupsByStore,
+  refreshServerReports,
   ORDER_STATUS,
   orderStatusLabels,
 } from '../stores/logisticsStore.js';
+import { toast } from '../utils/notify.js';
+
+const reportsBusy = ref(false);
+
+async function syncReports() {
+  reportsBusy.value = true;
+  try {
+    await refreshServerReports();
+    toast('Relatórios sincronizados com o servidor.', 'success');
+  } catch (e) {
+    toast(e?.message || 'Falha ao atualizar relatórios.', 'error');
+  } finally {
+    reportsBusy.value = false;
+  }
+}
 
 const sla = computed(() => logistics.slaMetrics || null);
 const slaBacklog = computed(() => (Array.isArray(sla.value?.backlogStuckByZone) ? sla.value.backlogStuckByZone : []));
@@ -248,6 +267,7 @@ const statusColors = {
   [ORDER_STATUS.ASSIGNED]: '#0d9488',
   [ORDER_STATUS.IN_TRANSIT]: '#1b8a4a',
   [ORDER_STATUS.DELIVERED]: '#64748b',
+  [ORDER_STATUS.CANCELLED_ADMIN]: '#b91c1c',
 };
 
 const donutLeg = computed(() => {
