@@ -19,8 +19,12 @@ const props = defineProps({
   storeLng: { type: Number, required: true },
   destLat: { type: Number, required: true },
   destLng: { type: Number, required: true },
-  /** 0 = junto à loja, 100 = no destino (posição do estafeta na linha) */
+  /** 0 = junto à loja, 100 = no destino (posição do estafeta na linha) — fallback quando não há GPS real */
   courierProgress: { type: Number, default: 0 },
+  /** GPS real do estafeta (latitude). Se fornecido, sobrepõe courierProgress */
+  courierLat: { type: Number, default: null },
+  /** GPS real do estafeta (longitude). Se fornecido, sobrepõe courierProgress */
+  courierLng: { type: Number, default: null },
   height: { type: String, default: '280px' },
   /** Classe CSS no body do mapa (ex.: in-transit) para filtro visual */
   dimTiles: { type: Boolean, default: false },
@@ -196,18 +200,34 @@ function drawLayers() {
     .addTo(layerGroup)
     .bindTooltip('Destino', { permanent: false, direction: 'top' });
 
-  const p = Math.min(1, Math.max(0, props.courierProgress / 100));
-  if (p > 0 && p < 1) {
-    const [clat, clng] = pointAlongPolyline(linePoints, p);
-    L.circleMarker([clat, clng], {
-      radius: 7,
+  // GPS real do estafeta (prioridade) ou fallback por progresso
+  const hasRealGps = props.courierLat != null && props.courierLng != null
+    && Number.isFinite(props.courierLat) && Number.isFinite(props.courierLng);
+
+  if (hasRealGps) {
+    L.circleMarker([props.courierLat, props.courierLng], {
+      radius: 8,
       fillColor: '#0f172a',
-      color: '#fff',
-      weight: 2,
+      color: '#10b981',
+      weight: 3,
       fillOpacity: 1,
     })
       .addTo(layerGroup)
-      .bindTooltip('Estafeta (indicativo)', { permanent: false, direction: 'right' });
+      .bindTooltip('Estafeta (GPS real)', { permanent: false, direction: 'right' });
+  } else {
+    const p = Math.min(1, Math.max(0, props.courierProgress / 100));
+    if (p > 0 && p < 1) {
+      const [clat, clng] = pointAlongPolyline(linePoints, p);
+      L.circleMarker([clat, clng], {
+        radius: 7,
+        fillColor: '#0f172a',
+        color: '#fff',
+        weight: 2,
+        fillOpacity: 1,
+      })
+        .addTo(layerGroup)
+        .bindTooltip('Estafeta (indicativo)', { permanent: false, direction: 'right' });
+    }
   }
 
   const key = `${coordsKey()}|${routeLatLngs ? 'r' : 's'}`;
@@ -263,7 +283,7 @@ watch(
 );
 
 watch(
-  () => [props.courierProgress, props.dimTiles],
+  () => [props.courierProgress, props.courierLat, props.courierLng, props.dimTiles],
   () => {
     if (map && layerGroup) drawLayers();
   }

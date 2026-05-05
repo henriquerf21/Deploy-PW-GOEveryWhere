@@ -18,7 +18,13 @@ const route = useRoute();
 const transitionName = computed(() => 'page-slide');
 
 /* ── Global scroll-reveal via IntersectionObserver ── */
+import { fetchStores, fetchCatalogProducts } from './stores/orderStore.js';
+
 onMounted(() => {
+  // Carregar dados dinâmicos do backend (RF)
+  fetchStores();
+  fetchCatalogProducts();
+
   if (typeof IntersectionObserver === 'undefined') return;
 
   const observer = new IntersectionObserver(

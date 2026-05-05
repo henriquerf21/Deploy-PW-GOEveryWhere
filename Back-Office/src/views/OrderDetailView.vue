@@ -235,7 +235,7 @@
           </div>
         </section>
 
-        <section class="bo-card">
+        <section v-if="canAssignSection" class="bo-card">
           <header class="bo-card__head">
             <div>
               <h3 class="bo-card__title">Atribuir estafeta</h3>
@@ -292,7 +292,7 @@
           </div>
         </section>
 
-        <section class="bo-card">
+        <section v-if="canRequestInfo" class="bo-card">
           <header class="bo-card__head">
             <div>
               <h3 class="bo-card__title">Pedir informação adicional</h3>
@@ -307,7 +307,32 @@
           </div>
         </section>
 
-        <section class="bo-card">
+
+        <section v-if="canAdminCorrect" class="bo-card">
+          <header class="bo-card__head">
+            <div>
+              <h3 class="bo-card__title">Correção administrativa</h3>
+              <p class="bo-card__sub">Ajusta morada de entrega ou deixa nota interna. Não substitui aprovação.</p>
+            </div>
+          </header>
+          <div class="bo-card__body bo-stack">
+            <div class="bo-field">
+              <label class="bo-field__label">Morada de entrega</label>
+              <input v-model="adminPatch.deliveryAddress" type="text" class="bo-input" />
+            </div>
+            <div class="bo-field">
+              <label class="bo-field__label">Cidade (entrega)</label>
+              <input v-model="adminPatch.deliveryCity" type="text" class="bo-input" />
+            </div>
+            <div class="bo-field">
+              <label class="bo-field__label">Nota interna</label>
+              <textarea v-model="adminPatch.internalNote" class="bo-textarea" rows="2" placeholder="Visível na ficha do pedido..." />
+            </div>
+            <button type="button" class="bo-btn bo-btn--outline" @click="doAdminPatch">Guardar correções</button>
+          </div>
+        </section>
+
+                <section v-if="canReject" class="bo-card">
           <header class="bo-card__head">
             <div>
               <h3 class="bo-card__title">Rejeitar pedido</h3>
@@ -322,35 +347,11 @@
           </div>
         </section>
 
-        <section v-if="canAdminCorrect" class="bo-card">
-          <header class="bo-card__head">
-            <div>
-              <h3 class="bo-card__title">Correção administrativa</h3>
-              <p class="bo-card__sub">Ajusta morada de entrega ou deixa nota interna (suporte). Não substitui aprovação ou atribuição.</p>
-            </div>
-          </header>
-          <div class="bo-card__body bo-stack">
-            <div class="bo-field">
-              <label class="bo-field__label">Morada de entrega</label>
-              <input v-model="adminPatch.deliveryAddress" type="text" class="bo-input" />
-            </div>
-            <div class="bo-field">
-              <label class="bo-field__label">Cidade (entrega)</label>
-              <input v-model="adminPatch.deliveryCity" type="text" class="bo-input" />
-            </div>
-            <div class="bo-field">
-              <label class="bo-field__label">Nota interna</label>
-              <textarea v-model="adminPatch.internalNote" class="bo-textarea" rows="2" placeholder="Visível na ficha do pedido (equipa)" />
-            </div>
-            <button type="button" class="bo-btn bo-btn--outline" @click="doAdminPatch">Guardar correções</button>
-          </div>
-        </section>
-
         <section v-if="canCancelAdmin" class="bo-card">
           <header class="bo-card__head">
             <div>
               <h3 class="bo-card__title">Cancelar pela operação</h3>
-              <p class="bo-card__sub">Estado S-14. O cliente recebe notificação na app e tentativa de email, se SMTP estiver ativo.</p>
+              <p class="bo-card__sub">Estado S-14. O cliente recebe notificação na app e tentativa de email.</p>
             </div>
           </header>
           <div class="bo-card__body bo-stack">
@@ -403,14 +404,24 @@ watch(order, (o) => {
     adminPatch.deliveryAddress = o.deliveryAddress || '';
     adminPatch.deliveryCity = o.deliveryCity || '';
     adminPatch.internalNote = '';
+    if (o.costEuro && !ap.costEuro) ap.costEuro = o.costEuro;
+    if (o.etaMinutes && !ap.etaMinutes) ap.etaMinutes = o.etaMinutes;
+
+    // Tentar pré-selecionar a loja enviada pelo FO
     if (o.storeName && !ap.storeId) {
-      const match = logistics.continentStores.find(s => s.name === o.storeName);
+      const match = logistics.continentStores.find(s => 
+        s.name.toLowerCase().trim() === o.storeName.toLowerCase().trim()
+      );
       if (match) ap.storeId = match.id;
     }
-    if (o.costEuro) ap.costEuro = o.costEuro;
+
     nextTick(() => initMap());
   }
 }, { immediate: true });
+
+watch(() => ap.storeId, () => {
+  initMap();
+});
 
 function initMap() {
   if (!mapContainer.value || !order.value) return;
@@ -441,8 +452,9 @@ function buildMap() {
   if (!mapContainer.value || !order.value) return;
   if (mapInstance) { mapInstance.remove(); mapInstance = null; }
   const o = order.value;
-  const pLat = o.pickupLat || 41.15;
-  const pLng = o.pickupLng || -8.61;
+  const selectedStore = logistics.continentStores.find(s => s.id === ap.storeId);
+  const pLat = selectedStore?.lat || o.pickupLat || 41.15;
+  const pLng = selectedStore?.lng || o.pickupLng || -8.61;
   const dLat = o.destLat || pLat;
   const dLng = o.destLng || pLng;
 
@@ -462,7 +474,7 @@ function buildMap() {
 
   L.marker([pLat, pLng], { icon: continenteIcon })
     .addTo(mapInstance)
-    .bindPopup('<b>Loja Continente (recolha)</b><br>' + (o.storeName || 'Recolha'));
+    .bindPopup('<b>Loja Continente (recolha)</b><br>' + (selectedStore?.name || o.storeName || 'Recolha'));
 
   L.marker([dLat, dLng], { icon: customerIcon })
     .addTo(mapInstance)
@@ -553,15 +565,15 @@ function formatTimelineDate(iso) {
   }
 }
 
-const terminalStatuses = ['REJECTED', 'DELIVERED', 'CANCELLED_ADMIN'];
+const terminalStatuses = ['REJECTED', 'DELIVERED', 'CANCELLED_ADMIN', 'CANCELLED_CLIENT'];
 
 const canApprove = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].includes(order.value.status));
 const canEditPriority = computed(() => order.value && !terminalStatuses.includes(order.value.status));
-const canReject = computed(() => order.value && !terminalStatuses.includes(order.value.status));
-const canRequestInfo = computed(() => order.value && !terminalStatuses.includes(order.value.status));
+const canReject = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].includes(order.value.status));
+const canRequestInfo = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].includes(order.value.status));
 const canAssignSection = computed(() => order.value && ['APPROVED', 'ASSIGNED'].includes(order.value.status));
 const canAdminCorrect = computed(() => order.value && !terminalStatuses.includes(order.value.status));
-const canCancelAdmin = computed(() => order.value && !terminalStatuses.includes(order.value.status));
+const canCancelAdmin = computed(() => order.value && ['APPROVED', 'ASSIGNED', 'IN_TRANSIT'].includes(order.value.status));
 const available = computed(() => (order.value ? availableCouriersForOrder(order.value.id) : []));
 const orderMails = computed(() => {
   const o = order.value;
@@ -589,6 +601,7 @@ function statusBadgeClass(status) {
     case ORDER_STATUS.ASSIGNED: return 'bo-badge--info';
     case ORDER_STATUS.IN_TRANSIT: return 'bo-badge--brand';
     case ORDER_STATUS.DELIVERED: return 'bo-badge--success';
+    case ORDER_STATUS.CANCELLED_CLIENT: return 'bo-badge--danger';
     case ORDER_STATUS.CANCELLED_ADMIN: return 'bo-badge--danger';
     default: return 'bo-badge--neutral';
   }

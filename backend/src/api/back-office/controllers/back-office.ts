@@ -282,6 +282,11 @@ export default {
     return ctx.send({ data: await service.getPublicMetrics() });
   },
 
+  async publicStores(ctx: Ctx) {
+    const service = getService(strapi);
+    return ctx.send({ data: await service.getContinentStores() });
+  },
+
   async chatbot(ctx: Ctx) {
     const service = getService(strapi);
     return ctx.send(await service.chatWithBot(ctx.request.body));

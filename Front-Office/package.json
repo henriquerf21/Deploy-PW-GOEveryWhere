@@ -11,6 +11,7 @@
     "bootstrap-icons": "^1.13.1",
     "leaflet": "^1.9.4",
     "lucide-vue-next": "^1.0.0",
+    "socket.io-client": "^4.8.3",
     "vue": "^3.3.4",
     "vue-router": "^4.6.4",
     "vue3-google-login": "^2.0.37"

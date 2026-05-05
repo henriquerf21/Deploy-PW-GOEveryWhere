@@ -143,7 +143,7 @@ async function handleLogin() {
 
     // 2. VERIFICA O RESULTADO
     if (result.success) {
-      router.push('/dashboard');
+      router.push('/about');
     } else {
       // 3. ATRIBUI O ERRO REAL QUE VEM DO STRAPI
       // O Strapi devolve "Invalid identifier or password" por defeito
@@ -179,7 +179,7 @@ async function handleGoogleLogin() {
     const result = await loginWithGoogle(response.access_token);
 
     if (result.success) {
-      router.push('/dashboard');
+      router.push('/about');
     } else {
       globalError.value = result.error || 'Falha ao autenticar com o Google.';
     }

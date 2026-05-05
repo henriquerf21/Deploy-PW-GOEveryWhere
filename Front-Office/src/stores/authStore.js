@@ -96,13 +96,17 @@ export async function fetchMe() {
     });
     const data = await res.json();
     if (res.ok) {
-      // Preserve local state fields like picture and authMethod
+      // Prioritize local state fields because Strapi /users/me might not return the picture
+      const finalPicture = state.user?.picture || data.picture;
+      const finalAvatar = state.user?.avatarUrl || data.avatarUrl;
+      const finalAuthMethod = state.user?.authMethod || data.authMethod;
+      
       state.user = {
         ...state.user,
         ...data,
-        picture: state.user?.picture || data.picture,
-        avatarUrl: state.user?.avatarUrl || data.avatarUrl,
-        authMethod: state.user?.authMethod || data.authMethod
+        picture: finalPicture,
+        avatarUrl: finalAvatar,
+        authMethod: finalAuthMethod
       };
       saveSession({ user: state.user, jwt: state.token });
     }
@@ -156,14 +160,32 @@ export async function loginWithGoogle(googleAccessToken) {
 
     // Now, fetch the profile picture from Google directly
     let googlePicture = null;
+    
+    // First try: Decode the token if it's a JWT (ID Token)
     try {
-      const googleRes = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${googleAccessToken}`);
-      if (googleRes.ok) {
-        const googleUser = await googleRes.json();
-        googlePicture = googleUser.picture;
+      const payload = JSON.parse(atob(googleAccessToken.split('.')[1]));
+      if (payload && payload.picture) {
+        googlePicture = payload.picture;
       }
-    } catch (err) {
-      console.error("Erro ao obter userinfo do Google:", err);
+    } catch (e) {
+      // Not a valid JWT, proceed to fetch
+    }
+
+    // Second try: Fetch from Google Userinfo API (if it's an Access Token)
+    if (!googlePicture) {
+      try {
+        console.log("A tentar buscar userinfo com:", googleAccessToken);
+        const googleRes = await fetch(`https://www.googleapis.com/oauth2/v3/userinfo?access_token=${googleAccessToken}`);
+        if (googleRes.ok) {
+          const googleUser = await googleRes.json();
+          googlePicture = googleUser.picture;
+          console.log("Foto obtida com sucesso da Google:", googlePicture);
+        } else {
+          console.error("googleRes não está ok:", googleRes.status);
+        }
+      } catch (err) {
+        console.error("Erro ao obter userinfo do Google:", err);
+      }
     }
 
     state.user = {
@@ -172,9 +194,11 @@ export async function loginWithGoogle(googleAccessToken) {
       authMethod: 'google'
     };
     state.token = data.jwt;
+    console.log("Picture dentro do state.user ANTES do save:", state.user.picture);
     saveSession({ user: state.user, jwt: data.jwt });
     
     await fetchMe(); // Carregar pontos logo após login Google
+    console.log("Picture dentro do state.user APOS fetchMe:", state.user.picture);
 
     return { success: true };
   } catch (error) {

@@ -61,13 +61,13 @@ async function handleGoogleLogin() {
 
     // 3. Se o teu store validar o token com sucesso, redireciona
     if (result && result.success) {
-      router.push('/dashboard');
+      router.push('/about');
     } else if (result && !result.success) {
       alert(result.error || "Erro ao validar conta Google.");
     }
     
     // Se não tiveres backend e o loginWithGoogle for apenas para guardar dados:
-    // router.push('/dashboard');
+    // router.push('/about');
 
   } catch (error) {
     // Caso o utilizador feche o popup sem escolher conta
