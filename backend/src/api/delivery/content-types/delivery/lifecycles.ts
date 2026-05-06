@@ -1,4 +1,6 @@
 
+import { DELIVERY_TO_ORDER_STATUS } from '../../../back-office/utils/order-state-machine';
+
 export default {
   async afterUpdate(event) {
     const { result, params } = event;
@@ -6,25 +8,14 @@ export default {
 
     if (!order) return;
 
-    // Mapeamento de estados da Delivery para a Order
-    const stateMap = {
-      'E-08 Pedido Recebido': 'S-06 Aguardando Aceitação',
-      'E-09 A Caminho da Loja': 'S-07 A Caminho da Loja',
-      'E-10 Na Loja / Em Recolha': 'S-08 Em Recolha na Loja',
-      'E-11 Em Trânsito para Cliente': 'S-09 Em Entrega / Trânsito',
-      'E-12 No Destino': 'S-10 No Destino / À Espera',
-      'E-13 Entrega Confirmada': 'S-11 Entregue',
-      'E-14 Entrega Impossível': 'S-14 Cancelada'
-    };
-
-    const newOrderStatus = stateMap[delivery_status];
+    const newOrderStatus = DELIVERY_TO_ORDER_STATUS[delivery_status];
 
     if (newOrderStatus) {
       console.log(`[Delivery Lifecycle] Sincronizando Order ${order.documentId || order.id} para estado: ${newOrderStatus}`);
       try {
         await strapi.documents('api::order.order').update({
           documentId: order.documentId || order.id,
-          data: { order_status: newOrderStatus },
+          data: { order_status: newOrderStatus as any },
           status: 'published'
         });
       } catch (err) {

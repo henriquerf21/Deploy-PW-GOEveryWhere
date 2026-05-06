@@ -261,6 +261,9 @@ const props = defineProps({ id: String });
 const router = useRouter();
 const routeMapEl = ref(null);
 let routeMap = null; let routeLayer = null; let leaflet = null;
+let pickupMarkerIcon = null;
+let destinationMarkerIcon = null;
+let courierMarkerIcon = null;
 
 const delivery = computed(() => getDeliveryById(props.id));
 const ctaLabel = computed(() => delivery.value ? STATE_CTA[delivery.value.state] : null);
@@ -398,6 +401,53 @@ function calculateRemainingSeconds() {
 function zoomIn() { routeMap?.zoomIn(); }
 function zoomOut() { routeMap?.zoomOut(); }
 
+function svgPinDataUri(fill, glyph) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="42" viewBox="0 0 34 42"><defs><filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,0.35)"/></filter></defs><g filter="url(#s)"><path d="M17 2C9.82 2 4 7.82 4 15c0 8.7 9.83 18.9 12.27 21.31a1 1 0 0 0 1.46 0C20.17 33.9 30 23.7 30 15 30 7.82 24.18 2 17 2z" fill="${fill}"/><circle cx="17" cy="15" r="9" fill="#fff"/><text x="17" y="19" text-anchor="middle" font-size="11" font-family="Arial, sans-serif">${glyph}</text></g></svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function getPickupIcon() {
+  if (!leaflet) return null;
+  if (!pickupMarkerIcon) {
+    pickupMarkerIcon = leaflet.icon({
+      iconUrl: svgPinDataUri('#f59e0b', '🏬'),
+      iconSize: [28, 34],
+      iconAnchor: [14, 34],
+      popupAnchor: [0, -30],
+      className: 'ge-map-marker-icon',
+    });
+  }
+  return pickupMarkerIcon;
+}
+
+function getDestinationIcon() {
+  if (!leaflet) return null;
+  if (!destinationMarkerIcon) {
+    destinationMarkerIcon = leaflet.icon({
+      iconUrl: svgPinDataUri('#16a34a', '🏠'),
+      iconSize: [28, 34],
+      iconAnchor: [14, 34],
+      popupAnchor: [0, -30],
+      className: 'ge-map-marker-icon',
+    });
+  }
+  return destinationMarkerIcon;
+}
+
+function getCourierIcon() {
+  if (!leaflet) return null;
+  if (!courierMarkerIcon) {
+    courierMarkerIcon = leaflet.icon({
+      iconUrl: svgPinDataUri('#2563eb', '🛵'),
+      iconSize: [30, 36],
+      iconAnchor: [15, 36],
+      popupAnchor: [0, -32],
+      className: 'ge-map-marker-icon ge-map-marker-icon--courier',
+    });
+  }
+  return courierMarkerIcon;
+}
+
 onMounted(() => {
   if (delivery.value?.state === DELIVERY_STATE.E08) {
     timerSeconds.value = calculateRemainingSeconds();
@@ -493,8 +543,14 @@ function renderRouteMap() {
     color: routeColor, weight: 5, opacity: 0.92,
     dashArray: isDashed ? '10 8' : null,
   }));
-  routeLayer.addLayer(leaflet.circleMarker([p.lat, p.lng], { radius: 9, fillColor: '#f59e0b', color: '#fff', weight: 2.5, fillOpacity: 1 }));
-  routeLayer.addLayer(leaflet.circleMarker([d.lat, d.lng], { radius: 9, fillColor: '#22c55e', color: '#fff', weight: 2.5, fillOpacity: 1 }));
+  routeLayer.addLayer(leaflet.marker([p.lat, p.lng], { icon: getPickupIcon() }));
+  routeLayer.addLayer(leaflet.marker([d.lat, d.lng], { icon: getDestinationIcon() }));
+
+  if (['E-10', 'E-11', 'E-12'].includes(s)) {
+    const clat = p.lat + (d.lat - p.lat) * 0.45;
+    const clng = p.lng + (d.lng - p.lng) * 0.45;
+    routeLayer.addLayer(leaflet.marker([clat, clng], { icon: getCourierIcon() }));
+  }
   routeMap.fitBounds(leaflet.latLngBounds([[p.lat, p.lng], [d.lat, d.lng]]), { padding: [24, 24], maxZoom: 14 });
 }
 </script>
@@ -545,6 +601,10 @@ function renderRouteMap() {
   border: 0.72px solid #e5e7eb;
 }
 .route-map { height: 200px; background: var(--ge-page); }
+.route-map :deep(.leaflet-container) { height: 100%; width: 100%; }
+.route-map :deep(.ge-map-marker-icon) {
+  filter: drop-shadow(0 2px 6px rgba(0,0,0,0.35));
+}
 .map-controls {
   position: absolute; bottom: 12px; right: 12px;
   display: flex; flex-direction: column; gap: 4px; z-index: 10;

@@ -26,7 +26,7 @@
     </header>
 
     <div v-if="order.priority === 5" class="urgent-banner" role="alert">
-      <strong>Prioridade máxima (5 — Urgente).</strong> Tratamento imediato obrigatório.
+      <strong>Prioridade máxima 5 — Urgente.</strong> Tratamento imediato obrigatório.
     </div>
 
     <div class="layout">
@@ -61,9 +61,9 @@
                   <dt>ETA</dt><dd>{{ order.etaMinutes ? order.etaMinutes + ' min' : '—' }}</dd>
                   <dt>Recursos</dt><dd>{{ order.resources || '—' }}</dd>
                   <dt>Estafeta</dt><dd>{{ order.courierName || '—' }}</dd>
-                  <dt v-if="order.cancelReason">Motivo cancelamento (op.)</dt>
+                  <dt v-if="order.cancelReason">Motivo cancelamento operação</dt>
                   <dd v-if="order.cancelReason">{{ order.cancelReason }}</dd>
-                  <dt v-if="order.adminInternalNote">Nota interna (última)</dt>
+                  <dt v-if="order.adminInternalNote">Nota interna última</dt>
                   <dd v-if="order.adminInternalNote">{{ order.adminInternalNote }}</dd>
                   <dt>Data</dt><dd class="bo-mono">{{ order.createdAt?.slice(0,16).replace('T',' ') }}</dd>
                   <dt>GO Points</dt><dd>{{ order.go_points_used || 0 }}</dd>
@@ -94,7 +94,7 @@
           <header class="bo-card__head">
             <div>
               <h3 class="bo-card__title">Mapa do pedido</h3>
-              <p class="bo-card__sub">Loja Continente, cliente e estafeta (quando atribuído).</p>
+              <p class="bo-card__sub">Loja Continente, cliente e estafeta quando atribuído.</p>
             </div>
           </header>
           <div class="bo-card__body" style="padding: 0;">
@@ -105,7 +105,7 @@
         <section v-if="order.clientReply || order.infoRequestMessage" class="bo-card s03-card">
           <header class="bo-card__head">
             <div>
-              <h3 class="bo-card__title">Esclarecimento (S-03)</h3>
+              <h3 class="bo-card__title">Esclarecimento S-03</h3>
               <p class="bo-card__sub">Diálogo com o cliente sobre informação adicional solicitada.</p>
             </div>
           </header>
@@ -355,7 +355,7 @@
             </div>
           </header>
           <div class="bo-card__body bo-stack">
-            <textarea v-model="cancelReasonText" class="bo-textarea" rows="3" placeholder="Motivo do cancelamento (obrigatório)…" />
+            <textarea v-model="cancelReasonText" class="bo-textarea" rows="3" placeholder="Motivo do cancelamento obrigatório…" />
             <button type="button" class="bo-btn bo-btn--danger" :disabled="!cancelReasonText.trim()" @click="doCancelAdmin">Cancelar pedido</button>
           </div>
         </section>
@@ -384,7 +384,7 @@ const order = computed(() => getOrderById(orderId.value));
 const mapContainer = ref(null);
 let mapInstance = null;
 
-const ap = reactive({ storeId: '', costEuro: 6.5, etaMinutes: 35, resources: 'Mota, caixa isotérmica' });
+const ap = reactive({ storeId: '', costEuro: 0, etaMinutes: 0, resources: '' });
 const pri = ref(3);
 const rejectText = ref('');
 const infoText = ref('');
@@ -404,8 +404,9 @@ watch(order, (o) => {
     adminPatch.deliveryAddress = o.deliveryAddress || '';
     adminPatch.deliveryCity = o.deliveryCity || '';
     adminPatch.internalNote = '';
-    if (o.costEuro && !ap.costEuro) ap.costEuro = o.costEuro;
-    if (o.etaMinutes && !ap.etaMinutes) ap.etaMinutes = o.etaMinutes;
+    ap.costEuro = Number.isFinite(Number(o.costEuro)) ? Number(o.costEuro) : 0;
+    ap.etaMinutes = Number.isFinite(Number(o.etaMinutes)) ? Number(o.etaMinutes) : 0;
+    ap.resources = o.resources || '';
 
     // Tentar pré-selecionar a loja enviada pelo FO
     if (o.storeName && !ap.storeId) {
@@ -608,6 +609,18 @@ function statusBadgeClass(status) {
 }
 
 async function doApprove() {
+  if (!ap.storeId) {
+    toast('Seleciona uma loja antes de aprovar.', 'error');
+    return;
+  }
+  if (!(Number(ap.costEuro) > 0)) {
+    toast('Define um custo válido (> 0).', 'error');
+    return;
+  }
+  if (!(Number(ap.etaMinutes) > 0)) {
+    toast('Define um ETA válido (> 0).', 'error');
+    return;
+  }
   const r = await approveOrder(order.value.id, { ...ap });
   toast(r.ok ? 'Pedido aprovado.' : r.error, r.ok ? 'success' : 'error');
   if (r.ok) void syncOrderDetail();

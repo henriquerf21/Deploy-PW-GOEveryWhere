@@ -1,10 +1,9 @@
 import { reactive, computed, ref, watch } from 'vue';
 import { io } from 'socket.io-client';
 import { DELIVERY_STATE, COURIER_STATE, NEXT_STATE } from '../constants.js';
+import { API_URL, BACKEND_URL, SOCKET_URL } from '../config/env.js';
 
 // ── Config ───────────────────────────────────────────────────────
-const API_URL = 'http://localhost:1337/api';
-const SOCKET_URL = 'http://localhost:1337';
 const STORAGE_KEY = 'ge-estafeta';
 
 // Global GPS coords for distances
@@ -53,6 +52,18 @@ async function apiPut(path, body) {
     });
     if (!res.ok) throw new Error(`PUT ${path} failed: ${res.status}`);
     return res.json();
+}
+
+async function apiCourierPut(path, body) {
+    const res = await fetch(`${API_URL}${path}`, {
+        method: 'PUT', headers: authHeaders(), body: JSON.stringify(body),
+    });
+    if (!res.ok) throw new Error(`PUT ${path} failed: ${res.status}`);
+    return res.json();
+}
+
+async function apiCourierSelfPut(data) {
+    return apiCourierPut('/courier-estafetas/me', { data });
 }
 
 async function apiUploadFile(file) {
@@ -146,9 +157,12 @@ function mapDelivery(d) {
         if (p !== null) distPickup = parseFloat(p.toFixed(1));
         if (d !== null) distDest = parseFloat(d.toFixed(1));
     } else {
-        // Fallback for initial load
-        distPickup = parseFloat((Math.random() * 2 + 0.5).toFixed(1));
-        distDest = parseFloat((Math.random() * 5 + 1).toFixed(1));
+        // Fallback determinístico sem valores aleatórios
+        const total = haversineKm(pickupLat, pickupLng, destLat, destLng);
+        if (total !== null) {
+            distPickup = parseFloat(total.toFixed(1));
+            distDest = parseFloat(total.toFixed(1));
+        }
     }
 
     return {
@@ -206,30 +220,6 @@ function mapDelivery(d) {
         timerStart: attrs.createdAt || null,
         chatHistory: Array.isArray(order.chatHistory) ? order.chatHistory : [],
     };
-}
-
-// ── Seed fallback (when API is unreachable) ──────────────────────
-function seedDeliveries() {
-    return [
-        {
-            id: 'GE-24100', orderId: '#ORD-2850', type: 'EXPRESS', priority: 5,
-            state: DELIVERY_STATE.E08,
-            pickup: { name: 'Continente Braga', address: 'Rua 25 de Abril 1090, 4710-913 Braga', lat: 41.5503, lng: -8.4200, distance: 3.2 },
-            destination: { name: 'Maria Santos', address: 'Rua do Carmo 45, 4050-164 Braga', phone: '+351 912 345 678', lat: 41.5450, lng: -8.4260, distance: 5.1 },
-            items: [{ name: 'GoGummies Original', qty: 4, unit: 'frascos' }],
-            weight: '0.4kg', size: 'Médio', instructions: 'Tocar à campainha 2 vezes.',
-            costEuro: 6.50, etaMinutes: 25, timestamps: {}, confirmation: null, notes: '', photos: [], timerStart: null,
-        },
-        {
-            id: 'GE-24101', orderId: '#ORD-2851', type: 'STANDARD', priority: 3,
-            state: DELIVERY_STATE.E08,
-            pickup: { name: 'Continente Gaia', address: 'Av. República 320, 4430-190 Vila Nova de Gaia', lat: 41.1235, lng: -8.6120, distance: 7.8 },
-            destination: { name: 'João Costa', address: 'Rua Heroísmo 90, 4300-259 Porto', phone: '+351 934 000 002', lat: 41.1480, lng: -8.5980, distance: 12.4 },
-            items: [{ name: 'GoGummies Boost', qty: 2, unit: 'frascos' }],
-            weight: '0.3kg', size: 'Pequeno', instructions: '',
-            costEuro: 4.90, etaMinutes: 35, timestamps: {}, confirmation: null, notes: '', photos: [], timerStart: null,
-        },
-    ];
 }
 
 // ── Store ─────────────────────────────────────────────────────────
@@ -337,27 +327,19 @@ export async function login(phone, countryCode, password) {
     store.loading = true;
     store.error = null;
     try {
-        // 1. Find courier by phone
-        let couriersRes;
-        try {
-            couriersRes = await apiGet(`/courier-estafetas?filters[phone][$eq]=${encodeURIComponent(countryCode + phone)}&populate=*&status=published`);
-        } catch (err) {
-            throw new Error('Não foi possível verificar os dados (Servidor offline ou sem permissões)');
-        }
-        
-        const couriers = couriersRes.data || [];
-
-        if (couriers.length === 0) {
-            throw new Error('Estafeta não registado. Verifica o número de telemóvel.');
+        // 1. Auth dedicated to courier-estafetas
+        const loginRes = await fetch(`${API_URL}/courier-estafetas/auth/login`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ phone, countryCode, password }),
+        });
+        const loginJson = await loginRes.json().catch(() => ({}));
+        if (!loginRes.ok || !loginJson?.courier) {
+            throw new Error(loginJson?.error?.message || loginJson?.message || 'Credenciais inválidas.');
         }
 
-        const courier = couriers[0];
+        const courier = loginJson.courier;
         const courierAttrs = courier.attributes || courier;
-        
-        // Validate password
-        if (courierAttrs.password !== password) {
-            throw new Error('A password está incorreta.');
-        }
 
         const courierStatus = courierAttrs.courier_status || '';
 
@@ -373,7 +355,7 @@ export async function login(phone, countryCode, password) {
         }
 
         // 3. Set state
-        store.auth = { loggedIn: true, phone, countryCode, token: null };
+        store.auth = { loggedIn: true, phone, countryCode, token: loginJson.token || null };
         store.courierId = courier.id || courier.documentId;
 
         // Build profile photo URL from docSelfie
@@ -383,7 +365,7 @@ export async function login(phone, countryCode, password) {
             const selfieData = selfie.data?.attributes || selfie;
             const photoPath = selfieData?.url || selfieData?.formats?.thumbnail?.url || null;
             if (photoPath) {
-                profilePhotoUrl = photoPath.startsWith('http') ? photoPath : `http://localhost:1337${photoPath}`;
+                profilePhotoUrl = photoPath.startsWith('http') ? photoPath : `${BACKEND_URL}${photoPath}`;
             }
         }
 
@@ -417,9 +399,9 @@ export async function login(phone, countryCode, password) {
 
         saveState();
 
-        // 4. Load deliveries
+        // 4. Presence defaults on app open + load deliveries
         store.activeDeliveryId = null; // will be repopulated by fetchDeliveries if active
-        
+        await setPausedOnAppOpen();
         await fetchDeliveries();
 
         return { success: true };
@@ -454,7 +436,7 @@ export function logout() {
 
 export async function fetchDeliveries() {
     if (!store.courierId) {
-        store.deliveries = seedDeliveries();
+        store.deliveries = [];
         return;
     }
 
@@ -475,32 +457,25 @@ export async function fetchDeliveries() {
         // População simplificada para evitar erro 500 e trazer dados da Order + User
         const res = await apiGet(`/deliveries?filters[courier][${idFilterKey}][$eq]=${courierId}&populate[order][populate]=user&sort=createdAt:desc&status=published`);
         
-        console.log('[fetchDeliveries] Resposta do Servidor:', res);
-
         const apiDeliveries = (res.data || []).map(d => mapDelivery(d));
 
         if (apiDeliveries.length > 0) {
             store.deliveries = apiDeliveries;
             
-            // Set active delivery if any is assigned (including E-08)
-            const inProgress = apiDeliveries.find(d => ['E-08', 'E-09', 'E-10', 'E-11', 'E-12'].includes(d.state));
+            // Bloqueamos o fluxo apenas quando o estafeta já aceitou (E-09+).
+            const inProgress = apiDeliveries.find(d => ['E-09', 'E-10', 'E-11', 'E-12'].includes(d.state));
             if (inProgress) {
                 store.activeDeliveryId = inProgress.id;
-                console.log('[fetchDeliveries] Entrega ativa detetada:', inProgress.id);
+                
+            } else {
+                store.activeDeliveryId = null;
             }
         } else {
-            // Only show seeds if NOT logged in (guest mode demo)
-            if (!store.auth.loggedIn) {
-                store.deliveries = seedDeliveries();
-            } else {
-                store.deliveries = [];
-            }
+            store.deliveries = [];
         }
     } catch (err) {
-        console.warn('fetchDeliveries fallback to seeds:', err.message);
-        if (store.deliveries.length === 0) {
-            store.deliveries = seedDeliveries();
-        }
+        console.warn('fetchDeliveries error:', err.message);
+        if (store.deliveries.length === 0) store.deliveries = [];
     } finally {
         store.loading = false;
     }
@@ -522,22 +497,28 @@ export async function fetchCompletedDeliveries() {
 // ── Actions: State transitions ───────────────────────────────────
 
 async function updateDeliveryOnStrapi(delivery, newState, extraData = {}) {
-    if (!delivery.documentId) return;
-    try {
-        const payload = {
-            data: {
-                delivery_status: STATUS_MAP[newState],
-                ...extraData,
-            }
-        };
-        await apiPut(`/deliveries/${delivery.documentId}`, payload);
-        // O estado da Order é agora sincronizado automaticamente pelo backend (Lifecycle Hook)
-        
-        // Emit Socket.io events for Real-Time UI updates across apps
-        socket.emit('order_status_update', { room: delivery.orderDocumentId, status: newState });
-    } catch (err) {
-        console.error('Error syncing state to Strapi:', err.message);
+    const payload = {
+        data: {
+            delivery_status: STATUS_MAP[newState],
+            ...extraData,
+        }
+    };
+
+    let lastErr = null;
+    const candidateIds = [delivery.documentId, delivery.id].filter(Boolean);
+
+    for (const candidate of candidateIds) {
+        try {
+            await apiCourierPut(`/courier-estafetas/deliveries/${candidate}`, payload);
+            // O estado da Order é agora sincronizado automaticamente pelo backend (Lifecycle Hook)
+            socket.emit('order_status_update', { room: delivery.orderDocumentId, status: newState });
+            return true;
+        } catch (err) {
+            lastErr = err;
+        }
     }
+
+    throw (lastErr || new Error('Falha ao sincronizar entrega no backend.'));
 }
 
 export async function acceptDelivery(deliveryId) {
@@ -545,14 +526,27 @@ export async function acceptDelivery(deliveryId) {
     if (!d || d.state !== DELIVERY_STATE.E08) return false;
 
     const now = new Date().toISOString();
+    const prevState = d.state;
+    const prevActive = store.activeDeliveryId;
+    const prevTimestamps = { ...d.timestamps };
     d.state = DELIVERY_STATE.E09;
     d.timestamps['E-08'] = d.timerStart || now;
     d.timestamps['E-09'] = now;
     store.activeDeliveryId = deliveryId;
     saveState();
 
-    await updateDeliveryOnStrapi(d, 'E-09', { startTime: now });
-    return true;
+    try {
+        await updateDeliveryOnStrapi(d, 'E-09', { startTime: now });
+        return true;
+    } catch (err) {
+        // Evita loop de "aceitar novamente" quando o backend não persiste a transição.
+        d.state = prevState;
+        d.timestamps = prevTimestamps;
+        store.activeDeliveryId = prevActive;
+        store.error = err.message || 'Não foi possível aceitar a entrega.';
+        saveState();
+        return false;
+    }
 }
 
 export async function advanceDeliveryState(deliveryId) {
@@ -578,9 +572,17 @@ export async function advanceDeliveryState(deliveryId) {
 
 export async function confirmDelivery(deliveryId, confirmation) {
     const d = store.deliveries.find(x => x.id === deliveryId);
-    if (!d || d.state !== DELIVERY_STATE.E12) return false;
+    if (!d || d.state !== DELIVERY_STATE.E12 || !d.documentId) return false;
 
     const now = new Date().toISOString();
+    const prevState = d.state;
+    const prevTimestamps = { ...d.timestamps };
+    const prevConfirmation = d.confirmation;
+    const prevShiftMetrics = JSON.parse(JSON.stringify(store.shiftMetrics));
+    const prevCompleted = [...store.completedDeliveries];
+    const prevActive = store.activeDeliveryId;
+    const prevTotalDeliveries = store.profile.totalDeliveries || 0;
+
     d.state = DELIVERY_STATE.E13;
     d.timestamps['E-13'] = now;
     d.confirmation = confirmation;
@@ -589,8 +591,7 @@ export async function confirmDelivery(deliveryId, confirmation) {
     store.shiftMetrics.completed++;
     store.shiftMetrics.revenue += d.costEuro || 0;
     store.shiftMetrics.distanceKm += (d.pickup.distance || 0) + (d.destination.distance || 0);
-    const rating = Math.random() > 0.2 ? 5 : 4;
-    store.shiftMetrics.ratingsReceived.push(rating);
+    // Rating real vem do cliente (FO), não deve ser simulado na PWA.
 
     store.completedDeliveries.push({ ...d });
     store.activeDeliveryId = null;
@@ -598,15 +599,14 @@ export async function confirmDelivery(deliveryId, confirmation) {
     saveState();
 
     // Sync to Strapi
-    if (d.documentId) {
-        try {
-            const extraData = {
-                endTime: now,
-                confirmationGps: confirmation.gps || confirmation.location || null,
-                notes: d.notes || '',
-            };
+    try {
+        const extraData = {
+            endTime: now,
+            confirmationGps: confirmation.gps || confirmation.location || null,
+            notes: d.notes || '',
+        };
 
-            // Upload photo (always required)
+            // Optional proof: photo
             if (confirmation.photo) {
                 try {
                     const blob = await fetch(confirmation.photo).then(r => r.blob());
@@ -616,25 +616,36 @@ export async function confirmDelivery(deliveryId, confirmation) {
                 } catch (e) { console.warn('Photo upload failed:', e); }
             }
 
-            // Save signature as base64 string (always required)
+            // Optional proof: signature
             if (confirmation.signature) {
                 extraData.confirmationSignature = confirmation.signature;
             }
 
-            await updateDeliveryOnStrapi(d, 'E-13', extraData);
-
-            // Update courier totalDeliveries
-            if (store.profile.documentId) {
-                try {
-                    await apiPut(`/courier-estafetas/${store.profile.documentId}`, {
-                        data: { totalDeliveries: (store.profile.totalDeliveries || 0) + 1 }
-                    });
-                    store.profile.totalDeliveries = (store.profile.totalDeliveries || 0) + 1;
-                } catch (e) { /* ignore */ }
+            // Optional proof: QR code
+            if (confirmation.qrCode) {
+                extraData.confirmationQrCode = String(confirmation.qrCode).trim();
             }
-        } catch (err) {
-            console.error('confirmDelivery sync error:', err);
+
+        await updateDeliveryOnStrapi(d, 'E-13', extraData);
+
+        // Update courier totalDeliveries
+        if (store.profile.documentId) {
+            try {
+                await apiCourierSelfPut({ totalDeliveries: (store.profile.totalDeliveries || 0) + 1 });
+                store.profile.totalDeliveries = (store.profile.totalDeliveries || 0) + 1;
+            } catch (e) { /* ignore */ }
         }
+    } catch (err) {
+        d.state = prevState;
+        d.timestamps = prevTimestamps;
+        d.confirmation = prevConfirmation;
+        store.shiftMetrics = prevShiftMetrics;
+        store.completedDeliveries = prevCompleted;
+        store.activeDeliveryId = prevActive;
+        store.profile.totalDeliveries = prevTotalDeliveries;
+        saveState();
+        console.error('confirmDelivery sync error:', err);
+        return false;
     }
 
     return true;
@@ -642,9 +653,15 @@ export async function confirmDelivery(deliveryId, confirmation) {
 
 export async function markDeliveryImpossible(deliveryId, reason, photo) {
     const d = store.deliveries.find(x => x.id === deliveryId);
-    if (!d) return false;
+    if (!d || !d.documentId) return false;
 
     const now = new Date().toISOString();
+    const prevState = d.state;
+    const prevTimestamps = { ...d.timestamps };
+    const prevConfirmation = d.confirmation;
+    const prevShiftMetrics = JSON.parse(JSON.stringify(store.shiftMetrics));
+    const prevCompleted = [...store.completedDeliveries];
+    const prevActive = store.activeDeliveryId;
     d.state = DELIVERY_STATE.E14;
     d.timestamps['E-14'] = now;
     d.confirmation = { type: 'impossible', reason, photo };
@@ -655,8 +672,19 @@ export async function markDeliveryImpossible(deliveryId, reason, photo) {
     stopGpsTracking(); // Stop GPS when delivery marked impossible
     saveState();
 
-    await updateDeliveryOnStrapi(d, 'E-14', { endTime: now, notes: reason });
-    return true;
+    try {
+        await updateDeliveryOnStrapi(d, 'E-14', { endTime: now, notes: reason });
+        return true;
+    } catch (err) {
+        d.state = prevState;
+        d.timestamps = prevTimestamps;
+        d.confirmation = prevConfirmation;
+        store.shiftMetrics = prevShiftMetrics;
+        store.completedDeliveries = prevCompleted;
+        store.activeDeliveryId = prevActive;
+        saveState();
+        return false;
+    }
 }
 
 // ── Actions: Notes & Photos ──────────────────────────────────────
@@ -691,40 +719,69 @@ export function endShift() {
 // ── Actions: Pause / Online Toggle (E-07 / E-06) ────────────────
 
 export async function togglePause() {
-    const isPaused = store.profile.state === COURIER_STATE.E05 || store.profile.state === 'E-07';
-    const newState = isPaused ? COURIER_STATE.E06 : 'E-07';
-    const newStrapiStatus = isPaused ? 'E-06 Online' : 'E-05 Offline';
-    const newIsOnline = isPaused;
+    const wasPaused = store.profile.state === COURIER_STATE.E05 || store.profile.state === 'E-07';
+    const nextState = wasPaused ? COURIER_STATE.E06 : 'E-07';
+    const nextStrapiStatus = wasPaused ? 'E-06 Online' : 'E-05 Offline';
+    const nextIsOnline = wasPaused;
 
-    store.profile.state = newState;
+    const prevState = store.profile.state;
+    store.profile.state = nextState;
     saveState();
 
-    // Sync to Strapi
     if (store.profile.documentId) {
         try {
-            await apiPut(`/courier-estafetas/${store.profile.documentId}`, {
-                data: { courier_status: newStrapiStatus, isOnline: newIsOnline }
-            });
+            await apiCourierSelfPut({ courier_status: nextStrapiStatus, isOnline: nextIsOnline });
         } catch (err) {
+            store.profile.state = prevState;
+            saveState();
             console.error('togglePause sync error:', err);
+            throw err;
         }
     }
-    return newState;
+    return nextState;
 }
 
 export function isPaused() {
     return store.profile.state === 'E-07' || store.profile.state === COURIER_STATE.E05;
 }
 
+async function syncPresenceStatus({ localState, strapiStatus, isOnline }) {
+    if (!store.auth.loggedIn || !store.profile.documentId) return;
+    store.profile.state = localState;
+    saveState();
+    try {
+        await apiCourierSelfPut({ courier_status: strapiStatus, isOnline });
+    } catch (err) {
+        console.error('syncPresenceStatus error:', err);
+    }
+}
+
+export async function setPausedOnAppOpen() {
+    await syncPresenceStatus({
+        localState: 'E-07',
+        strapiStatus: 'E-05 Offline',
+        isOnline: false,
+    });
+}
+
+export async function setOfflineOnAppClose() {
+    await syncPresenceStatus({
+        localState: COURIER_STATE.E05,
+        strapiStatus: 'E-05 Offline',
+        isOnline: false,
+    });
+}
+
 // ── Lifecycle Hooks ───────────────────────────────────────────────
 if (typeof window !== 'undefined') {
-    window.addEventListener('beforeunload', () => {
+    const sendOfflineKeepAlive = () => {
         if (store.auth.loggedIn && store.profile.documentId) {
-            const url = `${API_URL}/courier-estafetas/${store.profile.documentId}`;
+            const url = `${API_URL}/courier-estafetas/me`;
             const payload = JSON.stringify({
                 data: { courier_status: 'E-05 Offline', isOnline: false }
             });
-            // Usamos fetch com keepalive para garantir que o pedido sai antes da app morrer, suportando headers
+            store.profile.state = COURIER_STATE.E05;
+            saveState();
             fetch(url, {
                 method: 'PUT',
                 headers: authHeaders(),
@@ -732,7 +789,9 @@ if (typeof window !== 'undefined') {
                 keepalive: true
             }).catch(() => {});
         }
-    });
+    };
+    window.addEventListener('beforeunload', sendOfflineKeepAlive);
+    window.addEventListener('pagehide', sendOfflineKeepAlive);
 }
 
 
@@ -774,7 +833,7 @@ export function startGpsTracking() {
 
                 // Persist to DB occasionally (every 30s instead of 10s to reduce DB load)
                 if (Date.now() % 30000 < 5000) {
-                    apiPut(`/deliveries/${d.documentId}`, {
+                    apiCourierPut(`/courier-estafetas/deliveries/${d.documentId}`, {
                         data: {
                             courierLatitude: lastGpsCoords.lat,
                             courierLongitude: lastGpsCoords.lng,
@@ -820,10 +879,10 @@ export async function declineDeliveryTimeout(deliveryId) {
             });
             // Also revert order to S-06 (Aguardando Aceitação) for reassignment
             if (d.orderDocumentId) {
-                await apiPut(`/orders/${d.orderDocumentId}`, {
+                await apiCourierPut(`/courier-estafetas/orders/${d.orderDocumentId}`, {
                     data: { order_status: 'S-06 Aguardando Aceitação' }
                 });
-                socket.emit('order_status_update', { room: d.orderDocumentId, status: 'E-08' });
+                socket.emit('order_status_update', { room: d.orderDocumentId, status: 'S-06' });
                 socket.emit('global_order_status_update', { status: 'S-06' });
             }
         } catch (err) {
@@ -853,10 +912,8 @@ export async function submitDataChangeRequest({ field, newValue, reason }) {
 
     // Save to Strapi as a JSON field on the courier
     try {
-        await apiPut(`/courier-estafetas/${store.profile.documentId}`, {
-            data: {
-                dataChangeRequest: changeRequest,
-            }
+        await apiCourierSelfPut({
+            dataChangeRequest: changeRequest,
         });
     } catch (err) {
         console.error('Data change request error:', err);
@@ -908,5 +965,6 @@ export function wazeLink(lat, lng) {
 
 // ── Init: load deliveries if already logged in ───────────────────
 if (store.auth.loggedIn && store.courierId) {
+    setPausedOnAppOpen();
     fetchDeliveries();
 }

@@ -1,6 +1,126 @@
 import { factories } from '@strapi/strapi';
 
 type JwtUser = { id: number; documentId?: string };
+type RequestedItem = { sku: string; qty: number; name: string };
+
+function toNum(v: any, fallback = NaN): number {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function haversineKm(lat1: number, lng1: number, lat2: number, lng2: number): number {
+  const R = 6371;
+  const dLat = ((lat2 - lat1) * Math.PI) / 180;
+  const dLng = ((lng2 - lng1) * Math.PI) / 180;
+  const a = Math.sin(dLat / 2) ** 2
+    + Math.cos((lat1 * Math.PI) / 180) * Math.cos((lat2 * Math.PI) / 180) * Math.sin(dLng / 2) ** 2;
+  return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+}
+
+async function resolveRequestedItems(strapi: any, rawList: any[]): Promise<{ items: RequestedItem[]; error?: string }> {
+  const rows = await strapi.db.query('api::catalog-product.catalog-product').findMany({
+    select: ['sku', 'name'],
+  });
+
+  const bySku = new Map<string, any>();
+  const byName = new Map<string, any>();
+  for (const row of rows || []) {
+    const sku = String(row.sku || '').trim().toUpperCase();
+    const name = String(row.name || '').trim().toLowerCase();
+    if (sku) bySku.set(sku, row);
+    if (name) byName.set(name, row);
+  }
+
+  const unresolved: string[] = [];
+  const bucket = new Map<string, RequestedItem>();
+
+  for (const item of rawList || []) {
+    const qty = Math.max(0, Number(item?.qty || 0));
+    if (!qty) continue;
+
+    const incomingSku = String(item?.sku || item?.code || '').trim().toUpperCase();
+    const incomingName = String(item?.name || '').trim();
+    const fromSku = incomingSku ? bySku.get(incomingSku) : null;
+    const fromName = incomingName ? byName.get(incomingName.toLowerCase()) : null;
+    const product = fromSku || fromName;
+
+    if (!product) {
+      unresolved.push(incomingName || incomingSku || 'produto');
+      continue;
+    }
+
+    const sku = String(product.sku || '').trim().toUpperCase();
+    if (!sku) continue;
+    const prev = bucket.get(sku) || { sku, qty: 0, name: String(product.name || sku) };
+    prev.qty += qty;
+    bucket.set(sku, prev);
+  }
+
+  if (unresolved.length) {
+    return { items: [], error: `Não foi possível mapear produtos para stock: ${unresolved.join(', ')}` };
+  }
+
+  return { items: Array.from(bucket.values()) };
+}
+
+async function pickNearestStoreWithStock(strapi: any, orderData: any): Promise<{ store: any; error?: string }> {
+  const deliveryCoords = orderData?.items?.deliveryCoords || {};
+  const destLat = toNum(deliveryCoords.destLat);
+  const destLng = toNum(deliveryCoords.destLng);
+
+  const requestedRaw = Array.isArray(orderData?.items?.list) ? orderData.items.list : [];
+  const mapped = await resolveRequestedItems(strapi, requestedRaw);
+  if (mapped.error) return { store: null, error: mapped.error };
+  const requested = mapped.items;
+  if (!requested.length) return { store: null, error: 'Pedido sem itens válidos para validação de stock.' };
+
+  const stores = await strapi.db.query('api::continent-store.continent-store').findMany({
+    where: { isActive: true },
+    select: ['id', 'documentId', 'name', 'code', 'lat', 'lng'],
+  });
+  if (!stores?.length) return { store: null, error: 'Sem lojas Continente ativas.' };
+
+  const storeIds = stores.map((s: any) => s.id);
+  const skus = requested.map((r) => r.sku);
+
+  const invRows = await strapi.db.query('api::store-inventory-item.store-inventory-item').findMany({
+    where: {
+      store: { id: { $in: storeIds } },
+      sku: { $in: skus },
+      isActive: true,
+    },
+    select: ['sku', 'stock', 'reservedStock'],
+    populate: { store: true },
+  });
+
+  const invMap = new Map<string, number>();
+  for (const row of invRows || []) {
+    const storeId = row?.store?.id;
+    const sku = String(row?.sku || '').trim().toUpperCase();
+    if (!storeId || !sku) continue;
+    const available = Math.max(0, Number(row.stock || 0) - Number(row.reservedStock || 0));
+    invMap.set(`${storeId}:${sku}`, available);
+  }
+
+  const eligible = stores.filter((store: any) => requested.every((req) => {
+    const available = invMap.get(`${store.id}:${req.sku}`) || 0;
+    return available >= req.qty;
+  }));
+
+  if (!eligible.length) {
+    return { store: null, error: 'Sem stock suficiente em lojas próximas para os itens selecionados.' };
+  }
+
+  if (Number.isFinite(destLat) && Number.isFinite(destLng)) {
+    eligible.sort((a: any, b: any) => {
+      const da = haversineKm(destLat, destLng, Number(a.lat), Number(a.lng));
+      const db = haversineKm(destLat, destLng, Number(b.lat), Number(b.lng));
+      return da - db;
+    });
+  }
+
+  return { store: eligible[0] };
+}
 
 export default factories.createCoreController('api::order.order', ({ strapi }) => ({
   // Mantemos o find para filtrar apenas as encomendas do dono do token
@@ -25,9 +145,26 @@ export default factories.createCoreController('api::order.order', ({ strapi }) =
     if (!user) return ctx.unauthorized();
 
     const body = ctx.request.body as { data?: any };
-    const orderData = body.data || {};
+    const orderData = { ...(body.data || {}) };
 
     try {
+      const picked = await pickNearestStoreWithStock(strapi, orderData);
+      if (!picked.store) {
+        return ctx.badRequest(picked.error || 'Não foi possível atribuir loja com stock.');
+      }
+
+      const store = picked.store;
+      orderData.store_name = store.name || store.code || 'Continente';
+      orderData.storeLatitude = toNum(store.lat, null as any);
+      orderData.storeLongitude = toNum(store.lng, null as any);
+      orderData.items = {
+        ...(orderData.items || {}),
+        boMeta: {
+          ...(orderData.items?.boMeta || {}),
+          storeId: store.documentId || store.id,
+        },
+      };
+
       // Usamos a API de Documents diretamente para evitar a validação de permissões de campo do REST
       const entry = await strapi.documents('api::order.order').create({
         data: {

@@ -1,8 +1,8 @@
 import { reactive, computed } from 'vue';
+import { API_URL } from '../config/env.js';
 
 // ── Storage keys ──────────────────────────────────────────────────
 const STORAGE_KEY = 'goeverywhere_auth';
-const API_URL = 'http://localhost:1337/api'; // URL base do Strapi v5
 
 // ── Load persisted state ─────────────────────────────────────────
 function loadSession() {

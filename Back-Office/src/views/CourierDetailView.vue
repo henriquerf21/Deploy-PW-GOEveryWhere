@@ -12,7 +12,13 @@
 
     <header class="bo-page-head">
       <div class="bo-page-head__main" style="display: flex; gap: 16px; align-items: center;">
-        <div class="bo-avatar bo-avatar--lg">{{ initials }}</div>
+        <img
+          v-if="c.docUrls?.selfie"
+          :src="c.docUrls.selfie"
+          alt="Foto do estafeta"
+          class="courier-photo"
+        />
+        <div v-else class="bo-avatar bo-avatar--lg">{{ initials }}</div>
         <div>
           <p class="bo-page-head__eyebrow">Estafeta · {{ c.id }}</p>
           <h1 class="bo-page-head__title">{{ c.name }}</h1>
@@ -49,7 +55,7 @@
       <div class="bo-card__body" style="padding-top: 0;">
         <dl class="bo-dl">
           <dt>Campo</dt><dd>{{ c.dataChangeRequest.field || 'Não especificado' }}</dd>
-          <dt>Motivo / novo valor</dt><dd>{{ c.dataChangeRequest.reason }}<template v-if="c.dataChangeRequest.newValue"> (Novo: {{ c.dataChangeRequest.newValue }})</template></dd>
+          <dt>Motivo / novo valor</dt><dd>{{ c.dataChangeRequest.reason }}<template v-if="c.dataChangeRequest.newValue"> Novo: {{ c.dataChangeRequest.newValue }}</template></dd>
         </dl>
         <button type="button" class="bo-btn bo-btn--outline bo-btn--sm" @click="clearDataRequest">Marcar como tratado</button>
       </div>
@@ -67,7 +73,7 @@
         <header class="bo-card__head">
           <div>
             <h3 class="bo-card__title">Dados pessoais</h3>
-            <p class="bo-card__sub">Apenas editáveis após verificação (E-02 ou superior).</p>
+            <p class="bo-card__sub">Apenas editáveis após verificação E-02 ou superior.</p>
           </div>
         </header>
         <div class="bo-card__body">
@@ -117,7 +123,7 @@
             <div class="bo-field"><label class="bo-field__label">Cor</label><input v-model="edit.vehicle.color" class="bo-input" /></div>
             <div class="bo-field"><label class="bo-field__label">Matrícula</label><input v-model="edit.vehicle.plate" class="bo-input" /></div>
             <div class="bo-field"><label class="bo-field__label">Carta condução</label><input v-model="edit.vehicle.licenseNumber" class="bo-input" /></div>
-            <div class="bo-field"><label class="bo-field__label">Seguro (ref.)</label><input v-model="edit.vehicle.insuranceRef" class="bo-input" /></div>
+            <div class="bo-field"><label class="bo-field__label">Seguro ref.</label><input v-model="edit.vehicle.insuranceRef" class="bo-input" /></div>
             <div class="bo-field"><label class="bo-field__label">Inspeção até</label><input v-model="edit.vehicle.inspectionValidUntil" type="date" class="bo-input" /></div>
           </div>
           <dl v-else class="bo-dl">
@@ -155,7 +161,7 @@
               </div>
             </div>
             <div class="bo-doc-row__actions">
-              <a v-if="d.url" :href="d.url" target="_blank" class="bo-btn bo-btn--ghost bo-btn--sm">Ver</a>
+              <button v-if="d.url" type="button" class="bo-btn bo-btn--ghost bo-btn--sm" @click="openDocViewer(d)">Ver</button>
               <label class="bo-upload">
                 <input type="file" accept="image/*,.pdf" :disabled="uploading[d.key]" @change="onDocUpload($event, d.key)" />
                 <span>{{ uploading[d.key] ? 'A carregar...' : (d.url ? 'Substituir' : 'Carregar') }}</span>
@@ -236,7 +242,7 @@
     <section class="bo-card">
       <header class="bo-card__head">
         <div>
-          <h3 class="bo-card__title">Notas internas (admin)</h3>
+          <h3 class="bo-card__title">Notas internas admin</h3>
           <p class="bo-card__sub">Visíveis apenas no painel de administração.</p>
         </div>
       </header>
@@ -304,6 +310,37 @@
             <button type="button" class="bo-btn bo-btn--ghost" @click="showInfo = false">Cancelar</button>
             <button type="button" class="bo-btn bo-btn--primary" :disabled="!infoMsg.trim()" @click="confirmInfo">Enviar pedido</button>
           </footer>
+        </div>
+      </div>
+    </Teleport>
+
+    <Teleport to="body">
+      <div v-if="docViewer.open" class="bo-modal-backdrop" @click.self="closeDocViewer">
+        <div class="bo-modal bo-modal--doc">
+          <header class="bo-modal__head">
+            <div>
+              <h3 class="bo-modal__title">{{ docViewer.label || 'Documento' }}</h3>
+              <p class="bo-modal__sub">Visualização no painel sem abrir nova janela.</p>
+            </div>
+            <button type="button" class="bo-modal__close" @click="closeDocViewer">×</button>
+          </header>
+          <div class="bo-modal__body bo-doc-viewer">
+            <p v-if="docViewer.loading" class="bo-muted">A carregar documento...</p>
+            <p v-else-if="docViewer.error" class="bo-doc-viewer__error">{{ docViewer.error }}</p>
+            <img
+              v-else-if="docViewer.previewUrl && docViewer.isImage"
+              :src="docViewer.previewUrl"
+              :alt="docViewer.label || 'Documento'"
+              class="bo-doc-viewer__image"
+            />
+            <iframe
+              v-else-if="docViewer.previewUrl"
+              :src="docViewer.previewUrl"
+              class="bo-doc-viewer__frame"
+              title="Documento"
+            />
+            <p v-else class="bo-muted">Sem documento para visualizar.</p>
+          </div>
         </div>
       </div>
     </Teleport>
@@ -383,6 +420,15 @@ const showRej = ref(false);
 const showInfo = ref(false);
 const rejReason = ref('');
 const infoMsg = ref('');
+const docViewer = reactive({
+  open: false,
+  label: '',
+  url: '',
+  previewUrl: '',
+  loading: false,
+  error: '',
+  isImage: false,
+});
 
 watch(c, (x) => {
   if (!x) return;
@@ -428,7 +474,7 @@ async function onMax(v) {
 
 async function doVerify() {
   const r = await verifyCourier(c.value.id);
-  toast(r.ok ? 'Estafeta verificado (E-02).' : 'Não aplicável', r.ok ? 'success' : 'error');
+  toast(r.ok ? 'Estafeta verificado E-02.' : 'Não aplicável', r.ok ? 'success' : 'error');
 }
 
 async function confirmRej() {
@@ -503,6 +549,44 @@ function stateBadgeClass(state) {
     default: return 'bo-badge--neutral';
   }
 }
+
+function isImageUrl(url = '') {
+  const clean = String(url).toLowerCase().split('?')[0];
+  return ['.jpg', '.jpeg', '.png', '.webp', '.gif', '.bmp', '.svg'].some(ext => clean.endsWith(ext));
+}
+
+async function openDocViewer(doc) {
+  closeDocViewer();
+  docViewer.open = true;
+  docViewer.label = doc?.label || 'Documento';
+  docViewer.url = doc?.url || '';
+  docViewer.isImage = isImageUrl(docViewer.url);
+  if (!docViewer.url) return;
+  docViewer.loading = true;
+  try {
+    const res = await fetch(docViewer.url);
+    if (!res.ok) throw new Error('Não foi possível carregar o ficheiro.');
+    const blob = await res.blob();
+    docViewer.previewUrl = URL.createObjectURL(blob);
+  } catch (err) {
+    docViewer.error = err?.message || 'Falha ao abrir o documento.';
+  } finally {
+    docViewer.loading = false;
+  }
+}
+
+function closeDocViewer() {
+  if (docViewer.previewUrl) {
+    URL.revokeObjectURL(docViewer.previewUrl);
+  }
+  docViewer.open = false;
+  docViewer.label = '';
+  docViewer.url = '';
+  docViewer.previewUrl = '';
+  docViewer.loading = false;
+  docViewer.error = '';
+  docViewer.isImage = false;
+}
 </script>
 
 <style scoped>
@@ -524,9 +608,53 @@ function stateBadgeClass(state) {
   background: linear-gradient(90deg, #fffbeb, var(--bo-surface));
 }
 
+.courier-photo {
+  width: 64px;
+  height: 64px;
+  border-radius: 16px;
+  object-fit: cover;
+  border: 2px solid var(--bo-border);
+}
+
 .zones-grid {
   display: flex;
   flex-wrap: wrap;
   gap: 8px;
+}
+
+.bo-modal--doc {
+  width: min(1000px, 92vw);
+  max-width: 1000px;
+}
+
+.bo-doc-viewer {
+  min-height: 60vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #f8fafc;
+}
+
+.bo-doc-viewer__image {
+  max-width: 100%;
+  max-height: 70vh;
+  object-fit: contain;
+  border-radius: 8px;
+  border: 1px solid var(--bo-border);
+  background: #fff;
+}
+
+.bo-doc-viewer__frame {
+  width: 100%;
+  height: 70vh;
+  border: 1px solid var(--bo-border);
+  border-radius: 8px;
+  background: #fff;
+}
+
+.bo-doc-viewer__error {
+  color: #b91c1c;
+  font-size: 13px;
+  font-weight: 600;
 }
 </style>

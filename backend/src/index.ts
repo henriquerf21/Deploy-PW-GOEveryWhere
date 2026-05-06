@@ -116,29 +116,8 @@ export default {
         }
       }
 
-      const existing = await strapi.db.query('api::courier-estafeta.courier-estafeta').findOne({
-        where: { phone: '+351222222222' },
-      });
-      if (!existing) {
-        await strapi.db.query('api::courier-estafeta.courier-estafeta').create({
-          data: {
-            fullName: 'Estafeta Teste',
-            phone: '+351222222222',
-            password: '123',
-            courier_status: 'E-06 Online',
-            zone: 'Porto Centro',
-            vehicleType: 'mota',
-            publishedAt: new Date(),
-          },
-        });
-      } else {
-        await strapi.db.query('api::courier-estafeta.courier-estafeta').updateMany({
-          where: { phone: '+351222222222' },
-          data: { password: '123' },
-        });
-      }
     } catch (e) {
-      strapi.log.error('Bootstrap error (PWA permissions / seed courier):', e);
+      strapi.log.error('Bootstrap error (PWA permissions):', e);
     }
   },
 };

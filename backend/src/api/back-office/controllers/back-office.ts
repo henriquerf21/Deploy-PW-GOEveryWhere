@@ -29,10 +29,6 @@ async function ensureAdminSession(ctx: Ctx, strapi: any) {
   const token = String(authHeader).startsWith('Bearer ')
     ? String(authHeader).slice(7).trim()
     : '';
-  if (token === 'fake-test-jwt') {
-    ctx.state.user = { id: 1, email: 'admin@goeverywhere.pt', username: 'admin' };
-    return true;
-  }
   if (!token) return false;
   try {
     const payload = await strapi.plugin('users-permissions').service('jwt').verify(token);
@@ -138,6 +134,14 @@ export default {
     if (!(await ensureAdminSession(ctx, strapi))) return ctx.unauthorized();
     const service = getService(strapi);
     const result = await service.completeOrder(ctx, ctx.params.id);
+    if (!result.ok) return ctx.badRequest(result.error);
+    return ctx.send({ data: result.data });
+  },
+
+  async setOrderDeliveryStatus(ctx: Ctx) {
+    if (!(await ensureAdminSession(ctx, strapi))) return ctx.unauthorized();
+    const service = getService(strapi);
+    const result = await service.setOrderDeliveryStatus(ctx, ctx.params.id, ctx.request.body ?? {});
     if (!result.ok) return ctx.badRequest(result.error);
     return ctx.send({ data: result.data });
   },

@@ -259,7 +259,7 @@
     <div v-if="showCancelModal" class="modal-overlay">
       <div class="modal-card cancel-modal">
         <h3>Cancelar Encomenda</h3>
-        <p>Indica o motivo do cancelamento (obrigatório):</p>
+        <p>Indica o motivo do cancelamento obrigatório:</p>
         <textarea
           v-model="cancelReasonInput"
           placeholder="Ex: Enganei-me na morada ou nos itens..."
@@ -307,8 +307,9 @@ import DeliveryRouteMap from '../components/DeliveryRouteMap.vue';
 import { getDestinationLatLng } from '../utils/mapCoords.js';
 import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { useOrderStore, ORDER_STATES, fetchUserOrders, cancelActiveOrder, replyToInfoRequest, sendChatMessage, socket, acknowledgeActiveOrder } from '../stores/orderStore.js';
+import { useOrderStore, ORDER_STATES, DELIVERY_ACCEPTED_STATUSES, fetchUserOrders, cancelActiveOrder, replyToInfoRequest, sendChatMessage, socket, acknowledgeActiveOrder } from '../stores/orderStore.js';
 import { requestNotificationPermission, notifyOrderStateChange } from '../utils/notifications.js';
+import { API_URL, BACKEND_URL } from '../config/env.js';
 
 const router = useRouter();
 const store = useOrderStore();
@@ -316,6 +317,7 @@ const store = useOrderStore();
 const order = computed(() => store.activeOrder);
 const toastMessage = ref('');
 let pollingTimer = null;
+let currentOrderRoom = null;
 
 // ── GPS REAL DO ESTAFETA ────────────────────────────────────────────
 const courierGps = reactive({ lat: null, lng: null });
@@ -337,7 +339,7 @@ function haversineKm(lat1, lng1, lat2, lng2) {
 async function fetchCourierGps() {
   if (!order.value?.documentId) return;
   try {
-    const res = await fetch(`http://localhost:1337/api/deliveries?filters[order][documentId][$eq]=${order.value.documentId}&fields[0]=courierLatitude&fields[1]=courierLongitude&status=published`);
+    const res = await fetch(`${API_URL}/deliveries?filters[order][documentId][$eq]=${order.value.documentId}&fields[0]=courierLatitude&fields[1]=courierLongitude&status=published`);
     const json = await res.json();
     const deliveryData = json.data?.[0];
     const attrs = deliveryData?.attributes || deliveryData || {};
@@ -364,6 +366,18 @@ function updateGpsCoords(lat, lng) {
 function handleAcknowledgeAndGo(path) {
   acknowledgeActiveOrder();
   router.push(path);
+}
+
+async function refreshOrderAndCourierData() {
+  const previousStatus = order.value?.status;
+  await fetchUserOrders();
+  if (order.value?.status && previousStatus && order.value.status !== previousStatus) {
+    showStateToast(order.value.status);
+    notifyOrderStateChange(order.value.id, order.value.status, ORDER_STATES[order.value.status]);
+  }
+  if (order.value) {
+    fetchCourierInfo();
+  }
 }
 
 // --- Chat ---
@@ -412,9 +426,20 @@ const s03Sent = ref(false);
 
 // --- Courier info (visible from S-05 onwards) ---
 const courierInfo = ref(null);
+const deliveryStatusCode = ref(null);
+
+function toStatusCode(status) {
+  return String(status || '').substring(0, 4).toUpperCase();
+}
+
+function isCourierAcceptedStatus(statusCode) {
+  return DELIVERY_ACCEPTED_STATUSES.includes(statusCode);
+}
 
 const showCourierCard = computed(() => {
   if (!order.value) return false;
+  // Só mostramos estafeta após aceitação na PWA (Delivery em E-09+).
+  if (!isCourierAcceptedStatus(deliveryStatusCode.value)) return false;
   const statusFlow = ['S-07','S-08','S-09','S-10','S-11','S-15','S-16'];
   return statusFlow.includes(order.value.status);
 });
@@ -422,26 +447,21 @@ const showCourierCard = computed(() => {
 async function fetchCourierInfo() {
   if (!order.value?.documentId) return;
   try {
-    // 1. Tentar primeiro via Delivery (se o estafeta já aceitou na PWA)
-    const deliveryRes = await fetch(`http://localhost:1337/api/deliveries?filters[order][documentId][$eq]=${order.value.documentId}&populate[courier][populate]=docSelfie&status=published`);
+    // Fonte de verdade: Delivery da encomenda.
+    const deliveryRes = await fetch(`${API_URL}/deliveries?filters[order][documentId][$eq]=${order.value.documentId}&populate[courier][populate]=docSelfie&status=published`);
     const deliveryJson = await deliveryRes.json();
     const deliveryData = deliveryJson.data?.[0];
-    
-    let courierRaw = deliveryData?.courier?.data?.attributes || deliveryData?.courier || null;
-    
-    // 2. Fallback: Se não houver Delivery, tentar diretamente pela relação da Encomenda (atribuição manual do Admin)
-    if (!courierRaw || !courierRaw.fullName) {
-      const orderRes = await fetch(`http://localhost:1337/api/orders/${order.value.documentId}?populate[courier][populate]=docSelfie`, {
-        headers: { 'Authorization': `Bearer ${authState.token}` }
-      });
-      if (orderRes.ok) {
-        const orderJson = await orderRes.json();
-        courierRaw = orderJson.data?.courier?.data?.attributes || orderJson.data?.courier || null;
-      }
-    }
 
-    if (courierRaw && courierRaw.fullName) {
+    const rawDeliveryStatus = deliveryData?.delivery_status
+      || deliveryData?.attributes?.delivery_status
+      || null;
+    deliveryStatusCode.value = toStatusCode(rawDeliveryStatus);
+
+    const courierRaw = deliveryData?.courier?.data?.attributes || deliveryData?.courier || null;
+    if (courierRaw && courierRaw.fullName && isCourierAcceptedStatus(deliveryStatusCode.value)) {
       setCourierInfo(courierRaw);
+    } else {
+      courierInfo.value = null;
     }
   } catch (err) {
     console.warn('Failed to fetch courier info:', err);
@@ -452,7 +472,7 @@ function setCourierInfo(raw) {
   const selfie = raw.docSelfie?.data?.attributes || raw.docSelfie || null;
   let photoUrl = null;
   if (selfie?.url) {
-    photoUrl = selfie.url.startsWith('http') ? selfie.url : `http://localhost:1337${selfie.url}`;
+    photoUrl = selfie.url.startsWith('http') ? selfie.url : `${BACKEND_URL}${selfie.url}`;
   }
   const nameParts = (raw.fullName || '').split(' ');
   const initials = nameParts.length >= 2 ? nameParts[0][0] + nameParts[nameParts.length - 1][0] : (nameParts[0]?.[0] || '?');
@@ -518,8 +538,8 @@ onMounted(async () => {
   requestNotificationPermission();
 
   await fetchUserOrders();
-  // Fetch courier info if order is already in S-05+
-  if (order.value && showCourierCard.value) {
+  // Atualiza estado de aceitação/estafeta através da Delivery.
+  if (order.value) {
     fetchCourierInfo();
   }
   // Fetch GPS real do estafeta se já em trânsito
@@ -528,16 +548,28 @@ onMounted(async () => {
   }
 
   // Ligar aos websockets para atualizações imediatas
+  socket.connect();
   if (order.value?.documentId) {
-    socket.connect();
-    socket.emit('join_room', order.value.documentId);
-    
-    socket.on('gps_update', (data) => {
-      if (data.lat && data.lng) {
-        updateGpsCoords(data.lat, data.lng);
-      }
-    });
+    currentOrderRoom = order.value.documentId;
+    socket.emit('join_room', currentOrderRoom);
   }
+
+  socket.on('gps_update', (data) => {
+    if (data.lat && data.lng) {
+      updateGpsCoords(data.lat, data.lng);
+    }
+  });
+
+  socket.on('order_status_update', async (data) => {
+    if (!order.value?.documentId || !data?.room) return;
+    if (String(data.room) !== String(order.value.documentId)) return;
+    await refreshOrderAndCourierData();
+  });
+
+  socket.on('global_order_status_update', async () => {
+    if (!order.value?.documentId) return;
+    await refreshOrderAndCourierData();
+  });
 
   pollingTimer = setInterval(async () => {
     if (order.value && !ORDER_STATES[order.value.status]?.terminal) {
@@ -547,11 +579,9 @@ onMounted(async () => {
         showStateToast(order.value.status);
         // RF13: Notificação nativa do browser em cada mudança de estado
         notifyOrderStateChange(order.value.id, order.value.status, ORDER_STATES[order.value.status]);
-        // Fetch courier info when status reaches S-05 (Aprovada)
-        if (showCourierCard.value && !courierInfo.value) {
-          fetchCourierInfo();
-        }
       }
+      // Revalida sempre o estado da delivery para mostrar/esconder estafeta corretamente.
+      if (order.value) fetchCourierInfo();
     }
   }, 30000); // RNF02 relaxed: Polling de estado cai para 30s pois o GPS agora usa WebSockets (5s)
 });
@@ -559,6 +589,12 @@ onMounted(async () => {
 onUnmounted(() => {
   clearInterval(pollingTimer);
   socket.off('gps_update');
+  socket.off('order_status_update');
+  socket.off('global_order_status_update');
+  if (currentOrderRoom) {
+    socket.emit('leave_room', currentOrderRoom);
+    currentOrderRoom = null;
+  }
   socket.disconnect();
 });
 
@@ -674,7 +710,6 @@ function showStateToast(newState) {
   }
 }
 
-import authState from '../stores/authStore';
 </script>
 
 
