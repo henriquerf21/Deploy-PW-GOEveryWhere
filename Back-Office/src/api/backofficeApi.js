@@ -1,4 +1,4 @@
-const API_BASE = (import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:1337').replace(/\/$/, '');
+export const API_BASE = (import.meta.env.VITE_BACKEND_URL || 'http://127.0.0.1:1337').replace(/\/$/, '');
 
 function getJwt() {
   return localStorage.getItem('go_bo_jwt') || '';

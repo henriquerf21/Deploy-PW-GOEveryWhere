@@ -7,6 +7,12 @@ import {
 } from '../utils/back-office-validation';
 import { CONTINENTE_STORES_SEED } from '../data/continent-stores-seed';
 import { emitBoChange } from '../utils/bo-event-bus';
+import {
+  canTransitionDelivery,
+  DELIVERY_TO_ORDER_STATUS,
+  isOrderTerminal,
+  normalizeOrderStatus,
+} from '../utils/order-state-machine';
 
 const STORE_CATALOG = CONTINENTE_STORES_SEED.slice(0, 3).map((s) => ({
   id: s.code,
@@ -31,6 +37,7 @@ const ORDER_STATE = {
   ACCEPTED: 'S-07 Aceite pelo Estafeta',
   IN_TRANSIT: 'S-09 Em Trânsito',
   DELIVERED: 'S-11 Entregue',
+  UNDELIVERABLE: 'S-12 Não Foi Possível Entregar',
   CANCELLED_CLIENT: 'S-13 Cancelado pelo Cliente',
   CANCELLED_ADMIN: 'S-14 Cancelado pelo Admin',
 };
@@ -43,6 +50,16 @@ const COURIER_STATE = {
   E05: 'E-05 Offline',
   E06: 'E-06 Online',
 };
+
+const DELIVERY_STATUSES = new Set([
+  'E-08 Pedido Recebido',
+  'E-09 A Caminho da Loja',
+  'E-10 Na Loja / Em Recolha',
+  'E-11 Em Trânsito para Cliente',
+  'E-12 No Destino',
+  'E-13 Entrega Confirmada',
+  'E-14 Entrega Impossível',
+]);
 
 function toNum(v: any, fallback = 0) {
   const n = Number(v);
@@ -152,15 +169,7 @@ function dedupeByDocumentId<T extends { documentId?: string; id?: number; publis
 }
 
 function mapOrderStatus(strapiStatus?: string) {
-  if (strapiStatus === ORDER_STATE.INFO_REQUESTED) return 'INFO_REQUESTED';
-  if (strapiStatus === ORDER_STATE.REJECTED) return 'REJECTED';
-  if (strapiStatus === ORDER_STATE.APPROVED) return 'APPROVED';
-  if (strapiStatus === ORDER_STATE.ASSIGNED) return 'ASSIGNED';
-  if (strapiStatus === ORDER_STATE.IN_TRANSIT) return 'IN_TRANSIT';
-  if (strapiStatus === ORDER_STATE.DELIVERED) return 'DELIVERED';
-  if (strapiStatus === ORDER_STATE.CANCELLED_CLIENT) return 'CANCELLED_CLIENT';
-  if (strapiStatus === ORDER_STATE.CANCELLED_ADMIN) return 'CANCELLED_ADMIN';
-  return 'PENDING';
+  return normalizeOrderStatus(strapiStatus);
 }
 
 function mapCourierStatus(strapiStatus?: string, isOnline?: boolean) {
@@ -171,6 +180,21 @@ function mapCourierStatus(strapiStatus?: string, isOnline?: boolean) {
   if (strapiStatus === COURIER_STATE.E05) return 'E-05';
   if (strapiStatus === COURIER_STATE.E06 || isOnline) return 'E-06';
   return 'E-05';
+}
+
+function extractMediaUrl(media: any) {
+  if (!media) return '';
+  const raw = media?.data?.attributes || media?.data || media?.attributes || media;
+  const candidate =
+    raw?.url
+    || raw?.formats?.large?.url
+    || raw?.formats?.medium?.url
+    || raw?.formats?.small?.url
+    || raw?.formats?.thumbnail?.url
+    || '';
+  if (!candidate) return '';
+  const s = String(candidate);
+  return s.startsWith('http') ? s : `http://localhost:1337${s}`;
 }
 
 function isActiveOrder(status: string) {
@@ -300,6 +324,13 @@ function buildPublicCourier(entry: any, assignedCount = 0) {
   const idNum = toNum(attrs.id, 0);
   const pseudoLat = 41.14 + ((idNum % 15) * 0.003);
   const pseudoLng = -8.67 + ((idNum % 13) * 0.004);
+  const ccUrl = attrs.docCcUrl || extractMediaUrl(attrs.docCc);
+  const licenseUrl = attrs.docLicenseUrl || extractMediaUrl(attrs.drivingLicense);
+  const insuranceUrl = attrs.docInsuranceUrl || extractMediaUrl(attrs.insurance);
+  const inspectionUrl = attrs.docInspectionUrl || extractMediaUrl(attrs.inspection);
+  const selfieUrl = attrs.docSelfieUrl || extractMediaUrl(attrs.docSelfie);
+  const ibanUrl = attrs.docIbanUrl || extractMediaUrl(attrs.docIban);
+
   return {
     id: idToPublic('ST', attrs.documentId || attrs.id),
     _documentId: attrs.documentId,
@@ -330,18 +361,18 @@ function buildPublicCourier(entry: any, assignedCount = 0) {
       inspectionValidUntil: attrs.inspectionValidUntil || '',
     },
     docs: {
-      idDoc: !!attrs.docCcUrl || !!attrs.cc,
-      license: !!attrs.docLicenseUrl,
-      insurance: !!attrs.docInsuranceUrl,
-      inspection: !!attrs.docInspectionUrl,
+      idDoc: !!ccUrl || !!attrs.cc,
+      license: !!licenseUrl,
+      insurance: !!insuranceUrl,
+      inspection: !!inspectionUrl,
     },
     docUrls: {
-      license: attrs.docLicenseUrl || '',
-      insurance: attrs.docInsuranceUrl || '',
-      inspection: attrs.docInspectionUrl || '',
-      cc: attrs.docCcUrl || '',
-      selfie: attrs.docSelfieUrl || '',
-      iban: attrs.docIbanUrl || '',
+      license: licenseUrl,
+      insurance: insuranceUrl,
+      inspection: inspectionUrl,
+      cc: ccUrl,
+      selfie: selfieUrl,
+      iban: ibanUrl,
     },
     lat: toNum(attrs.lat, pseudoLat),
     lng: toNum(attrs.lng, pseudoLng),
@@ -733,6 +764,12 @@ export default ({ strapi }: any) => ({
         orders: {
           populate: { user: true, review: true },
         },
+        docCc: true,
+        drivingLicense: true,
+        insurance: true,
+        inspection: true,
+        docSelfie: true,
+        docIban: true,
       },
       orderBy: { createdAt: 'desc' },
     });
@@ -1083,6 +1120,7 @@ export default ({ strapi }: any) => ({
       'ASSIGNED',
       'IN_TRANSIT',
       'DELIVERED',
+      'UNDELIVERABLE',
       'CANCELLED_ADMIN',
     ]);
     const requestedStatus = String(filters.status || '').trim();
@@ -1522,6 +1560,66 @@ export default ({ strapi }: any) => ({
     const after = buildPublicOrder(updated);
 
     return { ok: true, data: after };
+  },
+
+  async setOrderDeliveryStatus(ctx: BoCtx | undefined, publicId: string, payload: any) {
+    const nextStatus = String(payload?.delivery_status || '').trim();
+    if (!DELIVERY_STATUSES.has(nextStatus)) {
+      return { ok: false, error: 'Estado de delivery inválido.' };
+    }
+
+    const order = await this.getOrder(ctx, publicId);
+    if (!order?._documentId) return { ok: false, error: 'Pedido não encontrado.' };
+    if (isOrderTerminal(order.status)) {
+      return { ok: false, error: 'Pedido em estado terminal. Não é permitido alterar a delivery.' };
+    }
+
+    const deliveries = await strapi.documents('api::delivery.delivery').findMany({
+      filters: { order: { documentId: order._documentId } },
+      status: 'published',
+    });
+    const target = deliveries[0];
+    if (!target?.documentId) return { ok: false, error: 'Delivery não encontrada para este pedido.' };
+
+    const currentDeliveryStatus = String(target.delivery_status || '');
+    if (currentDeliveryStatus === nextStatus) {
+      const refreshed = await this.getOrder(ctx, publicId);
+      return { ok: true, data: refreshed };
+    }
+    if (!canTransitionDelivery(currentDeliveryStatus, nextStatus)) {
+      const currentCode = String(currentDeliveryStatus || '').slice(0, 4).toUpperCase();
+      const nextCode = String(nextStatus || '').slice(0, 4).toUpperCase();
+      return { ok: false, error: `Transição inválida de ${currentCode} para ${nextCode}.` };
+    }
+
+    await strapi.documents('api::delivery.delivery').update({
+      documentId: target.documentId,
+      data: { delivery_status: nextStatus },
+      status: 'published',
+    });
+
+    const nextOrderStatus = DELIVERY_TO_ORDER_STATUS[nextStatus];
+    if (nextOrderStatus) {
+      await this.patchOrder(order.id, {
+        data: { order_status: nextOrderStatus },
+      }, {
+        action: 'delivery_status_sync',
+        ctx,
+        from: order.status,
+        to: mapOrderStatus(nextOrderStatus),
+        meta: { delivery_status: nextStatus },
+      });
+    }
+
+    emitBoChange({
+      entity: 'order',
+      id: order._documentId,
+      action: 'update',
+      meta: { deliveryId: target.documentId, delivery_status: nextStatus },
+    });
+
+    const refreshed = await this.getOrder(ctx, publicId);
+    return { ok: true, data: refreshed };
   },
 
   async cancelOrderByAdmin(ctx: BoCtx | undefined, publicId: string, payload: any) {

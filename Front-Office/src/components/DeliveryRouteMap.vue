@@ -51,6 +51,9 @@ let boundsKey = '';
 /** @type {number[][] | null} Leaflet [lat, lng][] */
 let routeLatLngs = null;
 let routeAbort = null;
+let storeIcon = null;
+let customerIcon = null;
+let courierIcon = null;
 
 const OSRM_BASE = 'https://router.project-osrm.org/route/v1';
 
@@ -119,6 +122,50 @@ function polylinePointsForDraw() {
   return straightLineLatLngs();
 }
 
+function svgPinDataUri(fill, glyph) {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="42" viewBox="0 0 34 42"><defs><filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,0.35)"/></filter></defs><g filter="url(#s)"><path d="M17 2C9.82 2 4 7.82 4 15c0 8.7 9.83 18.9 12.27 21.31a1 1 0 0 0 1.46 0C20.17 33.9 30 23.7 30 15 30 7.82 24.18 2 17 2z" fill="${fill}"/><circle cx="17" cy="15" r="9" fill="#fff"/><text x="17" y="19" text-anchor="middle" font-size="11" font-family="Arial, sans-serif">${glyph}</text></g></svg>`;
+  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
+}
+
+function getStoreIcon() {
+  if (!storeIcon) {
+    storeIcon = L.icon({
+      iconUrl: svgPinDataUri('#f59e0b', '🏬'),
+      iconSize: [28, 34],
+      iconAnchor: [14, 34],
+      popupAnchor: [0, -30],
+      className: 'ge-map-marker-icon',
+    });
+  }
+  return storeIcon;
+}
+
+function getCustomerIcon() {
+  if (!customerIcon) {
+    customerIcon = L.icon({
+      iconUrl: svgPinDataUri('#16a34a', '🏠'),
+      iconSize: [28, 34],
+      iconAnchor: [14, 34],
+      popupAnchor: [0, -30],
+      className: 'ge-map-marker-icon',
+    });
+  }
+  return customerIcon;
+}
+
+function getCourierIcon() {
+  if (!courierIcon) {
+    courierIcon = L.icon({
+      iconUrl: svgPinDataUri('#2563eb', '🛵'),
+      iconSize: [30, 36],
+      iconAnchor: [15, 36],
+      popupAnchor: [0, -32],
+      className: 'ge-map-marker-icon ge-map-marker-icon--courier',
+    });
+  }
+  return courierIcon;
+}
+
 function scheduleRouteFetch() {
   if (!map || !layerGroup || !validCoords()) return;
 
@@ -178,25 +225,11 @@ function drawLayers() {
     lineJoin: 'round',
   }).addTo(layerGroup);
 
-  L.circleMarker(storeLatLng, {
-    radius: 9,
-    fillColor: '#10b981',
-    color: '#fff',
-    weight: 2,
-    opacity: 1,
-    fillOpacity: 0.95,
-  })
+  L.marker(storeLatLng, { icon: getStoreIcon() })
     .addTo(layerGroup)
     .bindTooltip('Loja', { permanent: false, direction: 'top' });
 
-  L.circleMarker(destLatLng, {
-    radius: 9,
-    fillColor: '#dc2626',
-    color: '#fff',
-    weight: 2,
-    opacity: 1,
-    fillOpacity: 0.95,
-  })
+  L.marker(destLatLng, { icon: getCustomerIcon() })
     .addTo(layerGroup)
     .bindTooltip('Destino', { permanent: false, direction: 'top' });
 
@@ -205,26 +238,14 @@ function drawLayers() {
     && Number.isFinite(props.courierLat) && Number.isFinite(props.courierLng);
 
   if (hasRealGps) {
-    L.circleMarker([props.courierLat, props.courierLng], {
-      radius: 8,
-      fillColor: '#0f172a',
-      color: '#10b981',
-      weight: 3,
-      fillOpacity: 1,
-    })
+    L.marker([props.courierLat, props.courierLng], { icon: getCourierIcon() })
       .addTo(layerGroup)
       .bindTooltip('Estafeta (GPS real)', { permanent: false, direction: 'right' });
   } else {
     const p = Math.min(1, Math.max(0, props.courierProgress / 100));
     if (p > 0 && p < 1) {
       const [clat, clng] = pointAlongPolyline(linePoints, p);
-      L.circleMarker([clat, clng], {
-        radius: 7,
-        fillColor: '#0f172a',
-        color: '#fff',
-        weight: 2,
-        fillOpacity: 1,
-      })
+      L.marker([clat, clng], { icon: getCourierIcon() })
         .addTo(layerGroup)
         .bindTooltip('Estafeta (indicativo)', { permanent: false, direction: 'right' });
     }
@@ -330,5 +351,9 @@ onBeforeUnmount(() => {
 
 .is-dim :deep(.leaflet-tile-pane) {
   filter: saturate(0.92) brightness(1.02);
+}
+
+.delivery-route-map :deep(.ge-map-marker-icon) {
+  filter: drop-shadow(0 2px 5px rgba(15, 23, 42, 0.3));
 }
 </style>

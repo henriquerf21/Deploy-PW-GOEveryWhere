@@ -15,6 +15,7 @@ export default {
     { method: 'POST', path: '/bo/orders/:id/priority', handler: 'back-office.setPriority', config: { auth: false } },
     { method: 'POST', path: '/bo/orders/:id/start-transit', handler: 'back-office.startTransit', config: { auth: false } },
     { method: 'POST', path: '/bo/orders/:id/complete', handler: 'back-office.completeOrder', config: { auth: false } },
+    { method: 'POST', path: '/bo/orders/:id/delivery-status', handler: 'back-office.setOrderDeliveryStatus', config: { auth: false } },
 
     { method: 'GET', path: '/bo/couriers', handler: 'back-office.listCouriers', config: { auth: false } },
     { method: 'GET', path: '/bo/couriers/:id', handler: 'back-office.getCourier', config: { auth: false } },

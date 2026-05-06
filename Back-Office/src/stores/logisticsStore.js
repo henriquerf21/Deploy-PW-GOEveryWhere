@@ -5,15 +5,8 @@ import {
   COURIER_STATE,
   orderStatusLabels,
 } from '../constants/logistics.js';
-
-const SOCKET_URL = 'http://localhost:1337';
-export const socket = io(SOCKET_URL, { autoConnect: true });
-
-socket.on('global_order_status_update', () => {
-  // Sempre que um cliente ou estafeta altera um pedido, atualizamos o painel
-  initLogistics({ force: true });
-});
 import {
+  API_BASE,
   boBootstrap,
   boGetOrder,
   boOrderAction,
@@ -36,6 +29,12 @@ import {
   boUpsertProduct,
   boDeleteProduct,
 } from '../api/backofficeApi.js';
+
+export const socket = io(API_BASE, { autoConnect: true });
+let realtimeRefreshTimer = null;
+let realtimeRefreshInFlight = false;
+const lastRoomRefreshAt = new Map();
+let lastGlobalRefreshAt = 0;
 
 let _seq = 24090;
 
@@ -86,6 +85,53 @@ async function withBusy(fn) {
     adjustBusy(-1);
   }
 }
+
+async function runRealtimeFullRefresh() {
+  if (realtimeRefreshInFlight) return;
+  realtimeRefreshInFlight = true;
+  try {
+    await initLogistics({ force: true });
+  } finally {
+    realtimeRefreshInFlight = false;
+  }
+}
+
+function scheduleRealtimeFullRefresh(delayMs = 450) {
+  if (realtimeRefreshTimer) clearTimeout(realtimeRefreshTimer);
+  realtimeRefreshTimer = setTimeout(() => {
+    realtimeRefreshTimer = null;
+    runRealtimeFullRefresh();
+  }, delayMs);
+}
+
+async function handleRealtimeEvent(payload = {}) {
+  const model = String(payload?.model || '').trim().toLowerCase();
+  // Ignore courier-only lifecycle noise in the orders realtime channel.
+  if (model && model !== 'order') return;
+
+  const room = String(payload?.room || '').trim();
+  if (room) {
+    const now = Date.now();
+    const lastHit = lastRoomRefreshAt.get(room) || 0;
+    if (now - lastHit < 900) return; // debounce bursts for same order room
+    lastRoomRefreshAt.set(room, now);
+    try {
+      await refreshOrderFromServer(room);
+      syncOperationalAggregatesFromOrders();
+      return;
+    } catch {
+      // fallback below
+    }
+  }
+  const now = Date.now();
+  if (now - lastGlobalRefreshAt < 2000) return;
+  lastGlobalRefreshAt = now;
+  scheduleRealtimeFullRefresh(900);
+}
+
+socket.on('global_order_status_update', (payload) => {
+  handleRealtimeEvent(payload);
+});
 
 function applyBootstrap(data) {
   const rawStores = data.stores ?? data.continentStores;
@@ -442,6 +488,7 @@ export async function requestOrderInfo(orderId, message) {
     upsertOrder(order);
     logAct(`Pedido ${orderId}: pedido de informação ao cliente.`);
     syncOperationalAggregatesFromOrders();
+    socket.emit('global_order_status_update', { status: 'S-03' });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao pedir informação.' };
@@ -471,6 +518,7 @@ export async function setOrderPriority(orderId, priority) {
     upsertOrder(order);
     if (p === 5) pushUrgentAlert(`ALERTA: Pedido ${orderId} definido como prioridade 5 (Urgente).`);
     logAct(`Pedido ${orderId}: prioridade ${p}.`);
+    socket.emit('global_order_status_update', { status: `P-${p}` });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao alterar prioridade.' };
@@ -497,6 +545,7 @@ export async function completeDelivery(orderId) {
     logAct(`Pedido ${orderId} entregue.`);
     refreshAggregatesForCustomerId(order.clientId);
     syncOperationalAggregatesFromOrders();
+    socket.emit('global_order_status_update', { status: 'S-11' });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao concluir entrega.' };
@@ -524,6 +573,7 @@ export async function patchOrderAdmin(orderId, payload) {
     upsertOrder(order);
     logAct(`Pedido ${orderId}: correção administrativa.`);
     syncOperationalAggregatesFromOrders();
+    socket.emit('global_order_status_update', { status: 'admin_patch' });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao guardar correções.' };

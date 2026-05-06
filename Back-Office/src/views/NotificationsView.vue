@@ -9,8 +9,8 @@
         </p>
       </div>
       <div class="bo-page-head__actions">
-        <span class="bo-badge" :class="frontOfficeAlerts.length ? 'bo-badge--warn' : 'bo-badge--neutral'">{{ frontOfficeAlerts.length }} pedido(s)</span>
-        <span class="bo-badge" :class="pwaAlerts.length ? 'bo-badge--warn' : 'bo-badge--neutral'">{{ pwaAlerts.length }} candidatura(s)</span>
+        <span class="bo-badge" :class="frontOfficeAlerts.length ? 'bo-badge--warn' : 'bo-badge--neutral'">{{ frontOfficeAlerts.length }} pedidos</span>
+        <span class="bo-badge" :class="pwaAlerts.length ? 'bo-badge--warn' : 'bo-badge--neutral'">{{ pwaAlerts.length }} candidaturas</span>
       </div>
     </header>
 

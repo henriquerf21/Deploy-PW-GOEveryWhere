@@ -271,6 +271,7 @@
 import { computed, ref, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { ZONES } from '../constants.js';
+import { API_URL } from '../config/env.js';
 
 const router = useRouter();
 const step = ref(1);
@@ -355,7 +356,7 @@ async function submitRegistration() {
       const formData = new FormData();
       formData.append('files', file);
       
-      const res = await fetch('http://localhost:1337/api/upload', {
+      const res = await fetch(`${API_URL}/upload`, {
         method: 'POST',
         body: formData,
       });
@@ -415,7 +416,7 @@ async function submitRegistration() {
     };
 
     // 4. Gravar estafeta no Backend
-    const res = await fetch('http://localhost:1337/api/courier-estafetas', {
+    const res = await fetch(`${API_URL}/courier-estafetas`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(payload)
@@ -453,7 +454,7 @@ let pollTimer = null;
 function startStatusPolling(docId) {
   pollTimer = setInterval(async () => {
     try {
-      const res = await fetch(`http://localhost:1337/api/courier-estafetas?filters[documentId][$eq]=${docId}`);
+      const res = await fetch(`${API_URL}/courier-estafetas?filters[documentId][$eq]=${docId}`);
       if (!res.ok) return;
       const json = await res.json();
       if (!json.data || json.data.length === 0) return;

@@ -7,6 +7,7 @@ export const ORDER_STATUS = {
   ASSIGNED: 'ASSIGNED',
   IN_TRANSIT: 'IN_TRANSIT',
   DELIVERED: 'DELIVERED',
+  UNDELIVERABLE: 'UNDELIVERABLE',
   CANCELLED_CLIENT: 'CANCELLED_CLIENT',
   CANCELLED_ADMIN: 'CANCELLED_ADMIN',
 };
@@ -19,6 +20,7 @@ export const orderStatusLabels = {
   [ORDER_STATUS.ASSIGNED]: 'Estafeta atribuído',
   [ORDER_STATUS.IN_TRANSIT]: 'Em trânsito',
   [ORDER_STATUS.DELIVERED]: 'Entregue',
+  [ORDER_STATUS.UNDELIVERABLE]: 'Não foi possível entregar',
   [ORDER_STATUS.CANCELLED_CLIENT]: 'Cancelado (pelo cliente)',
   [ORDER_STATUS.CANCELLED_ADMIN]: 'Cancelado (operação)',
 };

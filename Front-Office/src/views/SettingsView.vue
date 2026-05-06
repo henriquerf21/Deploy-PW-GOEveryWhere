@@ -129,6 +129,7 @@ import { useRouter } from 'vue-router';
 import SiteHeader from '../components/SiteHeader.vue';
 import SiteFooter from '../components/SiteFooter.vue';
 import { useAuthStore, isAuthenticated } from '../stores/authStore.js';
+import { API_URL } from '../config/env.js';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -180,7 +181,7 @@ async function saveSettings() {
   try {
     // 1. Guardar dados pessoais e morada no Strapi [cite: 85, 137]
     // NOTA: Incluímos username e email porque são obrigatórios no teu esquema JSON
-    const response = await fetch(`http://localhost:1337/api/users/${user.value.id}`, {
+    const response = await fetch(`${API_URL}/users/${user.value.id}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
@@ -212,7 +213,7 @@ async function saveSettings() {
 
     // 2. Alterar password se preenchida (apenas para login por email/password) [cite: 17, 121, 123]
     if (user.value?.provider !== 'google' && form.newPassword) {
-      const passResponse = await fetch(`http://localhost:1337/api/auth/change-password`, {
+      const passResponse = await fetch(`${API_URL}/auth/change-password`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

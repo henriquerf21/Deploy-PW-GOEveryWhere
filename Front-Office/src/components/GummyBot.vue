@@ -58,8 +58,7 @@
 
 <script setup>
 import { ref, nextTick } from 'vue';
-
-const API_URL = 'http://localhost:1337/api';
+import { API_URL } from '../config/env.js';
 
 const isOpen = ref(false);
 const currentMessage = ref('');

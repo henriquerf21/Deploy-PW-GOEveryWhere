@@ -87,7 +87,7 @@
           <p v-if="!hasHourlyData" class="bo-muted" style="font-size: 13px;">Ainda não há pedidos suficientes.</p>
           <div v-else class="hist24" role="img" aria-label="Histograma de pedidos por hora">
             <div v-for="(h, i) in logistics.hourlyVolume" :key="i" class="hist24__col">
-              <div class="hist24__bar" :style="{ height: (h / maxH) * 100 + '%' }" :title="`${h} pedido(s) às ${i}h`" />
+              <div class="hist24__bar" :style="{ height: (h / maxH) * 100 + '%' }" :title="`${h} pedidos às ${i}h`" />
               <span class="hist24__x bo-num">{{ i }}</span>
             </div>
           </div>

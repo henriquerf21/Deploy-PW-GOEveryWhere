@@ -1,12 +1,10 @@
 import { reactive, computed } from 'vue';
 import authState from './authStore';
 import { io } from 'socket.io-client';
-
-const API_URL = 'http://localhost:1337/api';
-const SOCKET_URL = 'http://localhost:1337';
+import { API_URL, BACKEND_URL } from '../config/env.js';
 
 // Initialize socket connection
-export const socket = io(SOCKET_URL, {
+export const socket = io(BACKEND_URL, {
   autoConnect: false // Connect only when an order is active
 });
 
@@ -31,6 +29,8 @@ export const ORDER_STATES = {
   'S-15': { label: 'Concluído e Avaliado',       color: '#059669', icon: '⭐', terminal: true },
   'S-16': { label: 'Concluído Sem Avaliação',    color: '#6b7280', icon: '📋', terminal: true },
 };
+
+export const DELIVERY_ACCEPTED_STATUSES = ['E-09', 'E-10', 'E-11', 'E-12', 'E-13'];
 
 export const PRODUCTS = reactive([
   { id: 'frasco-1', name: '1 Frasco', desc: '30 gomas proteicas', price: 14.99, gomas: 30 },
@@ -69,6 +69,7 @@ function normalizeProductFromStrapi(entry) {
   const baseId = raw.sku || raw.code || raw.documentId || entry?.documentId || entry?.id || `prod-${Date.now()}`;
   return {
     id: String(baseId).toLowerCase().replace(/[^a-z0-9-_]/g, '-'),
+    sku: String(raw.sku || raw.code || baseId || '').toUpperCase(),
     name: raw.name || 'Produto',
     desc: raw.desc || '',
     price: Math.max(0, toNum(raw.price, 0)),
@@ -144,11 +145,20 @@ export function toggleGoPointsRedemption(type) {
 
 export function findNearestStore(lat, lng) {
   if (!CONTINENTE_STORES.length) return;
+  const R = 6371;
+  const toRad = (v) => (v * Math.PI) / 180;
+  const haversineKm = (aLat, aLng, bLat, bLng) => {
+    const dLat = toRad(bLat - aLat);
+    const dLng = toRad(bLng - aLng);
+    const p =
+      Math.sin(dLat / 2) ** 2
+      + Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.atan2(Math.sqrt(p), Math.sqrt(1 - p));
+  };
   let nearest = CONTINENTE_STORES[0];
   let minDist = Infinity;
   for (const s of CONTINENTE_STORES) {
-    // Cálculo simples de distância (Haversine seria melhor, mas isto serve para proximidade local)
-    const dist = Math.sqrt((s.lat - lat) ** 2 + (s.lng - lng) ** 2);
+    const dist = haversineKm(lat, lng, s.lat, s.lng);
     if (dist < minDist) {
       minDist = dist;
       nearest = s;
@@ -157,7 +167,7 @@ export function findNearestStore(lat, lng) {
   store.delivery.assignedStore = nearest;
   store.delivery.gpsLat = lat; // Guardar para recalculcar se a lista de lojas mudar
   store.delivery.gpsLng = lng;
-  store.delivery.estimatedDistance = Math.round(minDist * 111 * 10) / 10;
+  store.delivery.estimatedDistance = Math.round(minDist * 10) / 10;
 }
 
 export function isCartValid() { return cartItemCount.value > 0; }
@@ -330,6 +340,10 @@ export async function fetchUserOrders() {
         createdAt: attr.createdAt,
         products: productList,
         total: attr.total_price,
+        costEuro: Number(attr.total_price) || 0,
+        etaMinutes: Number(attr.estimatedTime) || null,
+        priority: Number(attr.priority) || (attr.is_urgent ? 5 : 3),
+        isUrgent: !!attr.is_urgent,
         status: statusCode,
         rating: attr.rating,
         store: attr.store_name,
@@ -383,6 +397,12 @@ export async function submitOrder() {
   if (!authState.user || !authState.token) return { success: false, error: 'Não autenticado' };
 
   try {
+    if (!store.delivery.assignedStore?.name) {
+      return { success: false, error: 'Escolhe uma loja Continente válida antes de submeter.' };
+    }
+
+    const isUrgent = !!store.cart.urgentDelivery;
+    const computedPriority = isUrgent ? 5 : 3;
     const pointsUsed = store.payment.goPointsRedemption === 'product' ? 1000
                      : store.payment.goPointsRedemption === 'delivery' ? 500
                      : 0;
@@ -391,9 +411,11 @@ export async function submitOrder() {
       data: {
         total_price: orderTotal.value,
         order_status: 'S-01 Submetido',
-        store_name: store.delivery.assignedStore?.name || 'Continente Braga',
+        store_name: store.delivery.assignedStore.name,
+        storeLatitude: store.delivery.assignedStore?.lat ?? null,
+        storeLongitude: store.delivery.assignedStore?.lng ?? null,
         items: {
-          list: cartProducts.value.map(p => ({ name: p.name, qty: p.qty })),
+          list: cartProducts.value.map(p => ({ sku: p.sku || '', name: p.name, qty: p.qty })),
           deliveryCoords: {
             destLat: store.delivery.gpsLat ?? null,
             destLng: store.delivery.gpsLng ?? null,
@@ -403,7 +425,9 @@ export async function submitOrder() {
             city: store.delivery.city || '',
           },
         },
-        is_urgent: store.cart.urgentDelivery,
+        is_urgent: isUrgent,
+        priority: computedPriority,
+        estimatedTime: estimatedETA.value,
         user: authState.user.id,
         go_points_redemption: store.payment.goPointsRedemption || null,
         go_points_used: pointsUsed,

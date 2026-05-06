@@ -107,6 +107,7 @@ import {
   fetchDeliveries,
   togglePause,
   isPaused,
+  setPausedOnAppOpen,
   startGpsTracking,
   stopGpsTracking,
 } from '../stores/courierStore.js';
@@ -140,7 +141,8 @@ function toggleDistance() {
 }
 
 async function handleAccept(id) {
-  await acceptDelivery(id);
+  const ok = await acceptDelivery(id);
+  if (!ok) return;
   startGpsTracking(); // Start GPS when delivery accepted
   router.push(`/deliveries/${id}`);
 }
@@ -162,12 +164,8 @@ onMounted(async () => {
     return;
   }
 
-  // Se o estafeta arrancar com estado Offline, passamos a Em Pausa para que possa ficar online depois
-  if (store.profile.state === 'E-05' || store.profile.state === 'E-05 Offline') {
-    store.profile.state = 'E-07'; // Forçar E-07 Em Pausa localmente
-    // Em alternativa podemos já chamar o togglePause(), mas forçar localmente é suficiente
-    // pois a lógica de togglePause vai tratar de passar de E-07 para E-06.
-  }
+  // Ao abrir a PWA, o estafeta entra em pausa até ativar online manualmente.
+  await setPausedOnAppOpen();
 
   // Refresh deliveries from Strapi
   await fetchDeliveries();

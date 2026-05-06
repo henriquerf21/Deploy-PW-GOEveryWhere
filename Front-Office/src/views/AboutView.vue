@@ -140,7 +140,7 @@
           <div class="cta-card cta-courier">
             <h2>Queres ser estafeta?</h2>
             <p>Junta-te à frota GoEverywhere. Horários flexíveis e ganhos imediatos.</p>
-            <a href="http://localhost:5175/register" target="_blank" rel="noopener" class="btn-cta btn-cta-lg btn-career">
+            <a :href="`${COURIER_PWA_URL}/register`" target="_blank" rel="noopener" class="btn-cta btn-cta-lg btn-career">
               Criar Conta
               <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
             </a>
@@ -213,6 +213,7 @@ import { computed, onMounted, onUnmounted, ref } from 'vue';
 import SiteHeader from '../components/SiteHeader.vue';
 import SiteFooter from '../components/SiteFooter.vue';
 import { MEDIA } from '../config/media.js';
+import { API_URL, COURIER_PWA_URL } from '../config/env.js';
 
 const aboutVideoMaskCss = `url('${MEDIA.aboutVideoMask}')`;
 
@@ -424,7 +425,7 @@ const vObserveVisibility = {
 
 onMounted(async () => {
   try {
-    const res = await fetch('http://localhost:1337/api/bo/public-metrics');
+    const res = await fetch(`${API_URL}/bo/public-metrics`);
     if (res.ok) {
       const json = await res.json();
       if (json.data) publicMetrics.value = json.data;
