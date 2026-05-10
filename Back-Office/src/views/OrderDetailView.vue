@@ -208,10 +208,7 @@
                   <input v-model.number="ap.etaMinutes" type="number" min="1" class="bo-input" required />
                 </div>
               </div>
-              <div class="bo-field">
-                <label class="bo-field__label">Recursos necessários</label>
-                <textarea v-model="ap.resources" class="bo-textarea" rows="2" placeholder="Mota, caixa isotérmica..." required />
-              </div>
+
               <button type="submit" class="bo-btn bo-btn--primary">Aprovar pedido</button>
             </form>
           </div>
@@ -239,7 +236,7 @@
           <header class="bo-card__head">
             <div>
               <h3 class="bo-card__title">Atribuir estafeta</h3>
-              <p class="bo-card__sub">Apenas estafetas online na zona, dentro do limite de simultâneos.</p>
+              <p class="bo-card__sub">Estafetas disponíveis:</p>
             </div>
           </header>
           <div class="bo-card__body bo-stack">
@@ -247,20 +244,6 @@
               <div v-if="order.courierName" class="current-courier-banner">
                 <span class="bo-badge bo-badge--success">Ativo</span>
                 <span>Estafeta atribuído: <strong>{{ order.courierName }}</strong></span>
-              </div>
-              <div v-if="suggested.length" class="suggest">
-                <span class="bo-eyebrow">Sugestão assistida</span>
-                <ul class="suggest__list">
-                  <li v-for="s in suggested" :key="s.id" class="suggest__row" :class="{ 'is-selected': pickCourier === s.id }" @click="pickCourier = s.id">
-                    <div>
-                      <strong>{{ s.name }}</strong>
-                      <span class="suggest__score">score {{ s.score }}</span>
-                    </div>
-                    <p class="suggest__meta">
-                      {{ (s.reasons || []).join(' · ') }}<template v-if="s.distanceKm != null"> · ~{{ s.distanceKm }} km</template>
-                    </p>
-                  </li>
-                </ul>
               </div>
               <p v-if="!available.length && !order.courierName" class="bo-muted" style="font-size: 13px;">Sem estafetas elegíveis para esta zona.</p>
               <div v-else class="assign-list">
@@ -384,7 +367,7 @@ const order = computed(() => getOrderById(orderId.value));
 const mapContainer = ref(null);
 let mapInstance = null;
 
-const ap = reactive({ storeId: '', costEuro: 0, etaMinutes: 0, resources: '' });
+const ap = reactive({ storeId: '', costEuro: 0, etaMinutes: 0 });
 const pri = ref(3);
 const rejectText = ref('');
 const infoText = ref('');

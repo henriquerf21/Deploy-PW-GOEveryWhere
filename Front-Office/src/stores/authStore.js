@@ -96,17 +96,27 @@ export async function fetchMe() {
     });
     const data = await res.json();
     if (res.ok) {
-      // Prioritize local state fields because Strapi /users/me might not return the picture
-      const finalPicture = state.user?.picture || data.picture;
-      const finalAvatar = state.user?.avatarUrl || data.avatarUrl;
-      const finalAuthMethod = state.user?.authMethod || data.authMethod;
+      // Helper to extract URL from Strapi media object if necessary
+      const getUrl = (val) => {
+        if (!val) return null;
+        if (typeof val === 'string') return val;
+        if (val.url) return val.url;
+        return null;
+      };
+
+      // Prioritize local state fields (like Google picture) over backend if they exist
+      const localPicture = state.user?.picture;
+      const localAvatar = state.user?.avatarUrl;
       
+      const remotePicture = getUrl(data.picture);
+      const remoteAvatar = getUrl(data.avatarUrl);
+
       state.user = {
         ...state.user,
         ...data,
-        picture: finalPicture,
-        avatarUrl: finalAvatar,
-        authMethod: finalAuthMethod
+        picture: localPicture || remotePicture,
+        avatarUrl: localAvatar || remoteAvatar,
+        authMethod: state.user?.authMethod || data.authMethod
       };
       saveSession({ user: state.user, jwt: state.token });
     }

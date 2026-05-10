@@ -63,16 +63,17 @@ export default factories.createCoreController('api::courier-estafeta.courier-est
     const numeric = Number(token);
     let order = await strapi.db.query('api::order.order').findOne({
       where: { documentId: token },
-      populate: { delivery: { populate: { courier: true } } },
+      populate: { delivery: { populate: { courier: true } }, courier: true },
     });
     if (!order && Number.isFinite(numeric)) {
       order = await strapi.db.query('api::order.order').findOne({
         where: { id: numeric },
-        populate: { delivery: { populate: { courier: true } } },
+        populate: { delivery: { populate: { courier: true } }, courier: true },
       });
     }
     if (!order) return ctx.notFound('Pedido não encontrado.');
-    if (String(order?.delivery?.courier?.documentId || '') !== auth.courierDocumentId) {
+    const orderCourierDocId = order?.courier?.documentId || order?.delivery?.courier?.documentId;
+    if (String(orderCourierDocId || '') !== auth.courierDocumentId) {
       return ctx.forbidden('Pedido não pertence ao estafeta autenticado.');
     }
 
@@ -104,6 +105,30 @@ export default factories.createCoreController('api::courier-estafeta.courier-est
     });
     const { password: _password, ...safeCourier } = (updated as any) || {};
     ctx.body = { data: safeCourier };
+  },
+
+  async myDeliveries(ctx: any) {
+    const auth = await getCourierAuth(strapi, ctx);
+    if (!auth) return ctx.unauthorized('Token de estafeta inválido.');
+
+    // Fetch all non-terminal deliveries for this courier
+    const deliveries = await strapi.documents('api::delivery.delivery').findMany({
+      filters: {
+        courier: { documentId: auth.courierDocumentId },
+        delivery_status: {
+          $notIn: ['E-13 Entrega Confirmada', 'E-14 Entrega Impossível'],
+        },
+      },
+      populate: {
+        order: {
+          populate: { user: true },
+        },
+        courier: true,
+      },
+      sort: { createdAt: 'desc' } as any,
+    });
+
+    ctx.body = { data: deliveries };
   },
 
   async login(ctx) {

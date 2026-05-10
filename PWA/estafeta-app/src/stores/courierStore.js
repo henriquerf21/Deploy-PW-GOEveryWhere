@@ -119,12 +119,18 @@ function mapDelivery(d) {
     const attrs = d.attributes || d;
     const order = attrs.order?.data?.attributes || attrs.order || {};
     const items = order.items || [{ name: 'GoGummies', qty: 1, unit: 'frasco' }];
+    // Extract delivery coordinates from the items JSON (set by Front-Office)
+    const itemsJson = (typeof order.items === 'object' && !Array.isArray(order.items)) ? order.items : {};
+    const deliveryCoords = itemsJson.deliveryCoords || {};
 
-    // Calculate distances from courier position (rough estimate)
-    const pickupLat = order.storeLatitude || 41.15;
-    const pickupLng = order.storeLongitude || -8.63;
-    const destLat = order.deliveryLatitude || 41.16;
-    const destLng = order.deliveryLongitude || -8.62;
+    // Use real coordinates from the order, falling back to items JSON, then to approximate
+    const pickupLat = Number(order.storeLatitude) || 41.5518;
+    const pickupLng = Number(order.storeLongitude) || -8.4229;
+    const destLat = Number(order.deliveryLatitude) || Number(deliveryCoords.lat) || pickupLat + 0.005;
+    const destLng = Number(order.deliveryLongitude) || Number(deliveryCoords.lng) || pickupLng + 0.003;
+
+    // Extract delivery address from order or items JSON
+    const deliveryAddress = order.deliveryAddress || deliveryCoords.address || '';
 
     // Mapeamento extra para User/Cliente
     const userData = order.user?.data?.attributes || order.user?.attributes || order.user || {};
@@ -186,15 +192,15 @@ function mapDelivery(d) {
             return s;
         })(),
         pickup: {
-            name: order.store_name || 'Continente Braga',
-            address: order.pickupAddress || 'Braga Parque',
+            name: order.store_name || 'Continente',
+            address: order.pickupAddress || order.store_name || '',
             lat: parseFloat(pickupLat),
             lng: parseFloat(pickupLng),
             distance: distPickup,
         },
         destination: {
             name: userData.fullName || userData.username || 'Cliente',
-            address: order.deliveryAddress || '',
+            address: deliveryAddress,
             phone: userData.phone || '',
             lat: parseFloat(destLat),
             lng: parseFloat(destLng),
@@ -442,31 +448,20 @@ export async function fetchDeliveries() {
 
     store.loading = true;
     try {
-        // Fetch active deliveries for this courier
-        const activeStatuses = [
-            'E-08 Pedido Recebido',
-            'E-09 A Caminho da Loja',
-            'E-10 Na Loja / Em Recolha',
-            'E-11 Em Trânsito para Cliente',
-            'E-12 No Destino',
-        ];
-
-        const courierId = store.profile.documentId || store.courierId;
-        const idFilterKey = (typeof courierId === 'string' && courierId.length > 5) ? 'documentId' : 'id';
-        
-        // População simplificada para evitar erro 500 e trazer dados da Order + User
-        const res = await apiGet(`/deliveries?filters[courier][${idFilterKey}][$eq]=${courierId}&populate[order][populate]=user&sort=createdAt:desc&status=published`);
+        // Use the dedicated courier endpoint that validates the courier JWT directly.
+        // The generic /deliveries endpoint silently returns empty because the courier
+        // JWT (scope:'courier') is not recognized by Strapi's standard auth middleware.
+        const res = await apiGet('/courier-estafetas/my-deliveries');
         
         const apiDeliveries = (res.data || []).map(d => mapDelivery(d));
 
         if (apiDeliveries.length > 0) {
             store.deliveries = apiDeliveries;
             
-            // Bloqueamos o fluxo apenas quando o estafeta já aceitou (E-09+).
+            // Lock the UI only when the courier has already accepted (E-09+).
             const inProgress = apiDeliveries.find(d => ['E-09', 'E-10', 'E-11', 'E-12'].includes(d.state));
             if (inProgress) {
                 store.activeDeliveryId = inProgress.id;
-                
             } else {
                 store.activeDeliveryId = null;
             }
@@ -480,6 +475,7 @@ export async function fetchDeliveries() {
         store.loading = false;
     }
 }
+
 
 export async function fetchCompletedDeliveries() {
     if (!store.courierId) return [];
@@ -536,7 +532,7 @@ export async function acceptDelivery(deliveryId) {
     saveState();
 
     try {
-        await updateDeliveryOnStrapi(d, 'E-09', { startTime: now });
+        await updateDeliveryOnStrapi(d, 'E-09', { startTime: now, timestamps: d.timestamps });
         return true;
     } catch (err) {
         // Evita loop de "aceitar novamente" quando o backend não persiste a transição.
@@ -560,7 +556,7 @@ export async function advanceDeliveryState(deliveryId) {
     d.timestamps[next] = now;
     saveState();
 
-    await updateDeliveryOnStrapi(d, next);
+    await updateDeliveryOnStrapi(d, next, { timestamps: d.timestamps });
 
     if (next === 'E-14') {
         store.activeDeliveryId = null;
@@ -602,6 +598,7 @@ export async function confirmDelivery(deliveryId, confirmation) {
     try {
         const extraData = {
             endTime: now,
+            timestamps: d.timestamps,
             confirmationGps: confirmation.gps || confirmation.location || null,
             notes: d.notes || '',
         };
@@ -820,6 +817,10 @@ export function startGpsTracking() {
     );
 
     // Send to Strapi via API every 30 seconds for persistence, but emit to Socket every 5 seconds for real-time tracking
+    if (gpsIntervalId !== null) {
+        clearInterval(gpsIntervalId);
+    }
+    
     gpsIntervalId = setInterval(() => {
         if (lastGpsCoords && store.activeDeliveryId) {
             const d = store.deliveries.find(x => x.id === store.activeDeliveryId);
@@ -926,22 +927,30 @@ export async function submitDataChangeRequest({ field, newValue, reason }) {
 export async function sendDeliveryChatMessage(orderDocumentId, text) {
     if (!orderDocumentId) return false;
     try {
-        const orderRes = await apiGet(`/orders/${orderDocumentId}`);
-        const order = orderRes.data?.attributes || orderRes.data || {};
-        const currentHistory = order.chatHistory || [];
+        // Read current chat history from local delivery state (already fetched via my-deliveries)
+        const active = store.deliveries.find(d => d.orderDocumentId === orderDocumentId);
+        const currentHistory = [...(active?.chatHistory || [])];
         
-        currentHistory.push({
+        const newMessage = {
             sender: 'courier',
             text,
             time: new Date().toISOString()
-        });
+        };
+        currentHistory.push(newMessage);
 
-        await apiPut(`/orders/${orderDocumentId}`, {
+        // Use the authenticated courier endpoint to update the order's chatHistory
+        await apiCourierPut(`/courier-estafetas/orders/${orderDocumentId}`, {
             data: { chatHistory: currentHistory }
         });
         
-        const active = store.deliveries.find(d => d.orderDocumentId === orderDocumentId);
+        // Update local state
         if (active) active.chatHistory = currentHistory;
+
+        // Emit via WebSocket for real-time delivery to Front-Office
+        socket.emit('chat_message', {
+            room: orderDocumentId,
+            message: newMessage,
+        });
 
         return true;
     } catch (err) {
@@ -956,6 +965,10 @@ export function getDeliveryById(id) {
     return store.deliveries.find(d => d.id === id) 
         || store.completedDeliveries.find(d => d.id === id)
         || null;
+}
+
+export function getLastGpsCoords() {
+    return lastGpsCoords;
 }
 
 /** Waze deep link */

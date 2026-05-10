@@ -34,7 +34,7 @@
       ]
     },
     "confirmationSignature": {
-      "type": "string"
+      "type": "text"
     },
     "confirmationQrCode": {
       "type": "string"
@@ -46,7 +46,7 @@
       "type": "json"
     },
     "notes": {
-      "type": "string"
+      "type": "text"
     },
     "delivery_status": {
       "type": "enumeration",

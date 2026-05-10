@@ -107,10 +107,10 @@ import {
   fetchDeliveries,
   togglePause,
   isPaused,
-  setPausedOnAppOpen,
   startGpsTracking,
   stopGpsTracking,
 } from '../stores/courierStore.js';
+
 import { deliveryStateLabels } from '../constants.js';
 import DeliveryCard from '../components/DeliveryCard.vue';
 import FilterPanel from '../components/FilterPanel.vue';
@@ -164,9 +164,6 @@ onMounted(async () => {
     return;
   }
 
-  // Ao abrir a PWA, o estafeta entra em pausa até ativar online manualmente.
-  await setPausedOnAppOpen();
-
   // Refresh deliveries from Strapi
   await fetchDeliveries();
 
@@ -184,6 +181,7 @@ onMounted(async () => {
   // Poll for new deliveries every 15s
   pollInterval = setInterval(() => fetchDeliveries(), 15000);
 });
+
 
 // Force redirect if active delivery detected
 watch(() => store.activeDeliveryId, (newId) => {

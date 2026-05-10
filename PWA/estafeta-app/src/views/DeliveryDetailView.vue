@@ -128,14 +128,8 @@
         <p class="instr-text">{{ delivery.instructions }}</p>
       </div>
 
-      <!-- Documentação adicional -->
-      <div class="section-card doc-link-card">
-        <div class="doc-link-row">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6"/></svg>
-          <span class="doc-link-text">Documentação adicional</span>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="2"><path d="M9 18l6-6-6-6"/></svg>
-        </div>
-      </div>
+
+
 
       <!-- CTA Buttons (Figma: per-state styling) -->
       <div class="cta-section" v-if="ctaLabel">
@@ -252,7 +246,7 @@ import { useRouter } from 'vue-router';
 import {
   getDeliveryById, acceptDelivery, advanceDeliveryState,
   markDeliveryImpossible, wazeLink, fetchDeliveries, sendDeliveryChatMessage,
-  declineDeliveryTimeout, startGpsTracking, stopGpsTracking,
+  declineDeliveryTimeout, startGpsTracking, stopGpsTracking, getLastGpsCoords,
 } from '../stores/courierStore.js';
 import { DELIVERY_STATE, deliveryStateLabels, STATE_CTA } from '../constants.js';
 import StatusStepper from '../components/StatusStepper.vue';
@@ -528,14 +522,25 @@ async function handleImpossible() {
   router.push('/deliveries');
 }
 
+let lastRenderedState = null;
+let lastRenderedGps = null;
+
 function renderRouteMap() {
   if (!delivery.value || !routeMap || !routeLayer || !leaflet) return;
-  routeLayer.clearLayers();
+  
   const p = delivery.value.pickup;
   const d = delivery.value.destination;
   if (p?.lat == null || d?.lat == null) return;
-
+  
   const s = delivery.value.state;
+  const gps = getLastGpsCoords();
+  const gpsKey = gps ? `${gps.lat},${gps.lng}` : null;
+  
+  // Only redraw if state or GPS actually changed
+  if (lastRenderedState === s && lastRenderedGps === gpsKey) return;
+  
+  routeLayer.clearLayers();
+  
   const routeColor = s === 'E-09' ? '#22c55e' : s === 'E-10' ? '#f59e0b' : s === 'E-11' ? '#3b82f6' : '#22c55e';
   const isDashed = !['E-13'].includes(s);
 
@@ -546,12 +551,21 @@ function renderRouteMap() {
   routeLayer.addLayer(leaflet.marker([p.lat, p.lng], { icon: getPickupIcon() }));
   routeLayer.addLayer(leaflet.marker([d.lat, d.lng], { icon: getDestinationIcon() }));
 
-  if (['E-10', 'E-11', 'E-12'].includes(s)) {
-    const clat = p.lat + (d.lat - p.lat) * 0.45;
-    const clng = p.lng + (d.lng - p.lng) * 0.45;
-    routeLayer.addLayer(leaflet.marker([clat, clng], { icon: getCourierIcon() }));
+  const points = [[p.lat, p.lng], [d.lat, d.lng]];
+  if (['E-09', 'E-10', 'E-11', 'E-12'].includes(s)) {
+    if (gps && gps.lat && gps.lng) {
+      routeLayer.addLayer(leaflet.marker([gps.lat, gps.lng], { icon: getCourierIcon() }));
+      points.push([gps.lat, gps.lng]);
+    }
   }
-  routeMap.fitBounds(leaflet.latLngBounds([[p.lat, p.lng], [d.lat, d.lng]]), { padding: [24, 24], maxZoom: 14 });
+  
+  // Only fitBounds on the very first render or state change
+  if (lastRenderedState !== s) {
+    routeMap.fitBounds(leaflet.latLngBounds(points), { padding: [24, 24], maxZoom: 14 });
+  }
+  
+  lastRenderedState = s;
+  lastRenderedGps = gpsKey;
 }
 </script>
 
