@@ -1285,7 +1285,6 @@ export default ({ strapi }: any) => ({
         items: {
           boMeta: {
             storeId: (store?.id || payload.storeId || null),
-            resources: payload.resources || '',
             type: order.type,
             zone: order.zone,
             city: order.city,
@@ -1302,7 +1301,6 @@ export default ({ strapi }: any) => ({
         storeName: store?.name || payload.storeId || null,
         costEuro: toNum(payload.costEuro, 0),
         etaMinutes: Math.max(1, toNum(payload.etaMinutes, 10)),
-        resources: payload.resources || '',
       },
     });
     if (!updated) return { ok: false, error: 'Falha ao atualizar pedido.' };

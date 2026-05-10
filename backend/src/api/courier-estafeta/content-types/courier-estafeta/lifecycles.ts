@@ -1,4 +1,5 @@
 import { hashCourierPassword, isCourierPasswordHash } from '../../utils/password';
+import { emitBoChange } from '../../../back-office/utils/bo-event-bus';
 
 export default {
   async beforeCreate(event: any) {
@@ -16,9 +17,8 @@ export default {
   async afterUpdate(event: any) {
     const { result } = event;
     
-    // Notificar Back-Office via SSE quando o estado do estafeta muda (isOnline, status, etc)
+    // Notificar Back-Office via SSE quando o estado do estafeta muda
     try {
-      const { emitBoChange } = require('../../../back-office/utils/bo-event-bus');
       emitBoChange({
         entity: 'courier',
         id: result.documentId || result.id,
@@ -28,7 +28,7 @@ export default {
           status: result.courier_status 
         }
       });
-    } catch (e) {
+    } catch (e: any) {
       console.warn('[BO-Bus] falha ao emitir mudança no lifecycle do estafeta:', e.message);
     }
   },

@@ -7,10 +7,11 @@
         <div class="welcome-card reveal">
           <div class="welcome-avatar" :class="{ 'google-avatar': user?.authMethod === 'google' && !user?.picture }">
             <img 
-              v-if="user?.picture" 
-              :src="user.picture" 
+              v-if="avatarSrc" 
+              :src="avatarSrc" 
               class="avatar-img" 
               alt="Avatar do utilizador" 
+              referrerpolicy="no-referrer"
             />
             <span v-else>{{ userInitial }}</span>
           </div>
@@ -77,6 +78,7 @@ import SiteFooter from '../components/SiteFooter.vue';
 import { computed } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore, logout, isAuthenticated } from '../stores/authStore.js';
+import { BACKEND_URL } from '../config/env.js';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -88,6 +90,15 @@ const userInitial = computed(() => {
   if (!user.value) return 'U';
   const name = user.value.firstName || user.value.username || user.value.email || 'U';
   return name.charAt(0).toUpperCase();
+});
+
+const avatarSrc = computed(() => {
+  if (!user.value) return null;
+  // Here we check picture first as it's common for Google, then avatarUrl
+  const url = user.value.picture || user.value.avatarUrl;
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return `${BACKEND_URL}${url}`;
 });
 
 // Redirecionar se não estiver autenticado

@@ -7,6 +7,12 @@ export default {
       config: { auth: false },
     },
     {
+      method: 'GET',
+      path: '/courier-estafetas/my-deliveries',
+      handler: 'courier-estafeta.myDeliveries',
+      config: { auth: false },
+    },
+    {
       method: 'PUT',
       path: '/courier-estafetas/deliveries/:id',
       handler: 'courier-estafeta.courierUpdateDelivery',

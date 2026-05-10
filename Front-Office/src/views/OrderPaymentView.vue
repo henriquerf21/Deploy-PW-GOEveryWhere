@@ -307,7 +307,7 @@ import { useRouter } from 'vue-router';
 import SiteHeader from '../components/SiteHeader.vue';
 import SiteFooter from '../components/SiteFooter.vue';
 import CheckoutWizardSteps from '../components/CheckoutWizardSteps.vue';
-import { User, Home, Store, Clock, Award, Loader2, CheckCircle2 } from 'lucide-vue-next';
+import { User, Home, Store, Clock, Award, Loader2, CheckCircle2, AlertCircle } from 'lucide-vue-next';
 
 import {
   useOrderStore,

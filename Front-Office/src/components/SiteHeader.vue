@@ -16,10 +16,11 @@
           <router-link to="/dashboard" class="action-btn" title="A tua conta">
             <div class="user-avatar">
               <img 
-                v-if="user?.avatarUrl || user?.picture" 
-                :src="user.avatarUrl || user.picture" 
+                v-if="avatarSrc" 
+                :src="avatarSrc" 
                 class="avatar-img" 
                 alt="Avatar"
+                referrerpolicy="no-referrer"
               />
               <span v-else>{{ userInitial }}</span>
             </div>
@@ -58,6 +59,7 @@ import { ref, computed, onMounted, onUnmounted } from 'vue';
 import { useRouter } from 'vue-router';
 import { useAuthStore, isAuthenticated, logout } from '../stores/authStore.js';
 import { MEDIA } from '../config/media.js';
+import { BACKEND_URL } from '../config/env.js';
 
 const router = useRouter();
 const auth = useAuthStore();
@@ -69,9 +71,16 @@ const mobileOpen = ref(false);
 // LÓGICA DA INICIAL DO NOME
 const userInitial = computed(() => {
   if (!user.value) return 'U';
-  // Tenta o firstName, se não houver tenta o username, senão 'U'
   const name = user.value.firstName || user.value.username || 'U';
   return name.charAt(0).toUpperCase();
+});
+
+const avatarSrc = computed(() => {
+  if (!user.value) return null;
+  const url = user.value.avatarUrl || user.value.picture;
+  if (!url) return null;
+  if (url.startsWith('http')) return url;
+  return `${BACKEND_URL}${url}`;
 });
 
 function handleLogout() {

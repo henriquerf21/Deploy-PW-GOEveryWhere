@@ -22,7 +22,7 @@
         </div>
         <div class="db-text">
           <span class="db-title">Estás no destino!</span>
-          <span class="db-desc">Confirma a entrega com fotografia, assinatura ou QR Code do cliente</span>
+          <span class="db-desc">Confirma a entrega com fotografia e assinatura do cliente</span>
         </div>
       </div>
 
@@ -31,12 +31,12 @@
         <div class="req-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         </div>
-        <span class="req-text">É obrigatório registar <strong>fotografia</strong>, <strong>assinatura</strong> ou <strong>QR Code</strong>, sempre com GPS.</span>
+        <span class="req-text">É obrigatório registar <strong>fotografia</strong> e <strong>assinatura</strong>, sempre com GPS.</span>
       </div>
 
       <!-- Photo section (always visible) -->
       <div class="section-card">
-        <span class="section-label">FOTOGRAFIA DA ENTREGA *</span>
+        <span class="section-label">FOTOGRAFIA DA ENTREGA (obrigatório)</span>
         <div class="capture-area-wrap">
           <label class="capture-area" :class="{ 'has-photo': photoPreview }">
             <input ref="photoInput" type="file" accept="image/*" capture="environment" @change="handlePhoto" class="sr-only">
@@ -52,7 +52,7 @@
 
       <!-- Signature section (optional proof method) -->
       <div class="section-card">
-        <span class="section-label">ASSINATURA DO CLIENTE</span>
+        <span class="section-label">ASSINATURA DO CLIENTE (obrigatório)</span>
         <div class="signature-wrap">
           <canvas ref="sigCanvas" width="360" height="200" @touchstart.prevent @mousedown.prevent></canvas>
           <button class="clear-sig" @click="clearSignature">Limpar</button>
@@ -60,17 +60,7 @@
         <p v-if="hasSig" class="proof-status proof-ok">✓ Assinatura recolhida</p>
       </div>
 
-      <!-- QR Code section (optional proof method) -->
-      <div class="section-card">
-        <span class="section-label">QR CODE DO CLIENTE</span>
-        <input
-          v-model.trim="qrCode"
-          type="text"
-          class="notes-textarea"
-          placeholder="Introduz ou cola o código QR lido"
-        >
-        <p v-if="hasQrCode" class="proof-status proof-ok">✓ QR Code registado</p>
-      </div>
+
 
       <!-- Location section -->
       <div class="section-card">
@@ -119,13 +109,9 @@
             <span class="check-box"><span v-if="hasSig" class="check-mark"></span></span>
             <span>Assinatura do cliente</span>
           </div>
-          <div class="check-item" :class="{ done: hasQrCode }">
-            <span class="check-box"><span v-if="hasQrCode" class="check-mark"></span></span>
-            <span>QR Code do cliente</span>
-          </div>
-          <div class="check-item" :class="{ done: hasAnyProof }">
-            <span class="check-box"><span v-if="hasAnyProof" class="check-mark"></span></span>
-            <span>Pelo menos 1 prova (foto, assinatura ou QR)</span>
+          <div class="check-item" :class="{ done: hasPhoto && hasSig }">
+            <span class="check-box"><span v-if="hasPhoto && hasSig" class="check-mark"></span></span>
+            <span>Fotografia + Assinatura (ambos obrigatórios)</span>
           </div>
           <div class="check-item" :class="{ done: !!gpsCoords }">
             <span class="check-box"><span v-if="gpsCoords" class="check-mark"></span></span>
@@ -151,7 +137,7 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
         Submeter entrega
       </button>
-      <p class="submit-note">Pelo menos 1 prova + localização GPS são obrigatórios</p>
+      <p class="submit-note">Fotografia + Assinatura + Localização GPS são obrigatórios</p>
     </div>
 
     <!-- Footer -->
@@ -178,7 +164,7 @@ const error = ref('');
 const notes = ref('');
 const extraDesc = ref('');
 const extraPhotos = ref([]);
-const qrCode = ref('');
+
 
 // Photo
 const photoPreview = ref(null);
@@ -245,35 +231,31 @@ function handleExtraPhotos(e) {
   extraPhotos.value = extraPhotosData.value.map(f => f.name);
 }
 
-const hasQrCode = computed(() => qrCode.value.trim().length > 0);
-const hasAnyProof = computed(() => hasPhoto.value || hasSig.value || hasQrCode.value);
+const hasAnyProof = computed(() => hasPhoto.value && hasSig.value);
 
 // Validation — Requires GPS + at least one proof method
 const canConfirm = computed(() => {
-  return hasAnyProof.value && !!gpsCoords.value;
+  return hasPhoto.value && hasSig.value && !!gpsCoords.value;
 });
 
 async function handleConfirm() {
   error.value = '';
   if (!canConfirm.value) {
     const missing = [];
-    if (!hasAnyProof.value) missing.push('fotografia, assinatura ou QR Code');
+    if (!hasPhoto.value) missing.push('fotografia');
+    if (!hasSig.value) missing.push('assinatura');
     if (!gpsCoords.value) missing.push('localização GPS');
     error.value = `Falta: ${missing.join(', ')}.`;
     return;
   }
-  const proofMethod = hasPhoto.value
-    ? 'photo'
-    : hasSig.value
-      ? 'signature'
-      : 'qrcode';
+  const proofMethod = 'photo_and_signature';
   const data = {
     method: proofMethod,
     gps: gpsCoords.value,
     timestamp: new Date().toISOString(),
     photo: photoPreview.value,
     signature: signaturePad ? signaturePad.toDataURL() : null,
-    qrCode: qrCode.value.trim() || null,
+
     location: gpsCoords.value,
     extraPhotos: extraPhotosData.value,
   };

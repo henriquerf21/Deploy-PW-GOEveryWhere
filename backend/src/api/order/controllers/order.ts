@@ -76,8 +76,10 @@ async function pickNearestStoreWithStock(strapi: any, orderData: any): Promise<{
 
   const stores = await strapi.db.query('api::continent-store.continent-store').findMany({
     where: { isActive: true },
-    select: ['id', 'documentId', 'name', 'code', 'lat', 'lng'],
+    select: ['id', 'documentId', 'name', 'code', 'lat', 'lng', 'manualStockOverride'],
   });
+  
+  console.log(`[PickStore] Encontradas ${stores?.length || 0} lojas ativas.`);
   if (!stores?.length) return { store: null, error: 'Sem lojas Continente ativas.' };
 
   const storeIds = stores.map((s: any) => s.id);
@@ -102,10 +104,22 @@ async function pickNearestStoreWithStock(strapi: any, orderData: any): Promise<{
     invMap.set(`${storeId}:${sku}`, available);
   }
 
-  const eligible = stores.filter((store: any) => requested.every((req) => {
-    const available = invMap.get(`${store.id}:${req.sku}`) || 0;
-    return available >= req.qty;
-  }));
+  const eligible = stores.filter((store: any) => {
+    console.log(`[PickStore] Verificando loja: ${store.name} (Override: ${store.manualStockOverride})`);
+    
+    // Se a loja tiver override manual, ignoramos o check de stock real
+    if (store.manualStockOverride === true || store.manualStockOverride === 'true') return true;
+
+    const hasStock = requested.every((req) => {
+      const available = invMap.get(`${store.id}:${req.sku}`) || 0;
+      return available >= req.qty;
+    });
+    
+    console.log(`[PickStore] Loja ${store.name} tem stock real? ${hasStock}`);
+    return hasStock;
+  });
+
+  console.log(`[PickStore] Lojas elegíveis após check: ${eligible.map(e => e.name).join(', ')}`);
 
   if (!eligible.length) {
     return { store: null, error: 'Sem stock suficiente em lojas próximas para os itens selecionados.' };
