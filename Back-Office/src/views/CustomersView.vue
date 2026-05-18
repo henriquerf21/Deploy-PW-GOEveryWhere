@@ -4,10 +4,6 @@
       <div class="bo-page-head__main">
         <p class="bo-page-head__eyebrow">Operações</p>
         <h1 class="bo-page-head__title">Clientes</h1>
-        <p class="bo-page-head__sub">
-          RF31 — contacto, cidade, encomendas, gasto total, última encomenda e avaliação média. Os totais provêm dos pedidos
-          (clica em «Sincronizar totais») e a avaliação é calculada a partir das reviews.
-        </p>
       </div>
       <div class="bo-page-head__actions">
         <button type="button" class="bo-btn bo-btn--outline" @click="doSync">Sincronizar totais</button>

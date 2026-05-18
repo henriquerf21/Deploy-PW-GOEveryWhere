@@ -88,7 +88,6 @@
           <div class="loc-detail">
             <span class="loc-label">RECOLHA</span>
             <span class="loc-name">{{ delivery.pickup.name }}</span>
-            <span class="loc-address">{{ delivery.pickup.address }}</span>
           </div>
         </div>
         <div class="loc-connector"></div>
@@ -96,8 +95,7 @@
           <div class="loc-dot loc-dot-green"></div>
           <div class="loc-detail">
             <span class="loc-label">ENTREGA</span>
-            <span class="loc-name">{{ delivery.destination.name }}</span>
-            <span class="loc-address">{{ delivery.destination.address || 'Rua do Sardoal, nº38, Av.Central, Braga' }}</span>
+            <span class="loc-name">{{ delivery.destination.address }}</span>
           </div>
         </div>
       </div>

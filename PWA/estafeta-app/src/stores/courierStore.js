@@ -199,7 +199,7 @@ function mapDelivery(d) {
             distance: distPickup,
         },
         destination: {
-            name: userData.fullName || userData.username || 'Cliente',
+            name: userData.username || userData.fullName|| 'Cliente',
             address: deliveryAddress,
             phone: userData.phone || '',
             lat: parseFloat(destLat),
