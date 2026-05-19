@@ -13,7 +13,7 @@ export default (plugin: any) => {
     }
 
     // Usar entityService garante que o populate funciona corretamente na v5
-    const user = await strapi.entityService.findOne('plugin::users-permissions.user', authUser.id, {
+    const user: any = await strapi.entityService.findOne('plugin::users-permissions.user', authUser.id, {
       populate: ['go_point', 'role']
     });
 
@@ -81,7 +81,7 @@ export default (plugin: any) => {
     await strapi.plugin('users-permissions').service('user').edit(targetId, cleanData);
 
     // Procurar o utilizador atualizado com go_point e role populados
-    const updatedUser = await strapi.entityService.findOne('plugin::users-permissions.user', targetId, {
+    const updatedUser: any = await strapi.entityService.findOne('plugin::users-permissions.user', targetId, {
       populate: ['go_point', 'role']
     });
 
