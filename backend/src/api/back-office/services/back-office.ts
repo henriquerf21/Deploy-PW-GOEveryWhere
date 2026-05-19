@@ -284,6 +284,7 @@ function buildPublicOrder(entry: any) {
     items: Array.isArray(items.list) ? items.list : (Array.isArray(items) ? items : []),
     go_points_used: toNum(attrs.go_points_used, 0),
     go_points_redemption: attrs.go_points_redemption || null,
+    notes: attrs.notes || '',
     rating: attrs.rating ?? null,
     timeline: buildOrderTimeline(attrs, bo),
     review: attrs.review ? {

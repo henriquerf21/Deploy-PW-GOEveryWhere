@@ -54,19 +54,17 @@
               <div>
                 <h4 class="info-grid__h">Encomenda</h4>
                 <dl class="bo-dl">
-                  <dt>Tipo</dt><dd>{{ orderTypeLabels[order.type] }}</dd>
                   <dt>Zona</dt><dd>{{ order.zone }}</dd>
                   <dt>Loja</dt><dd>{{ order.storeName || '—' }}</dd>
                   <dt>Custo</dt><dd>{{ order.costEuro != null ? order.costEuro.toFixed(2) + ' €' : '—' }}</dd>
                   <dt>ETA</dt><dd>{{ order.etaMinutes ? order.etaMinutes + ' min' : '—' }}</dd>
-                  <dt>Recursos</dt><dd>{{ order.resources || '—' }}</dd>
                   <dt>Estafeta</dt><dd>{{ order.courierName || '—' }}</dd>
                   <dt v-if="order.cancelReason">Motivo cancelamento operação</dt>
                   <dd v-if="order.cancelReason">{{ order.cancelReason }}</dd>
                   <dt v-if="order.adminInternalNote">Nota interna última</dt>
                   <dd v-if="order.adminInternalNote">{{ order.adminInternalNote }}</dd>
                   <dt>Data</dt><dd class="bo-mono">{{ order.createdAt?.slice(0,16).replace('T',' ') }}</dd>
-                  <dt>GO Points</dt><dd>{{ order.go_points_used || 0 }}</dd>
+                  <dt>GO Points</dt><dd>+{{ order.costEuro ? Math.floor(order.costEuro * 10) : 0 }} pts</dd>
                   <dt>Avaliação</dt><dd>{{ order.rating != null ? order.rating + ' / 5' : '—' }}</dd>
                 </dl>
               </div>
@@ -156,11 +154,7 @@
         <section class="bo-card">
           <header class="bo-card__head">
             <div>
-              <h3 class="bo-card__title">Comunicações ao cliente</h3>
-              <p class="bo-card__sub">
-                Registo persistido no Strapi (rejeição, pedido de informação, cancelamento operacional).
-                O envio real depende do plugin de email configurado no backend.
-              </p>
+              <h3 class="bo-card__title">Comunicações ao cliente</h3
             </div>
           </header>
           <div class="bo-card__body">
