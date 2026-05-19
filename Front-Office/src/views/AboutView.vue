@@ -292,12 +292,8 @@ const svcSlides = [
     num: '04', title: 'Zonas de Cobertura',
     text: 'Estamos ativos nas principais zonas urbanas do Norte de Portugal, com planos de expansão para todo o território nacional.',
     items: [
-      { icon: 'pin-map-fill', label: 'Braga — Centro Histórico, Lamaçães, Gualtar, São Vicente' },
-      { icon: 'pin-map', label: 'Porto Centro — Cedofeita, Bonfim, Foz, Paranhos' },
-      { icon: 'pin-map', label: 'Matosinhos — Centro, Leça da Palmeira, Senhora da Hora' },
-      { icon: 'pin-map', label: 'Vila Nova de Gaia — Mafamude, Canidelo, Santa Marinha' },
-      { icon: 'pin-map', label: 'Maia — Cidade da Maia, Águas Santas' },
-      { icon: 'pin-map', label: 'Gondomar — Rio Tinto, Valbom' },
+      { icon: 'pin-map-fill', label: 'Braga — Centro e distritos próximos' },
+      { icon: 'pin-map', label: 'Porto — Grande Porto' },
     ],
   },
 ];
