@@ -5,23 +5,32 @@ export default (plugin: any) => {
     return strapi.contentAPI.sanitize.output(user, schema, { auth });
   };
 
-  // 1. Sobrecargar o endpoint /users/me para retornar sempre os GoPoints e dados da morada
+  // 1. Sobrecargar o endpoint /users/me para retornar sempre os GoPoints
   plugin.controllers.user.me = async (ctx: any) => {
-    const user = ctx.state.user;
-    if (!user) {
+    const authUser = ctx.state.user;
+    if (!authUser) {
       return ctx.unauthorized('You must be logged in');
     }
 
-    // Carrega o utilizador com a relação go_point populada
-    const userWithRelation = await strapi.entityService.findOne('plugin::users-permissions.user', user.id, {
-      populate: ['go_point'],
+    // Usar o serviço padrão transformado para buscar o utilizador com go_point e role populados
+    const user = await strapi.plugin('users-permissions').service('user').fetch(authUser.id, {
+      populate: ['go_point', 'role']
     });
 
-    if (!userWithRelation) {
+    if (!user) {
       return ctx.notFound('User not found');
     }
 
-    ctx.body = await sanitizeOutput(userWithRelation, ctx);
+    const sanitized: any = await sanitizeOutput(user, ctx);
+    
+    // Forçar a inclusão do go_point para evitar que o sanitizador o remova
+    if (user.go_point) {
+      sanitized.go_point = user.go_point;
+    } else {
+      sanitized.go_point = null;
+    }
+
+    ctx.body = sanitized;
   };
 
   // 2. Sobrecargar o endpoint /users/:id para permitir atualizações de perfil seguras
@@ -52,7 +61,8 @@ export default (plugin: any) => {
       'defaultCity',
       'username',
       'email',
-      'initials'
+      'initials',
+      'picture' // Incluir picture para evitar perda do avatar nos updates!
     ];
 
     const cleanData: any = {};
@@ -66,13 +76,24 @@ export default (plugin: any) => {
     if (!cleanData.username) cleanData.username = loggedInUser.username;
     if (!cleanData.email) cleanData.email = loggedInUser.email;
 
-    // Atualizar utilizador via entityService
-    const updatedUser = await strapi.entityService.update('plugin::users-permissions.user', targetId, {
-      data: cleanData,
-      populate: ['go_point']
+    // Atualizar utilizador via serviço edit padrão (garante hash da password e outras regras do plugin)
+    await strapi.plugin('users-permissions').service('user').edit(targetId, cleanData);
+
+    // Procurar o utilizador atualizado com go_point e role populados
+    const updatedUser = await strapi.plugin('users-permissions').service('user').fetch(targetId, {
+      populate: ['go_point', 'role']
     });
 
-    ctx.body = await sanitizeOutput(updatedUser, ctx);
+    const sanitized: any = await sanitizeOutput(updatedUser, ctx);
+
+    // Forçar a inclusão do go_point
+    if (updatedUser.go_point) {
+      sanitized.go_point = updatedUser.go_point;
+    } else {
+      sanitized.go_point = null;
+    }
+
+    ctx.body = sanitized;
   };
 
   return plugin;
