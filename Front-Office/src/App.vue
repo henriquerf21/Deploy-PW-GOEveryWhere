@@ -18,12 +18,21 @@ const route = useRoute();
 const transitionName = computed(() => 'page-slide');
 
 /* ── Global scroll-reveal via IntersectionObserver ── */
-import { fetchStores, fetchCatalogProducts } from './stores/orderStore.js';
+import { fetchStores, fetchCatalogProducts, socket, fetchUserOrders } from './stores/orderStore.js';
+import { fetchMe, isAuthenticated } from './stores/authStore.js';
 
 onMounted(() => {
   // Carregar dados dinâmicos do backend (RF)
   fetchStores();
   fetchCatalogProducts();
+
+  // Escutar eventos globais para atualizar os pontos e o histórico em tempo real
+  socket.on('global_order_status_update', async () => {
+    if (isAuthenticated.value) {
+      await fetchUserOrders();
+      await fetchMe();
+    }
+  });
 
   if (typeof IntersectionObserver === 'undefined') return;
 

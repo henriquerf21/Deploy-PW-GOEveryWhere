@@ -5,7 +5,7 @@ import { API_URL, BACKEND_URL } from '../config/env.js';
 
 // Initialize socket connection
 export const socket = io(BACKEND_URL, {
-  autoConnect: false // Connect only when an order is active
+  autoConnect: true // Maintain global connection for real-time history & points
 });
 
 // ── DATA TABLES ──────────────────────────────────────────────────
