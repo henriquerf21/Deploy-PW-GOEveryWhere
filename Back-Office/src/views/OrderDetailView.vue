@@ -84,6 +84,7 @@
                 <dl class="bo-dl">
                   <dt>Morada</dt><dd>{{ order.deliveryAddress || '—' }}</dd>
                   <dt>Cidade</dt><dd>{{ order.deliveryCity || '—' }}</dd>
+                  <dt>Notas do Cliente</dt><dd>{{ order.notes || '—' }}</dd>
                 </dl>
               </div>
             </div>
