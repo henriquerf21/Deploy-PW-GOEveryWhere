@@ -62,27 +62,28 @@
 
         <section class="form-block" aria-labelledby="sec-address">
           <h2 id="sec-address" class="cf-section-title">Morada de entrega</h2>
+
+          <button
+            type="button"
+            class="btn-gps-wide"
+            :disabled="gpsLoading"
+            @click="detectGPS"
+          >
+            <Loader2 v-if="gpsLoading" class="spin" :size="18" />
+            <MapPin v-else :size="18" />
+            <span>{{ gpsLoading ? 'A detetar...' : 'Atribuir morada automaticamente' }}</span>
+          </button>
+
           <div class="cf-field" :class="{ 'has-error': errors.address }">
             <label class="cf-label" for="delivery-address">Rua e número <span class="req">*</span></label>
-            <div class="input-with-icon">
-              <input
-                id="delivery-address"
-                v-model="store.delivery.address"
-                class="cf-input"
-                type="text"
-                placeholder="Ex.: Rua do Comércio, 42"
-                @blur="validateField('address')"
-              />
-              <button
-                type="button"
-                class="icon-btn"
-                :disabled="gpsLoading"
-                @click="detectGPS"
-              >
-                <Loader2 v-if="gpsLoading" class="spin" :size="18" />
-                <MapPin v-else :size="18" />
-              </button>
-            </div>
+            <input
+              id="delivery-address"
+              v-model="store.delivery.address"
+              class="cf-input"
+              type="text"
+              placeholder="Ex.: Rua do Comércio, 42"
+              @blur="validateField('address')"
+            />
             <span v-if="errors.address" class="cf-field-error">{{ errors.address }}</span>
           </div>
 
@@ -609,6 +610,35 @@ watch(
 
 .form-submit {
   margin-top: 0.5rem;
+}
+
+.btn-gps-wide {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  padding: 0.875rem 1rem;
+  margin-bottom: 1.25rem;
+  background: rgba(16, 185, 129, 0.08);
+  color: var(--cf-cta);
+  border: 1px solid rgba(16, 185, 129, 0.25);
+  border-radius: var(--cf-radius);
+  font-family: var(--cf-font);
+  font-weight: 600;
+  font-size: 0.875rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.btn-gps-wide:hover:not(:disabled) {
+  background: rgba(16, 185, 129, 0.15);
+  border-color: rgba(16, 185, 129, 0.4);
+}
+
+.btn-gps-wide:disabled {
+  opacity: 0.7;
+  cursor: not-allowed;
 }
 
 @media (max-width: 768px) {
