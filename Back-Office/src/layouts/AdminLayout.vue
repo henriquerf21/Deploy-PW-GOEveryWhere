@@ -39,15 +39,14 @@
     </aside>
 
     <div class="bo-main">
-      <div v-if="shellBusy" class="bo-busy" role="status" aria-live="polite" aria-busy="true">
-        <div class="bo-busy__card">
-          <div class="bo-busy__spinner" aria-hidden="true" />
-          <div>
-            <p class="bo-busy__title">A processar…</p>
-            <p class="bo-busy__sub">A sincronizar com o Strapi. Aguarda um momento.</p>
+      <Transition name="bo-loader-fade">
+        <div v-if="shellBusy" class="bo-loader-overlay" role="status" aria-live="polite" aria-busy="true">
+          <div class="bo-loader">
+            <div class="bo-loader__ring" aria-hidden="true"></div>
+            <img src="/media/brand/logo-goeverywhere.png" alt="GoEverywhere" class="bo-loader__logo" />
           </div>
         </div>
-      </div>
+      </Transition>
 
 
       <div class="bo-breadcrumb-bar">
@@ -466,56 +465,77 @@ onBeforeUnmount(() => {
   position: relative;
 }
 
-.bo-busy {
-  position: absolute;
+/* ── Custom Loader ─────────────────────────────────────────── */
+.bo-loader-overlay {
+  position: fixed;
   inset: 0;
-  z-index: 50;
-  display: flex;
-  align-items: flex-start;
-  justify-content: center;
-  padding: 120px 24px 24px;
-  background: rgba(255, 255, 255, 0.72);
-  backdrop-filter: blur(2px);
-}
-
-.bo-busy__card {
+  z-index: 9999;
   display: flex;
   align-items: center;
-  gap: 14px;
-  padding: 16px 18px;
+  justify-content: center;
+  background: rgba(245, 246, 250, 0.88);
+  backdrop-filter: blur(6px);
+}
+
+.bo-loader {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 120px;
+  height: 120px;
+}
+
+.bo-loader__logo {
+  width: 56px;
+  height: 56px;
+  object-fit: contain;
   border-radius: 14px;
-  border: 1px solid var(--bo-border);
-  background: var(--bo-surface);
-  box-shadow: var(--bo-shadow);
-  max-width: 420px;
+  position: relative;
+  z-index: 2;
+  animation: bo-logo-breathe 2s ease-in-out infinite;
 }
 
-.bo-busy__title {
-  margin: 0;
-  font-weight: 800;
-  font-size: 15px;
-}
-
-.bo-busy__sub {
-  margin: 4px 0 0;
-  font-size: 13px;
-  color: var(--bo-text-secondary);
-  line-height: 1.4;
-}
-
-.bo-busy__spinner {
-  width: 22px;
-  height: 22px;
-  border-radius: 999px;
-  border: 3px solid #e5e7eb;
+.bo-loader__ring {
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid rgba(27, 138, 74, 0.12);
   border-top-color: var(--bo-brand);
-  animation: bo-spin 0.85s linear infinite;
+  border-right-color: var(--bo-brand);
+  animation: bo-ring-spin 1.2s cubic-bezier(0.5, 0, 0.5, 1) infinite;
 }
 
-@keyframes bo-spin {
-  to {
-    transform: rotate(360deg);
-  }
+.bo-loader__ring::before {
+  content: '';
+  position: absolute;
+  inset: -8px;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  border-top-color: rgba(27, 138, 74, 0.15);
+  animation: bo-ring-spin 2.4s cubic-bezier(0.5, 0, 0.5, 1) infinite reverse;
+}
+
+@keyframes bo-ring-spin {
+  0%   { transform: rotate(0deg); }
+  100% { transform: rotate(360deg); }
+}
+
+@keyframes bo-logo-breathe {
+  0%, 100% { transform: scale(1); opacity: 1; }
+  50%      { transform: scale(0.92); opacity: 0.7; }
+}
+
+/* Transition classes for the loader */
+.bo-loader-fade-enter-active {
+  transition: opacity 0.3s ease;
+}
+.bo-loader-fade-leave-active {
+  transition: opacity 0.5s ease;
+}
+.bo-loader-fade-enter-from,
+.bo-loader-fade-leave-to {
+  opacity: 0;
 }
 
 .bo-breadcrumb-bar {
@@ -625,8 +645,6 @@ onBeforeUnmount(() => {
 }
 
 .bo-content__inner {
-  max-width: var(--bo-content-max);
-  margin: 0 auto;
   width: 100%;
 }
 

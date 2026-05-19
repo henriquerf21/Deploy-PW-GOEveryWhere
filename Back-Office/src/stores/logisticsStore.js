@@ -106,11 +106,10 @@ function scheduleRealtimeFullRefresh(delayMs = 450) {
 
 async function handleRealtimeEvent(payload = {}) {
   const model = String(payload?.model || '').trim().toLowerCase();
-  // Ignore courier-only lifecycle noise in the orders realtime channel.
-  if (model && model !== 'order') return;
 
+  // For order-specific events with a room ID, try targeted refresh first
   const room = String(payload?.room || '').trim();
-  if (room) {
+  if (room && model === 'order') {
     const now = Date.now();
     const lastHit = lastRoomRefreshAt.get(room) || 0;
     if (now - lastHit < 900) return; // debounce bursts for same order room
@@ -123,6 +122,7 @@ async function handleRealtimeEvent(payload = {}) {
       // fallback below
     }
   }
+  // For any model change (orders, couriers, etc.) do a full refresh
   const now = Date.now();
   if (now - lastGlobalRefreshAt < 2000) return;
   lastGlobalRefreshAt = now;
@@ -131,6 +131,9 @@ async function handleRealtimeEvent(payload = {}) {
 
 socket.on('global_order_status_update', (payload) => {
   handleRealtimeEvent(payload);
+});
+socket.on('courier_status_update', (payload) => {
+  handleRealtimeEvent({ ...payload, model: 'courier' });
 });
 
 function applyBootstrap(data) {
@@ -368,13 +371,13 @@ export function getCustomerById(id) {
 
 function upsertOrder(order) {
   const idx = logistics.orders.findIndex((o) => o.id === order.id);
-  if (idx >= 0) logistics.orders[idx] = { ...logistics.orders[idx], ...order };
+  if (idx >= 0) logistics.orders.splice(idx, 1, { ...logistics.orders[idx], ...order });
   else logistics.orders.unshift(order);
 }
 
 function upsertCourier(courier) {
   const idx = logistics.couriers.findIndex((c) => c.id === courier.id);
-  if (idx >= 0) logistics.couriers[idx] = { ...logistics.couriers[idx], ...courier };
+  if (idx >= 0) logistics.couriers.splice(idx, 1, { ...logistics.couriers[idx], ...courier });
   else logistics.couriers.unshift(courier);
 }
 

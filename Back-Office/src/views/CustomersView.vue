@@ -5,10 +5,7 @@
         <p class="bo-page-head__eyebrow">Operações</p>
         <h1 class="bo-page-head__title">Clientes</h1>
       </div>
-      <div class="bo-page-head__actions">
-        <button type="button" class="bo-btn bo-btn--outline" @click="doSync">Sincronizar totais</button>
-        <button type="button" class="bo-btn bo-btn--primary" @click="openAdd"><Plus :size="16" /> Novo cliente</button>
-      </div>
+      <!-- Botões de ação removidos (Sincronizar / Novo cliente) -->
     </header>
 
     <section class="bo-card bo-card--padded">
@@ -218,14 +215,11 @@
 
 <script setup>
 import { computed, nextTick, reactive, ref, watch } from 'vue';
-import { Plus } from 'lucide-vue-next';
+
 import {
   logistics,
-  addCustomer,
   updateCustomer,
   deleteCustomer,
-  refreshCustomerAggregatesFromOrders,
-  syncOperationalAggregatesFromOrders,
   getCustomerById,
 } from '../stores/logisticsStore.js';
 import { ZONES, ORDER_STATUS, orderStatusLabels } from '../constants/logistics.js';
@@ -302,18 +296,7 @@ function orderStatusBadgeClass(status) {
   }
 }
 
-function doSync() {
-  const r = refreshCustomerAggregatesFromOrders();
-  syncOperationalAggregatesFromOrders();
-  toast(r.ok ? 'Totais e gráficos operacionais sincronizados.' : 'Erro', r.ok ? 'success' : 'error');
-}
 
-function openAdd() {
-  editingId.value = '';
-  formError.value = '';
-  Object.assign(form, { name: '', email: '', phone: '', nif: '', city: '', zone: ZONES[0], avgRating: 4.5, marketingOptIn: false, notes: '' });
-  formOpen.value = true;
-}
 
 function openEdit(c) {
   const live = getCustomerById(c.id) || c;

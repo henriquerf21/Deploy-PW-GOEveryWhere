@@ -40,20 +40,8 @@
         <p class="login-panel__sub">Acesso restrito a administradores</p>
 
         <div v-if="googleClientId" ref="googleBtnRef" class="google-host" />
-        <template v-else-if="isDev">
-          <button type="button" class="login-btn login-btn--google" @click="loginGoogleDemo">
-            Entrar com Google (demo — só em dev)
-            <span class="login-btn__arrow" aria-hidden="true">→</span>
-          </button>
-          <p class="login-google-hint">
-            Em produção define <code>VITE_GOOGLE_CLIENT_ID</code> no <code>.env</code> (Google Identity Services). O botão demo não aparece em build de produção.
-          </p>
-        </template>
-        <p v-else class="login-google-hint">
-          OAuth Google: define <code>VITE_GOOGLE_CLIENT_ID</code> no ficheiro <code>.env</code>.
-        </p>
 
-        <div class="login-divider">
+        <div v-if="googleClientId" class="login-divider">
           <span>ou com credenciais</span>
         </div>
 
@@ -111,13 +99,12 @@ import { toast } from '../utils/notify.js';
 const router = useRouter();
 const route = useRoute();
 
-const email = ref('admin@goeverywhere.pt');
+const email = ref('');
 const password = ref('');
 const remember = ref(true);
 const showPw = ref(false);
 const googleBtnRef = ref(null);
 const googleClientId = import.meta.env.VITE_GOOGLE_CLIENT_ID || '';
-const isDev = import.meta.env.DEV;
 const supportEmail = import.meta.env.VITE_BO_SUPPORT_EMAIL || '';
 
 const barHeights = [32, 48, 40, 62, 55, 70, 45, 58, 75, 68, 82, 60];
@@ -129,20 +116,7 @@ function goDash() {
   router.push(typeof redirect === 'string' && redirect.startsWith('/') ? redirect : '/dashboard');
 }
 
-async function loginGoogleDemo() {
-  try {
-    const data = await boLoginGoogle({
-      email: 'admin.demo@googleusercontent.com',
-      name: 'Admin (Google demo)',
-      picture: '',
-    });
-    setBoSession({ ...data.user, jwt: data.jwt });
-    toast('Sessão Google ativa.', 'success');
-    goDash();
-  } catch (err) {
-    toast(err.message || 'Falha no login Google.', 'error');
-  }
-}
+
 
 function onRecoverAccess() {
   if (supportEmail) {
