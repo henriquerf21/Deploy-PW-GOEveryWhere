@@ -85,6 +85,32 @@
               <Clock :size="16" :stroke-width="1.75" class="detail-ic" aria-hidden="true" />
               <span>Chegada indicativa ~{{ eta }} min{{ store.cart.urgentDelivery ? ' (urgente)' : '' }}</span>
             </div>
+
+            <div class="urgent-card" :class="{ active: store.cart.urgentDelivery }">
+              <div class="urgent-row">
+                <div class="urgent-copy">
+                  <div class="urgent-title-row">
+                    <Zap :size="18" :stroke-width="1.75" class="urgent-ic" aria-hidden="true" />
+                    <span class="urgent-title">Entrega urgente</span>
+                    <span class="urgent-price">+€1,50</span>
+                  </div>
+                  <p class="urgent-desc">Prioridade na fila — indicativo ~15 min, conforme zona e tráfego.</p>
+                </div>
+                <button
+                  type="button"
+                  class="toggle"
+                  :class="{ active: store.cart.urgentDelivery }"
+                  :aria-pressed="store.cart.urgentDelivery"
+                  aria-label="Ativar entrega urgente"
+                  @click="toggleUrgentFn"
+                >
+                  <span class="toggle-dot" />
+                </button>
+              </div>
+              <p v-if="store.cart.urgentDelivery" class="urgent-note">
+                A tua encomenda entra com prioridade máxima na atribuição ao estafeta.
+              </p>
+            </div>
           </section>
 
           <hr class="cf-divider" />
@@ -307,7 +333,7 @@ import { useRouter } from 'vue-router';
 import SiteHeader from '../components/SiteHeader.vue';
 import SiteFooter from '../components/SiteFooter.vue';
 import CheckoutWizardSteps from '../components/CheckoutWizardSteps.vue';
-import { User, Home, Store, Clock, Award, Loader2, CheckCircle2, AlertCircle } from 'lucide-vue-next';
+import { User, Home, Store, Clock, Award, Loader2, CheckCircle2, AlertCircle, Zap } from 'lucide-vue-next';
 
 import {
   useOrderStore,
@@ -328,7 +354,8 @@ import {
   submitOrder,
   resetCart,
   isCartValid,
-  isDeliveryValid
+  isDeliveryValid,
+  toggleUrgent
 } from '../stores/orderStore.js';
 
 const router = useRouter();
@@ -420,6 +447,10 @@ function setMethod(m) { setPaymentMethod(m); }
 
 function handleToggleRedemption(type) {
   toggleGoPointsRedemption(type);
+}
+
+function toggleUrgentFn() {
+  toggleUrgent();
 }
 
 // ── Submissão ─────────────────────────────────────────────────────
@@ -714,6 +745,100 @@ async function handleConfirmOrder() {
   text-transform: uppercase;
   background: var(--cf-warn-soft);
   color: var(--cf-warn);
+}
+
+.urgent-card {
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius);
+  padding: 1rem 1.125rem;
+  background: #fff;
+  transition: border-color 0.2s ease, box-shadow 0.2s ease;
+  margin-top: 1rem;
+}
+
+.urgent-card.active {
+  border-color: rgba(234, 88, 12, 0.45);
+  background: var(--cf-warn-soft);
+}
+
+.urgent-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.urgent-copy {
+  min-width: 0;
+}
+
+.urgent-title-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.urgent-ic {
+  color: var(--cf-warn);
+  flex-shrink: 0;
+}
+
+.urgent-title {
+  font-weight: 700;
+  font-size: 0.9375rem;
+}
+
+.urgent-price {
+  font-weight: 700;
+  font-size: 0.8125rem;
+  color: var(--cf-warn);
+}
+
+.urgent-desc {
+  margin: 0.35rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--cf-muted);
+  line-height: 1.45;
+}
+
+.toggle {
+  flex-shrink: 0;
+  width: 3rem;
+  height: 1.625rem;
+  border-radius: 999px;
+  border: none;
+  background: var(--cf-line);
+  cursor: pointer;
+  position: relative;
+  transition: background 0.25s ease;
+}
+
+.toggle.active {
+  background: var(--cf-cta);
+}
+
+.toggle-dot {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 1.125rem;
+  height: 1.125rem;
+  border-radius: 50%;
+  background: #fff;
+  box-shadow: 0 1px 3px rgba(15, 23, 42, 0.2);
+  transition: transform 0.25s ease;
+}
+
+.toggle.active .toggle-dot {
+  transform: translateX(1.35rem);
+}
+
+.urgent-note {
+  margin: 0.75rem 0 0;
+  font-size: 0.8125rem;
+  color: var(--cf-warn);
+  line-height: 1.45;
 }
 
 .gopoints-intro {
