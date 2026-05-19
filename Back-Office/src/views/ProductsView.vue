@@ -4,9 +4,6 @@
       <div class="bo-page-head__main">
         <p class="bo-page-head__eyebrow">Catálogo</p>
         <h1 class="bo-page-head__title">Produto único</h1>
-        <p class="bo-page-head__sub">
-          Operação simplificada GoEverywhere: um produto global no Strapi alimenta o Front-Office. O stock é gerido automaticamente como sempre disponível.
-        </p>
       </div>
       <div class="bo-page-head__actions">
         <button type="button" class="bo-btn bo-btn--outline" @click="refreshAll">Atualizar</button>
@@ -17,7 +14,6 @@
       <header class="bo-card__head">
         <div>
           <h3 class="bo-card__title">Produto global</h3>
-          <p class="bo-card__sub">Este registo é servido ao Front-Office. Atualizações refletem-se em todas as lojas.</p>
         </div>
         <div v-if="logistics.products?.length" class="bo-row">
           <span class="bo-eyebrow">Catálogo Strapi:</span>
@@ -81,15 +77,33 @@
         </div>
       </div>
       <footer class="bo-card__foot">
-        <span class="bo-muted" style="margin-right: auto; font-size: 12px;">Este produto é guardado no Strapi e consumido pelo Front-Office.</span>
         <button type="button" class="bo-btn bo-btn--primary" @click="saveGlobalProduct">Guardar produto</button>
       </footer>
+    </section>
+
+    <section class="bo-card" style="margin-top: 1.5rem;">
+      <header class="bo-card__head">
+        <div>
+          <h3 class="bo-card__title">Lojas e Zonas de Cobertura</h3>
+          <p class="bo-card__sub">As lojas abaixo estão sincronizadas com o Front-Office para recolha e entregas.</p>
+        </div>
+      </header>
+      <div class="bo-card__body bo-stack">
+        <div v-for="(stores, zone) in storesByZone" :key="zone" class="bo-field">
+          <span class="bo-eyebrow" style="color: var(--bo-brand);">{{ zone }}</span>
+          <div class="bo-row" style="flex-wrap: wrap; gap: 0.5rem; margin-top: 0.5rem;">
+            <span v-for="s in stores" :key="s.id" class="bo-chip bo-chip--info">
+              {{ s.name }}
+            </span>
+          </div>
+        </div>
+      </div>
     </section>
   </div>
 </template>
 
 <script setup>
-import { onMounted, reactive, ref } from 'vue';
+import { onMounted, reactive, ref, computed } from 'vue';
 import {
   logistics,
   refreshStores,
@@ -115,6 +129,16 @@ const globalProduct = reactive({
   imageUrl: '',
   sortOrder: 10,
   popular: false,
+});
+
+const storesByZone = computed(() => {
+  const groups = {};
+  for (const s of logistics.continentStores || []) {
+    const zone = s.zone || 'Outra';
+    if (!groups[zone]) groups[zone] = [];
+    groups[zone].push(s);
+  }
+  return groups;
 });
 
 const uploadingImage = ref(false);
