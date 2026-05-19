@@ -62,16 +62,16 @@
 
         <section class="form-block" aria-labelledby="sec-address">
           <h2 id="sec-address" class="cf-section-title">Morada de entrega</h2>
-
+          
           <button
             type="button"
-            class="btn-gps-wide"
+            class="cf-btn-gps"
             :disabled="gpsLoading"
             @click="detectGPS"
           >
             <Loader2 v-if="gpsLoading" class="spin" :size="18" />
             <MapPin v-else :size="18" />
-            <span>{{ gpsLoading ? 'A detetar...' : 'Atribuir morada automaticamente' }}</span>
+            Atribuir morada automaticamente
           </button>
 
           <div class="cf-field" :class="{ 'has-error': errors.address }">
@@ -464,6 +464,35 @@ watch(
   flex: 1;
 }
 
+.cf-btn-gps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin-bottom: 1.5rem;
+  padding: 0.85rem;
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius);
+  background: var(--cf-bg);
+  color: var(--cf-fg);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cf-btn-gps:hover:not(:disabled) {
+  border-color: var(--cf-cta);
+  color: var(--cf-cta);
+  background: rgba(234, 88, 12, 0.05);
+}
+
+.cf-btn-gps:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .icon-btn {
   flex-shrink: 0;
   width: 3rem;
@@ -610,35 +639,6 @@ watch(
 
 .form-submit {
   margin-top: 0.5rem;
-}
-
-.btn-gps-wide {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 0.5rem;
-  width: 100%;
-  padding: 0.875rem 1rem;
-  margin-bottom: 1.25rem;
-  background: rgba(16, 185, 129, 0.08);
-  color: var(--cf-cta);
-  border: 1px solid rgba(16, 185, 129, 0.25);
-  border-radius: var(--cf-radius);
-  font-family: var(--cf-font);
-  font-weight: 600;
-  font-size: 0.875rem;
-  cursor: pointer;
-  transition: all 0.2s ease;
-}
-
-.btn-gps-wide:hover:not(:disabled) {
-  background: rgba(16, 185, 129, 0.15);
-  border-color: rgba(16, 185, 129, 0.4);
-}
-
-.btn-gps-wide:disabled {
-  opacity: 0.7;
-  cursor: not-allowed;
 }
 
 @media (max-width: 768px) {
