@@ -1,5 +1,5 @@
 import { reactive, computed } from 'vue';
-import authState from './authStore';
+import authState, { fetchMe } from './authStore';
 import { io } from 'socket.io-client';
 import { API_URL, BACKEND_URL } from '../config/env.js';
 
@@ -273,22 +273,7 @@ export async function fetchStores() {
 }
 
 export async function refreshUserProfile() {
-  if (!authState.token) return;
-  try {
-    const response = await fetch(`${API_URL}/users/me?populate=go_point`, {
-      headers: { 'Authorization': `Bearer ${authState.token}` }
-    });
-    const userData = await response.json();
-    if (response.ok) {
-      const newPoints = userData?.go_point?.points;
-      const currentPoints = authState.user?.go_point?.points;
-      if (newPoints !== currentPoints) {
-        authState.user = { ...authState.user, ...userData };
-      }
-    }
-  } catch (error) {
-    console.error('Erro ao atualizar perfil:', error);
-  }
+  await fetchMe();
 }
 
 export async function fetchUserOrders() {

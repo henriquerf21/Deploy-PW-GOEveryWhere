@@ -12,10 +12,11 @@ export default (plugin: any) => {
       return ctx.unauthorized('You must be logged in');
     }
 
-    // Usar o serviço padrão transformado para buscar o utilizador com go_point e role populados
-    const user = await strapi.plugin('users-permissions').service('user').fetch(authUser.id, {
+    // Usar entityService garante que o populate funciona corretamente na v5
+    const user = await strapi.entityService.findOne('plugin::users-permissions.user', authUser.id, {
       populate: ['go_point', 'role']
     });
+
 
     if (!user) {
       return ctx.notFound('User not found');
@@ -80,7 +81,7 @@ export default (plugin: any) => {
     await strapi.plugin('users-permissions').service('user').edit(targetId, cleanData);
 
     // Procurar o utilizador atualizado com go_point e role populados
-    const updatedUser = await strapi.plugin('users-permissions').service('user').fetch(targetId, {
+    const updatedUser = await strapi.entityService.findOne('plugin::users-permissions.user', targetId, {
       populate: ['go_point', 'role']
     });
 
