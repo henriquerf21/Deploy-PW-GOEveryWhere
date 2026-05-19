@@ -1,4 +1,10 @@
 export default (plugin: any) => {
+  const sanitizeOutput = async (user: any, ctx: any) => {
+    const schema = strapi.getModel('plugin::users-permissions.user');
+    const { auth } = ctx.state;
+    return strapi.contentAPI.sanitize.output(user, schema, { auth });
+  };
+
   // 1. Sobrecargar o endpoint /users/me para retornar sempre os GoPoints e dados da morada
   plugin.controllers.user.me = async (ctx: any) => {
     const user = ctx.state.user;
@@ -15,8 +21,7 @@ export default (plugin: any) => {
       return ctx.notFound('User not found');
     }
 
-    const { sanitize } = strapi.plugin('users-permissions').service('user');
-    ctx.body = await sanitize(userWithRelation);
+    ctx.body = await sanitizeOutput(userWithRelation, ctx);
   };
 
   // 2. Sobrecargar o endpoint /users/:id para permitir atualizações de perfil seguras
@@ -67,8 +72,7 @@ export default (plugin: any) => {
       populate: ['go_point']
     });
 
-    const { sanitize } = strapi.plugin('users-permissions').service('user');
-    ctx.body = await sanitize(updatedUser);
+    ctx.body = await sanitizeOutput(updatedUser, ctx);
   };
 
   return plugin;
