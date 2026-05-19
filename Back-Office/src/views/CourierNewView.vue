@@ -96,14 +96,6 @@
               <label class="bo-field__label">Carta de condução (n.º) <span class="bo-required">*</span></label>
               <input v-model="f.licenseNumber" required class="bo-input" />
             </div>
-            <div class="bo-field">
-              <label class="bo-field__label">Seguro (referência) <span class="bo-required">*</span></label>
-              <input v-model="f.insuranceRef" required class="bo-input" />
-            </div>
-            <div class="bo-field">
-              <label class="bo-field__label">Inspeção válida até <span class="bo-required">*</span></label>
-              <input v-model="f.inspectionValidUntil" type="date" required class="bo-input" />
-            </div>
           </div>
         </div>
       </section>
@@ -195,8 +187,6 @@ const f = reactive({
   plate: '',
   vehicleColor: '',
   licenseNumber: '',
-  insuranceRef: '',
-  inspectionValidUntil: '',
   docCcUrl: '',
   docLicenseUrl: '',
   docInsuranceUrl: '',

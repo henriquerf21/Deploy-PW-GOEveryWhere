@@ -35,7 +35,7 @@ export function normalizeOrderStatus(strapiStatus?: string) {
   if (code === 'S-05') return 'APPROVED';
   if (code === 'S-06' || code === 'S-07' || code === 'S-08') return 'ASSIGNED';
   if (code === 'S-09' || code === 'S-10') return 'IN_TRANSIT';
-  if (code === 'S-11') return 'DELIVERED';
+  if (code === 'S-11' || code === 'S-15' || code === 'S-16') return 'DELIVERED';
   if (code === 'S-12') return 'UNDELIVERABLE';
   if (code === 'S-13') return 'CANCELLED_CLIENT';
   if (code === 'S-14') return 'CANCELLED_ADMIN';
