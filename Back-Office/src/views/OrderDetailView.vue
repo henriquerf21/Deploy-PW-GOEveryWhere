@@ -100,14 +100,16 @@
             <DeliveryRouteMap
               v-if="order"
               :key="order.id"
-              :store-lat="ap.storeId ? logistics.continentStores.find(s => s.id === ap.storeId)?.lat || 41.15 : order.pickupLat || 41.15"
-              :store-lng="ap.storeId ? logistics.continentStores.find(s => s.id === ap.storeId)?.lng || -8.61 : order.pickupLng || -8.61"
-              :dest-lat="order.destLat || order.pickupLat || 41.15"
-              :dest-lng="order.destLng || order.pickupLng || -8.61"
-              :courier-lat="order.courierId ? getCourierById(order.courierId)?.lat : null"
-              :courier-lng="order.courierId ? getCourierById(order.courierId)?.lng : null"
+              :store-lat="Number(ap.storeId ? logistics.continentStores.find(s => s.id === ap.storeId)?.lat || 41.15 : order.pickupLat || 41.15)"
+              :store-lng="Number(ap.storeId ? logistics.continentStores.find(s => s.id === ap.storeId)?.lng || -8.61 : order.pickupLng || -8.61)"
+              :dest-lat="Number(order.destLat || order.pickupLat || 41.15)"
+              :dest-lng="Number(order.destLng || order.pickupLng || -8.61)"
+              :courier-lat="order.courierId && getCourierById(order.courierId)?.lat != null ? Number(getCourierById(order.courierId).lat) : null"
+              :courier-lng="order.courierId && getCourierById(order.courierId)?.lng != null ? Number(getCourierById(order.courierId).lng) : null"
               height="300px"
             />
+          </div>
+        </section>
 
         <section v-if="order.clientReply || order.infoRequestMessage" class="bo-card s03-card">
           <header class="bo-card__head">
