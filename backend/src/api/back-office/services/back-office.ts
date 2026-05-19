@@ -357,8 +357,6 @@ function buildPublicCourier(entry: any, assignedCount = 0) {
       color: attrs.vehicleColor || '',
       plate: attrs.vehiclePlate || '',
       licenseNumber: attrs.licenseNumber || '',
-      insuranceRef: attrs.insuranceRef || '',
-      inspectionValidUntil: attrs.inspectionValidUntil || '',
     },
     docs: {
       idDoc: !!ccUrl || !!attrs.cc,
@@ -891,6 +889,16 @@ export default ({ strapi }: any) => ({
   },
 
   async ensureContinentStoresSeeded() {
+    // Force true on all existing stores first
+    try {
+      await strapi.db.query('api::continent-store.continent-store').updateMany({
+        where: {},
+        data: { manualStockOverride: true }
+      });
+    } catch (e) {
+      console.error('[Seed] Falha ao forçar manualStockOverride no updateMany:', e);
+    }
+
     for (const row of CONTINENTE_STORES_SEED) {
       const existing = await strapi.db.query('api::continent-store.continent-store').findOne({
         where: { code: row.code }
@@ -910,6 +918,7 @@ export default ({ strapi }: any) => ({
             phone: row.phone || '',
             format: row.format,
             isActive: true,
+            manualStockOverride: true,
           },
           status: 'published',
         });
@@ -947,6 +956,7 @@ export default ({ strapi }: any) => ({
         format: payload.format || 'Hiper',
         imageUrl: String(payload.imageUrl || '').trim(),
         isActive: payload.isActive !== false,
+        manualStockOverride: true,
       },
       status: 'published',
     });
@@ -986,6 +996,7 @@ export default ({ strapi }: any) => ({
         format: payload.format ?? target.format,
         imageUrl: payload.imageUrl ?? target.imageUrl,
         isActive: payload.isActive != null ? !!payload.isActive : target.isActive,
+        manualStockOverride: true,
       },
       status: 'published',
     });
@@ -1846,8 +1857,6 @@ export default ({ strapi }: any) => ({
         vehiclePlate: plateRes.value,
         vehicleColor: payload.vehicleColor || '',
         licenseNumber: payload.licenseNumber || '',
-        insuranceRef: payload.insuranceRef || '',
-        inspectionValidUntil: payload.inspectionValidUntil || null,
         docLicenseUrl: String(payload.docLicenseUrl || '').trim(),
         docInsuranceUrl: String(payload.docInsuranceUrl || '').trim(),
         docInspectionUrl: String(payload.docInspectionUrl || '').trim(),
@@ -1920,8 +1929,6 @@ export default ({ strapi }: any) => ({
         vehiclePlate: plateRes.value,
         vehicleColor: payload.vehicle?.color ?? payload.vehicleColor ?? target.vehicleColor,
         licenseNumber: payload.vehicle?.licenseNumber ?? payload.licenseNumber ?? target.licenseNumber,
-        insuranceRef: payload.vehicle?.insuranceRef ?? payload.insuranceRef ?? target.insuranceRef,
-        inspectionValidUntil: payload.vehicle?.inspectionValidUntil ?? payload.inspectionValidUntil ?? target.inspectionValidUntil,
         adminNotes: payload.adminNotes ?? target.adminNotes,
         docLicenseUrl: payload.docLicenseUrl ?? target.docLicenseUrl,
         docInsuranceUrl: payload.docInsuranceUrl ?? target.docInsuranceUrl,

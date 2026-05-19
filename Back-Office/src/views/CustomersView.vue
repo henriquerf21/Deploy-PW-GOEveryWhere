@@ -152,7 +152,7 @@
         <div class="bo-modal bo-modal--lg">
           <header class="bo-modal__head">
             <div>
-              <h3 class="bo-modal__title">{{ editingId ? 'Editar cliente' : 'Novo cliente' }}</h3>
+              <h3 class="bo-modal__title">Editar cliente</h3>
               <p class="bo-modal__sub">Os campos com * são obrigatórios.</p>
             </div>
             <button type="button" class="bo-modal__close" @click="closeForm">×</button>
@@ -205,7 +205,7 @@
           </form>
           <footer class="bo-modal__foot">
             <button type="button" class="bo-btn bo-btn--ghost" @click="closeForm">Cancelar</button>
-            <button type="button" class="bo-btn bo-btn--primary" @click="submitForm">{{ editingId ? 'Guardar alterações' : 'Criar cliente' }}</button>
+            <button type="button" class="bo-btn bo-btn--primary" @click="submitForm">Guardar alterações</button>
           </footer>
         </div>
       </div>
@@ -353,17 +353,11 @@ async function submitForm() {
     marketingOptIn: form.marketingOptIn,
     notes: form.notes,
   };
-  if (editingId.value) {
-    const r = await updateCustomer(editingId.value, payload);
-    toast(r.ok ? 'Cliente atualizado.' : r.error || 'Erro.', r.ok ? 'success' : 'error');
-    if (r.ok) closeForm();
-    else if (r.error) formError.value = r.error;
-  } else {
-    const r = await addCustomer(payload);
-    toast(r.ok ? 'Cliente criado.' : r.error || 'Erro.', r.ok ? 'success' : 'error');
-    if (r.ok) closeForm();
-    else if (r.error) formError.value = r.error;
-  }
+  if (!editingId.value) return;
+  const r = await updateCustomer(editingId.value, payload);
+  toast(r.ok ? 'Cliente atualizado.' : r.error || 'Erro.', r.ok ? 'success' : 'error');
+  if (r.ok) closeForm();
+  else if (r.error) formError.value = r.error;
 }
 
 async function confirmDelete(c) {

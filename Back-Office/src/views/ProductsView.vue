@@ -3,9 +3,9 @@
     <header class="bo-page-head">
       <div class="bo-page-head__main">
         <p class="bo-page-head__eyebrow">Catálogo</p>
-        <h1 class="bo-page-head__title">Produto único & Stock</h1>
+        <h1 class="bo-page-head__title">Produto único</h1>
         <p class="bo-page-head__sub">
-          Operação simplificada GoEverywhere: um produto global no Strapi alimenta o Front-Office, e o stock é distribuído pelos Continentes.
+          Operação simplificada GoEverywhere: um produto global no Strapi alimenta o Front-Office. O stock é gerido automaticamente como sempre disponível.
         </p>
       </div>
       <div class="bo-page-head__actions">
@@ -85,92 +85,6 @@
         <button type="button" class="bo-btn bo-btn--primary" @click="saveGlobalProduct">Guardar produto</button>
       </footer>
     </section>
-
-    <section class="bo-card">
-      <header class="bo-card__head">
-        <div>
-          <h3 class="bo-card__title">Stock por loja Continente</h3>
-          <p class="bo-card__sub">Cada linha cria/atualiza o item de inventário SKU «{{ globalProduct.sku || '—' }}» na respetiva loja.</p>
-        </div>
-        <span class="bo-badge bo-badge--info">{{ rows.length }} loja(s)</span>
-      </header>
-      <div class="bo-table-wrap" style="border: none; border-radius: 0; box-shadow: none;">
-        <table class="bo-table">
-          <thead>
-            <tr>
-              <th>Loja</th>
-              <th>Cidade / Distrito</th>
-              <th>Formato</th>
-              <th>Stock</th>
-              <th>Reposição</th>
-              <th>Preço (€)</th>
-              <th class="col-actions"></th>
-            </tr>
-          </thead>
-          <tbody>
-            <tr v-if="!rows.length">
-              <td colspan="7" class="bo-table__empty">
-                <div class="bo-empty">
-                  <h3 class="bo-empty__title">Sem lojas carregadas</h3>
-                  <p class="bo-empty__hint">Verifica a ligação ao Strapi ou clica em «Atualizar».</p>
-                </div>
-              </td>
-            </tr>
-            <tr v-for="r in rows" :key="r.store.id">
-              <td>
-                <div class="bo-table__primary">{{ r.store.name }}</div>
-                <div class="bo-table__secondary">{{ r.store.address || '—' }}</div>
-              </td>
-              <td>
-                <div>{{ r.store.city || '—' }}</div>
-                <div class="bo-table__secondary">{{ r.store.district || '—' }}</div>
-              </td>
-              <td><span class="bo-badge bo-badge--neutral">{{ r.store.format || '—' }}</span></td>
-              <td><input v-model.number="r.stock" type="number" min="0" class="bo-input bo-num" style="width: 100px;" /></td>
-              <td><input v-model.number="r.reorderLevel" type="number" min="0" class="bo-input bo-num" style="width: 100px;" /></td>
-              <td><input v-model.number="r.price" type="number" min="0" step="0.01" class="bo-input bo-num" style="width: 110px;" /></td>
-              <td class="bo-table__actions">
-                <button type="button" class="bo-btn bo-btn--sm bo-btn--primary" @click="saveRow(r)">Guardar</button>
-                <button type="button" class="bo-btn bo-btn--sm bo-btn--outline" @click="openDetails(r.store)">Detalhes</button>
-              </td>
-            </tr>
-          </tbody>
-        </table>
-      </div>
-    </section>
-
-    <Teleport to="body">
-      <div v-if="detailsOpen && selectedStore" class="bo-modal-backdrop" @click.self="closeDetails">
-        <div class="bo-modal bo-modal--lg">
-          <header class="bo-modal__head">
-            <div>
-              <h3 class="bo-modal__title">{{ selectedStore.name }}</h3>
-              <p class="bo-modal__sub">Detalhes obrigatórios da loja Continente · localização em destaque.</p>
-            </div>
-            <button type="button" class="bo-modal__close" @click="closeDetails">×</button>
-          </header>
-          <div class="bo-modal__body">
-            <div class="details-grid">
-              <div class="detail-cell"><span class="bo-eyebrow">Cidade</span><span>{{ selectedStore.city || '—' }}</span></div>
-              <div class="detail-cell"><span class="bo-eyebrow">Distrito</span><span>{{ selectedStore.district || '—' }}</span></div>
-              <div class="detail-cell detail-cell--wide"><span class="bo-eyebrow">Morada</span><span>{{ selectedStore.address || '—' }}</span></div>
-              <div class="detail-cell"><span class="bo-eyebrow">Código postal</span><span class="bo-mono">{{ selectedStore.postalCode || '—' }}</span></div>
-              <div class="detail-cell"><span class="bo-eyebrow">Horário</span><span>{{ selectedStore.openingHours || '—' }}</span></div>
-              <div class="detail-cell"><span class="bo-eyebrow">Telefone</span><span class="bo-mono">{{ selectedStore.phone || '—' }}</span></div>
-              <div class="detail-cell"><span class="bo-eyebrow">Formato</span><span>{{ selectedStore.format || '—' }}</span></div>
-              <div class="detail-cell detail-cell--loc"><span class="bo-eyebrow">Latitude</span><span class="bo-mono bo-num">{{ formatCoord(selectedStore.lat) }}</span></div>
-              <div class="detail-cell detail-cell--loc"><span class="bo-eyebrow">Longitude</span><span class="bo-mono bo-num">{{ formatCoord(selectedStore.lng) }}</span></div>
-            </div>
-            <p v-if="missingRequiredFields(selectedStore).length" class="missing-fields" role="alert">
-              Em falta: {{ missingRequiredFields(selectedStore).join(', ') }}.
-            </p>
-          </div>
-          <footer class="bo-modal__foot">
-            <button type="button" class="bo-btn bo-btn--ghost" @click="closeDetails">Fechar</button>
-          </footer>
-        </div>
-      </div>
-    </Teleport>
   </div>
 </template>
 
@@ -181,8 +95,6 @@ import {
   refreshStores,
   refreshProducts,
   addProduct,
-  refreshStoreInventory,
-  upsertStoreInventoryItem,
 } from '../stores/logisticsStore.js';
 import { toast } from '../utils/notify.js';
 import { boUpload } from '../api/backofficeApi.js';
@@ -205,9 +117,6 @@ const globalProduct = reactive({
   popular: false,
 });
 
-const rows = ref([]);
-const detailsOpen = ref(false);
-const selectedStore = ref(null);
 const uploadingImage = ref(false);
 
 function toNum(v, fallback = 0) {
@@ -232,68 +141,13 @@ async function onImageUpload(event) {
   }
 }
 
-function formatCoord(v) {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return '—';
-  return n.toFixed(6);
-}
-
-function missingRequiredFields(store) {
-  const required = [
-    ['name', 'nome'],
-    ['city', 'cidade'],
-    ['district', 'distrito'],
-    ['address', 'morada'],
-    ['postalCode', 'código postal'],
-    ['lat', 'latitude'],
-    ['lng', 'longitude'],
-    ['openingHours', 'horário'],
-    ['phone', 'telefone'],
-    ['format', 'formato'],
-  ];
-  return required
-    .filter(([key]) => store?.[key] == null || String(store[key]).trim() === '')
-    .map(([, label]) => label);
-}
-
-function openDetails(store) {
-  selectedStore.value = store;
-  detailsOpen.value = true;
-}
-
-function closeDetails() {
-  detailsOpen.value = false;
-  selectedStore.value = null;
-}
-
-async function buildRows() {
-  const stores = logistics.stores || [];
-  const out = [];
-  for (const store of stores) {
-    let inv = [];
-    try { inv = await refreshStoreInventory(store.id); } catch { inv = []; }
-    const matchBySku = inv.find((i) => i.sku === globalProduct.sku);
-    const firstItem = inv[0] || null;
-    const item = matchBySku || firstItem;
-    out.push({
-      store,
-      stock: toNum(item?.stock, 0),
-      reorderLevel: toNum(item?.reorderLevel, 10),
-      price: toNum(item?.price, globalProduct.price),
-      unit: item?.unit || 'un',
-    });
-  }
-  rows.value = out;
-}
-
 async function refreshAll() {
   try {
     await refreshProducts();
     await refreshStores();
     if (logistics.products?.length) selectCatalogProduct(logistics.products[0]);
-    await buildRows();
   } catch (e) {
-    toast(e?.message || 'Falha ao carregar lojas.', 'error');
+    toast(e?.message || 'Falha ao carregar catálogo.', 'error');
   }
 }
 
@@ -335,34 +189,10 @@ async function saveGlobalProduct() {
   }
 }
 
-async function saveRow(row) {
-  const sku = (globalProduct.sku || '').trim().toUpperCase();
-  const name = (globalProduct.name || '').trim();
-  if (!sku || !name) { toast('SKU e nome do produto global são obrigatórios.', 'error'); return; }
-  try {
-    await upsertStoreInventoryItem(row.store.id, {
-      sku, name,
-      brand: 'GoGummies',
-      category: 'Produto Único',
-      unit: row.unit || 'un',
-      stock: Math.max(0, toNum(row.stock, 0)),
-      reservedStock: 0,
-      reorderLevel: Math.max(0, toNum(row.reorderLevel, 0)),
-      price: Math.max(0, toNum(row.price, globalProduct.price)),
-      isActive: true,
-    });
-    toast(`Stock guardado: ${row.store.name}.`, 'success');
-  } catch (e) {
-    toast(e?.message || 'Erro ao guardar stock.', 'error');
-  }
-}
-
 onMounted(async () => { await refreshAll(); });
 </script>
 
 <style scoped>
-.col-actions { width: 220px; text-align: right; white-space: nowrap; }
-
 .product-layout {
   display: grid;
   grid-template-columns: 200px 1fr;
@@ -393,42 +223,4 @@ onMounted(async () => { await refreshAll(); });
 }
 
 .product-image__preview img { max-width: 92%; max-height: 92%; object-fit: contain; }
-
-.details-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 10px;
-}
-
-@media (max-width: 720px) {
-  .details-grid { grid-template-columns: 1fr; }
-}
-
-.detail-cell {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-  padding: 12px 14px;
-  border: 1px solid var(--bo-border);
-  border-radius: var(--bo-radius-sm);
-  background: var(--bo-surface);
-}
-
-.detail-cell--wide { grid-column: 1 / -1; }
-
-.detail-cell--loc {
-  background: var(--bo-brand-soft);
-  border-color: #a7f3d0;
-}
-
-.missing-fields {
-  margin: 14px 0 0;
-  padding: 10px 14px;
-  background: var(--bo-warning-soft);
-  color: #92400e;
-  border: 1px solid #fde68a;
-  border-radius: var(--bo-radius-sm);
-  font-size: 13px;
-  font-weight: 600;
-}
 </style>

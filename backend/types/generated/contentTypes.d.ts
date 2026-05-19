@@ -551,7 +551,7 @@ export interface ApiContinentStoreContinentStore
     > &
       Schema.Attribute.Private;
     manualStockOverride: Schema.Attribute.Boolean &
-      Schema.Attribute.DefaultTo<false>;
+      Schema.Attribute.DefaultTo<true>;
     name: Schema.Attribute.String & Schema.Attribute.Required;
     openingHours: Schema.Attribute.String;
     phone: Schema.Attribute.String;
@@ -617,9 +617,7 @@ export interface ApiCourierEstafetaCourierEstafeta
     inspection: Schema.Attribute.Media<
       'images' | 'files' | 'videos' | 'audios'
     >;
-    inspectionValidUntil: Schema.Attribute.Date;
     insurance: Schema.Attribute.Media<'images' | 'files' | 'videos' | 'audios'>;
-    insuranceRef: Schema.Attribute.String;
     isOnline: Schema.Attribute.Boolean;
     lat: Schema.Attribute.Decimal;
     licenseNo: Schema.Attribute.String;

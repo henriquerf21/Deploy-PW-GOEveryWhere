@@ -116,15 +116,13 @@
                 <option value="Mota">Mota</option>
                 <option value="Carro">Carro</option>
                 <option value="Bicicleta">Bicicleta</option>
+                <option value="Trotinete">Trotinete</option>
               </select>
             </div>
             <div class="bo-field"><label class="bo-field__label">Marca</label><input v-model="edit.vehicle.brand" class="bo-input" /></div>
             <div class="bo-field"><label class="bo-field__label">Modelo</label><input v-model="edit.vehicle.model" class="bo-input" /></div>
             <div class="bo-field"><label class="bo-field__label">Cor</label><input v-model="edit.vehicle.color" class="bo-input" /></div>
             <div class="bo-field"><label class="bo-field__label">Matrícula</label><input v-model="edit.vehicle.plate" class="bo-input" /></div>
-            <div class="bo-field"><label class="bo-field__label">Carta condução</label><input v-model="edit.vehicle.licenseNumber" class="bo-input" /></div>
-            <div class="bo-field"><label class="bo-field__label">Seguro ref.</label><input v-model="edit.vehicle.insuranceRef" class="bo-input" /></div>
-            <div class="bo-field"><label class="bo-field__label">Inspeção até</label><input v-model="edit.vehicle.inspectionValidUntil" type="date" class="bo-input" /></div>
           </div>
           <dl v-else class="bo-dl">
             <dt>Tipo</dt><dd>{{ c.vehicle?.type || '—' }}</dd>
@@ -132,9 +130,6 @@
             <dt>Modelo</dt><dd>{{ c.vehicle?.model || '—' }}</dd>
             <dt>Cor</dt><dd>{{ c.vehicle?.color || '—' }}</dd>
             <dt>Matrícula</dt><dd class="bo-mono">{{ c.vehicle?.plate || '—' }}</dd>
-            <dt>Carta</dt><dd class="bo-mono">{{ c.vehicle?.licenseNumber || '—' }}</dd>
-            <dt>Seguro</dt><dd class="bo-mono">{{ c.vehicle?.insuranceRef || '—' }}</dd>
-            <dt>Inspeção</dt><dd class="bo-mono">{{ c.vehicle?.inspectionValidUntil || '—' }}</dd>
           </dl>
           <p v-if="(c.vehicle?.type || '').toLowerCase() === 'bicicleta'" class="bo-muted" style="margin-top: 10px; font-size: 12.5px; font-style: italic;">
             Veículo bicicleta — matrícula, seguro e inspeção não se aplicam.
@@ -157,16 +152,19 @@
               <span class="bo-doc-row__dot"></span>
               <div>
                 <div class="bo-doc-row__name">{{ d.label }}</div>
-                <div class="bo-doc-row__meta">{{ d.url ? 'Carregado' : 'Em falta' }}</div>
+                <div class="bo-doc-row__meta">Carregado</div>
               </div>
             </div>
             <div class="bo-doc-row__actions">
-              <button v-if="d.url" type="button" class="bo-btn bo-btn--ghost bo-btn--sm" @click="openDocViewer(d)">Ver</button>
+              <button type="button" class="bo-btn bo-btn--ghost bo-btn--sm" @click="openDocViewer(d)">Ver</button>
               <label class="bo-upload">
                 <input type="file" accept="image/*,.pdf" :disabled="uploading[d.key]" @change="onDocUpload($event, d.key)" />
-                <span>{{ uploading[d.key] ? 'A carregar...' : (d.url ? 'Substituir' : 'Carregar') }}</span>
+                <span>Substituir</span>
               </label>
             </div>
+          </div>
+          <div v-if="!docList.length" class="bo-muted" style="font-size: 13.5px; padding: 10px 0;">
+            Nenhum documento carregado pelo estafeta.
           </div>
         </div>
       </section>
@@ -435,7 +433,14 @@ watch(c, (x) => {
   edit.name = x.name; edit.email = x.email; edit.phone = x.phone || '';
   edit.nif = x.nif; edit.cc = x.cc; edit.birthDate = x.birthDate;
   edit.address = x.address; edit.iban = x.iban; edit.zones = [...(x.zones || [])];
-  edit.vehicle = { ...(x.vehicle || {}), color: x.vehicle?.color || '' };
+  
+  const rawType = x.vehicle?.type || '';
+  const normalizedType = rawType ? rawType.charAt(0).toUpperCase() + rawType.slice(1).toLowerCase() : '';
+  edit.vehicle = { 
+    ...(x.vehicle || {}), 
+    type: normalizedType,
+    color: x.vehicle?.color || '' 
+  };
   adminNotesDraft.value = x.adminNotes || '';
 }, { immediate: true });
 
@@ -510,7 +515,7 @@ const uploading = reactive({
 
 const docList = computed(() => {
   const u = c.value?.docUrls || {};
-  return [
+  const list = [
     { key: 'docCcUrl', label: 'Cartão de Cidadão', url: u.cc || '' },
     { key: 'docLicenseUrl', label: 'Carta de Condução', url: u.license || '' },
     { key: 'docInsuranceUrl', label: 'Apólice de Seguro', url: u.insurance || '' },
@@ -518,6 +523,7 @@ const docList = computed(() => {
     { key: 'docSelfieUrl', label: 'Selfie', url: u.selfie || '' },
     { key: 'docIbanUrl', label: 'Comprovativo IBAN', url: u.iban || '' },
   ];
+  return list.filter((d) => !!d.url);
 });
 
 async function onDocUpload(event, fieldKey) {

@@ -170,12 +170,6 @@
     "licenseNumber": {
       "type": "string"
     },
-    "insuranceRef": {
-      "type": "string"
-    },
-    "inspectionValidUntil": {
-      "type": "date"
-    },
     "adminNotes": {
       "type": "text"
     },
