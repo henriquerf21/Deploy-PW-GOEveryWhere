@@ -132,12 +132,32 @@ const globalProduct = reactive({
 });
 
 const storesByZone = computed(() => {
-  const groups = {};
+  const groups = {
+    'Braga - Centro': [],
+    'Braga - Distritos': [],
+    'Grande Porto': [],
+    'Outras Zonas': []
+  };
+  
   for (const s of logistics.continentStores || []) {
-    const zone = s.zone || 'Outra';
-    if (!groups[zone]) groups[zone] = [];
-    groups[zone].push(s);
+    if (s.district === 'Porto') {
+      groups['Grande Porto'].push(s);
+    } else if (s.district === 'Braga') {
+      if (s.city === 'Braga') {
+        groups['Braga - Centro'].push(s);
+      } else {
+        groups['Braga - Distritos'].push(s);
+      }
+    } else {
+      groups['Outras Zonas'].push(s);
+    }
   }
+
+  // Remover grupos vazios
+  for (const k in groups) {
+    if (groups[k].length === 0) delete groups[k];
+  }
+  
   return groups;
 });
 
