@@ -117,6 +117,9 @@
     },
     "chatHistory": {
       "type": "json"
+    },
+    "notes": {
+      "type": "text"
     }
   }
 }

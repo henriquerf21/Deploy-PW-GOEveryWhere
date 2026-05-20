@@ -292,8 +292,8 @@ const svcSlides = [
     num: '04', title: 'Zonas de Cobertura',
     text: 'Estamos ativos nas principais zonas urbanas do Norte de Portugal, com planos de expansão para todo o território nacional.',
     items: [
-      { icon: 'pin-map-fill', label: 'Braga — Centro Histórico, Lamaçães, Gualtar, São Vicente' },
-      { icon: 'pin-map', label: 'Porto — Cedofeita, Bonfim, Foz, Paranhos' },
+      { icon: 'pin-map-fill', label: 'Braga — Centro e distritos próximos' },
+      { icon: 'pin-map', label: 'Porto — Grande Porto' },
     ],
   },
 ];

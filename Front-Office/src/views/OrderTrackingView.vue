@@ -548,7 +548,7 @@ onMounted(async () => {
   }
 
   // Ligar aos websockets para atualizações imediatas
-  socket.connect();
+
   if (order.value?.documentId) {
     currentOrderRoom = order.value.documentId;
     socket.emit('join_room', currentOrderRoom);
@@ -595,7 +595,7 @@ onUnmounted(() => {
     socket.emit('leave_room', currentOrderRoom);
     currentOrderRoom = null;
   }
-  socket.disconnect();
+  // Mantém a ligação global, apenas sai da sala
 });
 
 // ── COMPUTED ────────────────────────────────────────────────────────

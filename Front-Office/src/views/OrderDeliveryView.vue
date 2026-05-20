@@ -62,27 +62,28 @@
 
         <section class="form-block" aria-labelledby="sec-address">
           <h2 id="sec-address" class="cf-section-title">Morada de entrega</h2>
+          
+          <button
+            type="button"
+            class="cf-btn-gps"
+            :disabled="gpsLoading"
+            @click="detectGPS"
+          >
+            <Loader2 v-if="gpsLoading" class="spin" :size="18" />
+            <MapPin v-else :size="18" />
+            Atribuir morada automaticamente
+          </button>
+
           <div class="cf-field" :class="{ 'has-error': errors.address }">
             <label class="cf-label" for="delivery-address">Rua e número <span class="req">*</span></label>
-            <div class="input-with-icon">
-              <input
-                id="delivery-address"
-                v-model="store.delivery.address"
-                class="cf-input"
-                type="text"
-                placeholder="Ex.: Rua do Comércio, 42"
-                @blur="validateField('address')"
-              />
-              <button
-                type="button"
-                class="icon-btn"
-                :disabled="gpsLoading"
-                @click="detectGPS"
-              >
-                <Loader2 v-if="gpsLoading" class="spin" :size="18" />
-                <MapPin v-else :size="18" />
-              </button>
-            </div>
+            <input
+              id="delivery-address"
+              v-model="store.delivery.address"
+              class="cf-input"
+              type="text"
+              placeholder="Ex.: Rua do Comércio, 42"
+              @blur="validateField('address')"
+            />
             <span v-if="errors.address" class="cf-field-error">{{ errors.address }}</span>
           </div>
 
@@ -461,6 +462,35 @@ watch(
 
 .input-with-icon .cf-input {
   flex: 1;
+}
+
+.cf-btn-gps {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  width: 100%;
+  margin-bottom: 1.5rem;
+  padding: 0.85rem;
+  border: 1px solid var(--cf-line);
+  border-radius: var(--cf-radius);
+  background: var(--cf-bg);
+  color: var(--cf-fg);
+  font-weight: 600;
+  font-size: 0.9375rem;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.cf-btn-gps:hover:not(:disabled) {
+  border-color: var(--cf-cta);
+  color: var(--cf-cta);
+  background: rgba(234, 88, 12, 0.05);
+}
+
+.cf-btn-gps:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 .icon-btn {

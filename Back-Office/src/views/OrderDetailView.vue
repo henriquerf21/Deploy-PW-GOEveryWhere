@@ -54,19 +54,17 @@
               <div>
                 <h4 class="info-grid__h">Encomenda</h4>
                 <dl class="bo-dl">
-                  <dt>Tipo</dt><dd>{{ orderTypeLabels[order.type] }}</dd>
                   <dt>Zona</dt><dd>{{ order.zone }}</dd>
                   <dt>Loja</dt><dd>{{ order.storeName || '—' }}</dd>
                   <dt>Custo</dt><dd>{{ order.costEuro != null ? order.costEuro.toFixed(2) + ' €' : '—' }}</dd>
                   <dt>ETA</dt><dd>{{ order.etaMinutes ? order.etaMinutes + ' min' : '—' }}</dd>
-                  <dt>Recursos</dt><dd>{{ order.resources || '—' }}</dd>
                   <dt>Estafeta</dt><dd>{{ order.courierName || '—' }}</dd>
                   <dt v-if="order.cancelReason">Motivo cancelamento operação</dt>
                   <dd v-if="order.cancelReason">{{ order.cancelReason }}</dd>
                   <dt v-if="order.adminInternalNote">Nota interna última</dt>
                   <dd v-if="order.adminInternalNote">{{ order.adminInternalNote }}</dd>
                   <dt>Data</dt><dd class="bo-mono">{{ order.createdAt?.slice(0,16).replace('T',' ') }}</dd>
-                  <dt>GO Points</dt><dd>{{ order.go_points_used || 0 }}</dd>
+                  <dt>GO Points</dt><dd>+{{ order.costEuro ? Math.floor(order.costEuro * 10) : 0 }} pts</dd>
                   <dt>Avaliação</dt><dd>{{ order.rating != null ? order.rating + ' / 5' : '—' }}</dd>
                 </dl>
               </div>
@@ -84,6 +82,7 @@
                 <dl class="bo-dl">
                   <dt>Morada</dt><dd>{{ order.deliveryAddress || '—' }}</dd>
                   <dt>Cidade</dt><dd>{{ order.deliveryCity || '—' }}</dd>
+                  <dt>Notas do Cliente</dt><dd>{{ order.notes || '—' }}</dd>
                 </dl>
               </div>
             </div>
@@ -98,7 +97,17 @@
             </div>
           </header>
           <div class="bo-card__body" style="padding: 0;">
-            <div ref="mapContainer" class="order-map"></div>
+            <DeliveryRouteMap
+              v-if="order"
+              :key="order.id"
+              :store-lat="Number(ap.storeId ? logistics.continentStores.find(s => s.id === ap.storeId)?.lat || 41.15 : order.pickupLat || 41.15)"
+              :store-lng="Number(ap.storeId ? logistics.continentStores.find(s => s.id === ap.storeId)?.lng || -8.61 : order.pickupLng || -8.61)"
+              :dest-lat="Number(order.destLat || order.pickupLat || 41.15)"
+              :dest-lng="Number(order.destLng || order.pickupLng || -8.61)"
+              :courier-lat="order.courierId && getCourierById(order.courierId)?.lat != null ? Number(getCourierById(order.courierId).lat) : null"
+              :courier-lng="order.courierId && getCourierById(order.courierId)?.lng != null ? Number(getCourierById(order.courierId).lng) : null"
+              height="300px"
+            />
           </div>
         </section>
 
@@ -156,10 +165,6 @@
           <header class="bo-card__head">
             <div>
               <h3 class="bo-card__title">Comunicações ao cliente</h3>
-              <p class="bo-card__sub">
-                Registo persistido no Strapi (rejeição, pedido de informação, cancelamento operacional).
-                O envio real depende do plugin de email configurado no backend.
-              </p>
             </div>
           </header>
           <div class="bo-card__body">
@@ -334,7 +339,6 @@
           <header class="bo-card__head">
             <div>
               <h3 class="bo-card__title">Cancelar pela operação</h3>
-              <p class="bo-card__sub">Estado S-14. O cliente recebe notificação na app e tentativa de email.</p>
             </div>
           </header>
           <div class="bo-card__body bo-stack">
@@ -348,9 +352,10 @@
 </template>
 
 <script setup>
-import { computed, onMounted, reactive, ref, watch, nextTick } from 'vue';
+import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { ArrowLeft } from 'lucide-vue-next';
+import DeliveryRouteMap from '@/components/DeliveryRouteMap.vue';
 import {
   logistics, getOrderById, getCourierById, approveOrder, rejectOrder, requestOrderInfo,
   assignCourierToOrder, setOrderPriority, availableCouriersForOrder,
@@ -364,8 +369,6 @@ import { toast } from '../utils/notify.js';
 const route = useRoute();
 const orderId = computed(() => route.params.id);
 const order = computed(() => getOrderById(orderId.value));
-const mapContainer = ref(null);
-let mapInstance = null;
 
 const ap = reactive({ storeId: '', costEuro: 0, etaMinutes: 0 });
 const pri = ref(3);
@@ -398,81 +401,8 @@ watch(order, (o) => {
       );
       if (match) ap.storeId = match.id;
     }
-
-    nextTick(() => initMap());
   }
 }, { immediate: true });
-
-watch(() => ap.storeId, () => {
-  initMap();
-});
-
-function initMap() {
-  if (!mapContainer.value || !order.value) return;
-  if (typeof L === 'undefined') {
-    const link = document.createElement('link');
-    link.rel = 'stylesheet';
-    link.href = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.css';
-    document.head.appendChild(link);
-    const script = document.createElement('script');
-    script.src = 'https://unpkg.com/leaflet@1.9.4/dist/leaflet.js';
-    script.onload = () => buildMap();
-    document.head.appendChild(script);
-  } else {
-    buildMap();
-  }
-}
-
-function buildIcon(url, size) {
-  return L.icon({
-    iconUrl: url,
-    iconSize: [size, size],
-    iconAnchor: [size / 2, size],
-    popupAnchor: [0, -size],
-  });
-}
-
-function buildMap() {
-  if (!mapContainer.value || !order.value) return;
-  if (mapInstance) { mapInstance.remove(); mapInstance = null; }
-  const o = order.value;
-  const selectedStore = logistics.continentStores.find(s => s.id === ap.storeId);
-  const pLat = selectedStore?.lat || o.pickupLat || 41.15;
-  const pLng = selectedStore?.lng || o.pickupLng || -8.61;
-  const dLat = o.destLat || pLat;
-  const dLng = o.destLng || pLng;
-
-  const base = (import.meta.env.BASE_URL || '/');
-  const continenteIcon = buildIcon(`${base}media/map/continente-pin.png`, 28);
-  const customerIcon = buildIcon(`${base}media/map/customer-house-pin.png`, 26);
-  const courierIcon = buildIcon(`${base}media/map/courier-pin.png`, 40);
-
-  const points = [[pLat, pLng], [dLat, dLng]];
-  const courier = o.courierId ? getCourierById(o.courierId) : null;
-  if (courier && Number.isFinite(courier.lat) && Number.isFinite(courier.lng)) {
-    points.push([courier.lat, courier.lng]);
-  }
-
-  mapInstance = L.map(mapContainer.value).fitBounds(points, { padding: [40, 40], maxZoom: 15 });
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '&copy; OSM' }).addTo(mapInstance);
-
-  L.marker([pLat, pLng], { icon: continenteIcon })
-    .addTo(mapInstance)
-    .bindPopup('<b>Loja Continente (recolha)</b><br>' + (selectedStore?.name || o.storeName || 'Recolha'));
-
-  L.marker([dLat, dLng], { icon: customerIcon })
-    .addTo(mapInstance)
-    .bindPopup('<b>Cliente (entrega)</b><br>' + (o.deliveryAddress || 'Destino'));
-
-  if (courier && Number.isFinite(courier.lat) && Number.isFinite(courier.lng)) {
-    L.marker([courier.lat, courier.lng], { icon: courierIcon })
-      .addTo(mapInstance)
-      .bindPopup('<b>Estafeta</b><br>' + (courier.name || o.courierName || ''));
-    L.polyline([[courier.lat, courier.lng], [pLat, pLng]], { color: '#e8ff00', weight: 4, opacity: 0.85 }).addTo(mapInstance);
-  }
-
-  L.polyline([[pLat, pLng], [dLat, dLng]], { color: '#00ff66', weight: 4, opacity: 0.9, dashArray: '8,6' }).addTo(mapInstance);
-}
 
 async function syncOrderDetail() {
   const id = orderId.value;
