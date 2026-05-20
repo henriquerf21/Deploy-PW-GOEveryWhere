@@ -85,7 +85,6 @@
       <header class="bo-card__head">
         <div>
           <h3 class="bo-card__title">Lojas e Zonas de Cobertura</h3>
-          <p class="bo-card__sub">As lojas abaixo estão sincronizadas com o Front-Office para recolha e entregas.</p>
         </div>
       </header>
       <div class="bo-card__body bo-stack">
