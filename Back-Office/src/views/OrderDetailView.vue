@@ -399,16 +399,21 @@ onMounted(() => { void syncOrderDetail(); });
 watch(orderId, () => { void syncOrderDetail(); });
 
 const TIMELINE_LABELS = {
-  created: { title: 'Pedido criado', kind: 'created' },
-  approve: { title: 'Pedido aprovado', kind: 'approved' },
-  reject: { title: 'Pedido rejeitado', kind: 'rejected' },
-  request_info: { title: 'Informação solicitada ao cliente', kind: 'info' },
-  assign_courier: { title: 'Estafeta atribuído', kind: 'assigned' },
-  start_transit: { title: 'Em trânsito', kind: 'transit' },
-  complete: { title: 'Entrega concluída', kind: 'delivered' },
-  set_priority: { title: 'Prioridade alterada', kind: 'priority' },
-  cancel_admin: { title: 'Cancelado pela operação', kind: 'rejected' },
-  admin_patch: { title: 'Correção administrativa', kind: 'info' },
+  created: { title: 'Pedido criado', kind: 'client' },
+  approve: { title: 'Pedido aprovado', kind: 'admin' },
+  reject: { title: 'Pedido rejeitado', kind: 'admin_danger' },
+  request_info: { title: 'Informação solicitada ao cliente', kind: 'admin_warn' },
+  assign_courier: { title: 'Estafeta atribuído', kind: 'admin' },
+  start_transit: { title: 'Em trânsito', kind: 'admin_transit' },
+  complete: { title: 'Entrega concluída', kind: 'admin_success' },
+  set_priority: { title: 'Prioridade alterada', kind: 'admin_warn' },
+  cancel_admin: { title: 'Cancelado pela operação', kind: 'admin_danger' },
+  admin_patch: { title: 'Correção administrativa', kind: 'admin' },
+  
+  courier_status: { title: 'Atualização', kind: 'courier' },
+  client_status: { title: 'Atualização', kind: 'client' },
+  admin_status: { title: 'Atualização', kind: 'admin' },
+  status_update: { title: 'Atualização de Estado', kind: 'generic' }
 };
 
 const timelineEntries = computed(() => {
@@ -418,6 +423,8 @@ const timelineEntries = computed(() => {
     const cfg = TIMELINE_LABELS[ev.action] || { title: ev.action || '—', kind: 'generic' };
     const meta = ev.meta || {};
     let detail = '';
+    let title = cfg.title;
+
     switch (ev.action) {
       case 'approve':
         detail = [meta.storeName ? `Loja: ${meta.storeName}` : null, meta.costEuro != null ? `Custo: ${Number(meta.costEuro).toFixed(2)}€` : null, meta.etaMinutes != null ? `ETA: ${meta.etaMinutes} min` : null]
@@ -441,11 +448,21 @@ const timelineEntries = computed(() => {
       case 'admin_patch':
         detail = Array.isArray(meta.fields) ? `Campos: ${meta.fields.join(', ')}` : '';
         break;
+      case 'courier_status':
+      case 'client_status':
+      case 'admin_status':
+      case 'status_update':
+        if (meta.status) title = meta.status;
+        if (meta.fromStatus && meta.status) {
+          detail = `${meta.fromStatus.split(' ')[0]} → ${meta.status.split(' ')[0]}`;
+        }
+        break;
       default:
         detail = '';
     }
+
     return {
-      title: cfg.title,
+      title,
       kind: cfg.kind,
       at: ev.at,
       actorName: ev.actor?.name || 'Sistema',
@@ -822,14 +839,15 @@ async function doCancelAdmin() {
   box-shadow: 0 0 0 1px var(--bo-border, #e2e8f0);
 }
 
-.timeline__row--created .timeline__dot { background: #6366f1; }
-.timeline__row--approved .timeline__dot { background: #10b981; }
-.timeline__row--rejected .timeline__dot { background: #ef4444; }
-.timeline__row--info .timeline__dot { background: #a855f7; }
-.timeline__row--assigned .timeline__dot { background: #0ea5e9; }
-.timeline__row--transit .timeline__dot { background: #f59e0b; }
-.timeline__row--delivered .timeline__dot { background: #22c55e; }
-.timeline__row--priority .timeline__dot { background: #ec4899; }
+.timeline__row--client .timeline__dot { background: #6366f1; } /* Indigo for Client */
+.timeline__row--courier .timeline__dot { background: #0ea5e9; } /* Light Blue for Courier */
+.timeline__row--admin .timeline__dot { background: #8b5cf6; } /* Purple for Admin actions */
+.timeline__row--admin_warn .timeline__dot { background: #f59e0b; } /* Amber for Admin warnings */
+.timeline__row--admin_danger .timeline__dot { background: #ef4444; } /* Red for Admin reject/cancel */
+.timeline__row--admin_transit .timeline__dot { background: #f97316; } /* Orange for Admin transit */
+.timeline__row--admin_success .timeline__dot { background: #10b981; } /* Emerald for Admin success */
+.timeline__row--admin_info .timeline__dot { background: #a855f7; }
+.timeline__row--generic .timeline__dot { background: #94a3b8; }
 
 .timeline__content {
   display: flex;
