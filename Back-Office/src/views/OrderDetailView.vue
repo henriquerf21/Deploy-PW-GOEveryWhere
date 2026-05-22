@@ -114,7 +114,7 @@
         <section v-if="order.clientReply || order.infoRequestMessage" class="bo-card s03-card">
           <header class="bo-card__head">
             <div>
-              <h3 class="bo-card__title">Esclarecimento S-03</h3>
+              <h3 class="bo-card__title">Histórico do pedido de informação extra solicitada</h3>
               <p class="bo-card__sub">Diálogo com o cliente sobre informação adicional solicitada.</p>
             </div>
           </header>
@@ -161,28 +161,6 @@
           </div>
         </section>
 
-        <section class="bo-card">
-          <header class="bo-card__head">
-            <div>
-              <h3 class="bo-card__title">Comunicações ao cliente</h3>
-            </div>
-          </header>
-          <div class="bo-card__body">
-            <ul class="mail-list">
-              <li v-for="m in orderMails" :key="m.id" class="mail-list__row">
-                <div class="mail-list__head">
-                  <span class="bo-badge bo-badge--info">{{ m.kind }}</span>
-                  <span v-if="m.emailSent === false" class="bo-badge bo-badge--warn">SMTP não confirmado</span>
-                  <span class="bo-mono bo-muted">{{ m.to }}</span>
-                  <span class="bo-mono bo-muted">{{ (m.at || '').slice(0, 16).replace('T', ' ') }}</span>
-                </div>
-                <p v-if="m.emailError" class="bo-muted" style="font-size: 12px; margin: 0 0 6px;">{{ m.emailError }}</p>
-                <p class="mail-list__body">{{ (m.body || '').slice(0, 240) }}{{ (m.body || '').length > 240 ? '…' : '' }}</p>
-              </li>
-              <li v-if="!orderMails.length" class="bo-muted" style="font-size: 13px;">Nenhuma comunicação registada para este pedido.</li>
-            </ul>
-          </div>
-        </section>
       </div>
 
       <aside class="layout__side bo-stack">
@@ -497,22 +475,7 @@ const canAssignSection = computed(() => order.value && ['APPROVED', 'ASSIGNED'].
 const canAdminCorrect = computed(() => order.value && !terminalStatuses.includes(order.value.status));
 const canCancelAdmin = computed(() => order.value && ['APPROVED', 'ASSIGNED', 'IN_TRANSIT'].includes(order.value.status));
 const available = computed(() => (order.value ? availableCouriersForOrder(order.value.id) : []));
-const orderMails = computed(() => {
-  const o = order.value;
-  const fromServer = o?.communicationLog;
-  if (Array.isArray(fromServer) && fromServer.length) {
-    return fromServer.map((c) => ({
-      id: c.id || `${c.at}-${c.kind}`,
-      kind: c.kind || c.channel || 'registo',
-      to: c.to || '',
-      at: c.at || '',
-      body: c.body || '',
-      emailSent: c.emailSent,
-      emailError: c.emailError || '',
-    }));
-  }
-  return logistics.emailLog.filter((e) => e.orderId === orderId.value);
-});
+
 
 function statusBadgeClass(status) {
   switch (status) {
@@ -819,31 +782,6 @@ async function doCancelAdmin() {
   border: 1px solid var(--bo-border);
   border-radius: var(--bo-radius-sm);
   font-size: 13px;
-}
-
-.mail-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-
-.mail-list__row {
-  padding: 12px 14px;
-  border: 1px solid var(--bo-border);
-  border-radius: 10px;
-  background: var(--bo-surface);
-}
-
-.mail-list__head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 6px;
-}
-
-.mail-list__body {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--bo-text);
-  white-space: pre-wrap;
 }
 
 .timeline {
