@@ -31,6 +31,10 @@ import {
 } from '../api/backofficeApi.js';
 
 export const socket = io(API_BASE, { autoConnect: true });
+// Join dedicated admin room for targeted updates from backend
+socket.on('connect', () => {
+  socket.emit('join_admin');
+});
 let realtimeRefreshTimer = null;
 let realtimeRefreshInFlight = false;
 const lastRoomRefreshAt = new Map();
@@ -107,6 +111,11 @@ function scheduleRealtimeFullRefresh(delayMs = 450) {
 export async function handleRealtimeEvent(payload = {}) {
   const model = String(payload?.model || '').trim().toLowerCase();
 
+  // Ignore GPS updates for courier-estafeta to prevent high database/network load from full bootstrap refreshes
+  if (model === 'courier-estafeta') {
+    return;
+  }
+
   // For order-specific events with a room ID, try targeted refresh first
   const room = String(payload?.room || '').trim();
   if (room && model === 'order') {
@@ -126,10 +135,10 @@ export async function handleRealtimeEvent(payload = {}) {
   const now = Date.now();
   if (now - lastGlobalRefreshAt < 2000) return;
   lastGlobalRefreshAt = now;
-  scheduleRealtimeFullRefresh(900);
+  scheduleRealtimeFullRefresh(2000);
 }
 
-socket.on('global_order_status_update', (payload) => {
+socket.on('data_changed', (payload) => {
   handleRealtimeEvent(payload);
 });
 socket.on('courier_status_update', (payload) => {
@@ -467,7 +476,7 @@ export async function approveOrder(orderId, { storeId, costEuro, etaMinutes, res
     upsertOrder(order);
     logAct(`Pedido ${orderId} aprovado (loja ${storeId}).`);
     syncOperationalAggregatesFromOrders();
-    socket.emit('global_order_status_update', { status: 'S-05' });
+    // Lifecycle hook on Strapi already notifies admin_room via data_changed
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao aprovar pedido.' };
@@ -483,7 +492,7 @@ export async function rejectOrder(orderId, justification) {
     upsertOrder(order);
     logAct(`Pedido ${orderId} rejeitado.`);
     syncOperationalAggregatesFromOrders();
-    socket.emit('global_order_status_update', { status: 'S-04' });
+    // Lifecycle hook on Strapi already notifies admin_room via data_changed
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao rejeitar pedido.' };
@@ -499,7 +508,7 @@ export async function requestOrderInfo(orderId, message) {
     upsertOrder(order);
     logAct(`Pedido ${orderId}: pedido de informação ao cliente.`);
     syncOperationalAggregatesFromOrders();
-    socket.emit('global_order_status_update', { status: 'S-03' });
+    // Lifecycle hook on Strapi already notifies admin_room via data_changed
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao pedir informação.' };
@@ -513,7 +522,7 @@ export async function assignCourierToOrder(orderId, courierId) {
     upsertOrder(order);
     logAct(`Pedido ${orderId} atribuído a ${courierId}.`);
     syncOperationalAggregatesFromOrders();
-    socket.emit('global_order_status_update', { status: 'S-07' });
+    // Lifecycle hook on Strapi already notifies admin_room via data_changed
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao atribuir estafeta.' };
@@ -529,7 +538,7 @@ export async function setOrderPriority(orderId, priority) {
     upsertOrder(order);
     if (p === 5) pushUrgentAlert(`ALERTA: Pedido ${orderId} definido como prioridade 5 (Urgente).`);
     logAct(`Pedido ${orderId}: prioridade ${p}.`);
-    socket.emit('global_order_status_update', { status: `P-${p}` });
+    // Lifecycle hook on Strapi already notifies admin_room via data_changed
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao alterar prioridade.' };
@@ -542,7 +551,7 @@ export async function startTransit(orderId) {
     upsertOrder(order);
     logAct(`Pedido ${orderId} em trânsito.`);
     syncOperationalAggregatesFromOrders();
-    socket.emit('global_order_status_update', { status: 'S-09' });
+    // Lifecycle hook on Strapi already notifies admin_room via data_changed
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao iniciar trânsito.' };
@@ -556,7 +565,7 @@ export async function completeDelivery(orderId) {
     logAct(`Pedido ${orderId} entregue.`);
     refreshAggregatesForCustomerId(order.clientId);
     syncOperationalAggregatesFromOrders();
-    socket.emit('global_order_status_update', { status: 'S-11' });
+    // Lifecycle hook on Strapi already notifies admin_room via data_changed
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao concluir entrega.' };
@@ -571,7 +580,7 @@ export async function cancelOrderByAdmin(orderId, reason) {
     upsertOrder(order);
     logAct(`Pedido ${orderId} cancelado pela operação.`);
     syncOperationalAggregatesFromOrders();
-    socket.emit('global_order_status_update', { status: 'S-14' });
+    // Lifecycle hook on Strapi already notifies admin_room via data_changed
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao cancelar.' };
@@ -584,7 +593,7 @@ export async function patchOrderAdmin(orderId, payload) {
     upsertOrder(order);
     logAct(`Pedido ${orderId}: correção administrativa.`);
     syncOperationalAggregatesFromOrders();
-    socket.emit('global_order_status_update', { status: 'admin_patch' });
+    // Lifecycle hook on Strapi already notifies admin_room via data_changed
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao guardar correções.' };
