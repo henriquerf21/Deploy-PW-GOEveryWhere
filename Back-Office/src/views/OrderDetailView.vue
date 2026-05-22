@@ -141,6 +141,15 @@
             </div>
           </header>
           <div class="bo-card__body">
+            <div v-if="timelineEntries.length" class="timeline-legend">
+              <span class="legend-item" title="Ações feitas pelo Cliente"><span class="legend-dot" style="background: #6366f1;"></span> Cliente</span>
+              <span class="legend-item" title="Ações feitas pelo Estafeta"><span class="legend-dot" style="background: #0ea5e9;"></span> Estafeta</span>
+              <span class="legend-item" title="Ações e atualizações feitas pelo Operador/Sistema"><span class="legend-dot" style="background: #8b5cf6;"></span> Admin</span>
+              <span class="legend-item" title="Avisos e Trânsito"><span class="legend-dot" style="background: #f97316;"></span> Em Trânsito / Avisos</span>
+              <span class="legend-item" title="Entrega concluída ou Sucesso"><span class="legend-dot" style="background: #10b981;"></span> Concluído</span>
+              <span class="legend-item" title="Rejeições ou Cancelamentos"><span class="legend-dot" style="background: #ef4444;"></span> Cancelado</span>
+            </div>
+            
             <ol v-if="timelineEntries.length" class="timeline">
               <li v-for="(ev, idx) in timelineEntries" :key="idx" class="timeline__row" :class="`timeline__row--${ev.kind}`">
                 <span class="timeline__dot" aria-hidden="true" />
@@ -848,6 +857,32 @@ async function doCancelAdmin() {
 .timeline__row--admin_success .timeline__dot { background: #10b981; } /* Emerald for Admin success */
 .timeline__row--admin_info .timeline__dot { background: #a855f7; }
 .timeline__row--generic .timeline__dot { background: #94a3b8; }
+
+.timeline-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed var(--bo-border);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--bo-text-secondary);
+  font-weight: 500;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 1px var(--bo-border, #e2e8f0);
+}
 
 .timeline__content {
   display: flex;
