@@ -81,6 +81,7 @@ export const COURIER_STATE = {
     E04: 'E-04', // Suspenso
     E05: 'E-05', // Offline
     E06: 'E-06', // Online — Disponível
+    E07: 'E-07', // Em Pausa
 };
 
 export const courierStateLabels = {
@@ -90,6 +91,7 @@ export const courierStateLabels = {
     'E-04': 'Suspenso',
     'E-05': 'Offline',
     'E-06': 'Disponível',
+    'E-07': 'Em Pausa',
 };
 
 /** State flow: which state comes next */

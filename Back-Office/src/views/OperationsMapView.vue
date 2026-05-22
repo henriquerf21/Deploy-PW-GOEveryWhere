@@ -259,7 +259,7 @@ const ordersForMap = computed(() => {
 });
 
 const activeCouriers = computed(() =>
-  logistics.couriers.filter((c) => c.state === COURIER_STATE.E06 || !!c.currentOrderId)
+  logistics.couriers.filter((c) => c.state === COURIER_STATE.E06 || c.state === COURIER_STATE.E07 || !!c.currentOrderId)
 );
 
 const couriersForSidePanel = computed(() => {
@@ -379,7 +379,7 @@ function drawMarkers() {
     : logistics.couriers;
 
   for (const c of couriersToIterate) {
-    if (c.lat == null || hideCourierIds.has(c.id)) continue;
+    if (c.lat == null || (c.lat === 0 && c.lng === 0) || hideCourierIds.has(c.id)) continue;
     const m = L.marker([c.lat, c.lng], { icon: getCourierIcon(false) }).addTo(map);
     m.bindPopup(`<strong>${c.name}</strong><br/>${courierStateLabels[c.state]}`);
     markerLayers.push(m);

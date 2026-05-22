@@ -26,95 +26,51 @@
         </div>
       </div>
 
-      <!-- Stats -->
-      <div class="stats-row">
-        <div class="stat-card">
-          <span class="stat-val">{{ profile.totalDeliveries }}</span>
-          <span class="stat-lbl">Entregas</span>
+      <!-- Info sections -->
+      <div v-if="!isEditing">
+        <div class="info-section">
+          <span class="section-label">INFORMAÇÕES PESSOAIS</span>
+          <div class="info-row"><span class="info-key">Email</span><span>{{ profile.email }}</span></div>
+          <div class="info-row"><span class="info-key">Morada</span><span>{{ profile.address }}</span></div>
+          <div class="info-row"><span class="info-key">Data nasc.</span><span>{{ profile.birthDate }}</span></div>
+          <div class="info-row"><span class="info-key">IBAN</span><span class="iban">{{ profile.iban }}</span></div>
+          <div class="info-row"><span class="info-key">Zona</span><span>{{ profile.zone }}</span></div>
         </div>
-        <div class="stat-card">
-          <span class="stat-val">
-            <template v-if="profile.totalDeliveries > 0">
-              {{ profile.rating }} <svg width="12" height="12" viewBox="0 0 24 24" fill="#f59e0b"><polygon points="12,2 15,9 22,9.5 17,14.5 18.5,22 12,18 5.5,22 7,14.5 2,9.5 9,9"/></svg>
-            </template>
-            <template v-else>
-              N/A
-            </template>
-          </span>
-          <span class="stat-lbl">Rating</span>
-        </div>
-        <div class="stat-card">
-          <span class="stat-val">{{ profile.totalDeliveries > 0 ? profile.onTimePct + '%' : 'N/A' }}</span>
-          <span class="stat-lbl">No prazo</span>
-        </div>
+
+
+
+        <button class="change-btn" @click="startEditing" style="margin: 0 16px;">Editar Perfil</button>
       </div>
 
-      <!-- Info sections (read-only) -->
-      <div class="info-section">
-        <span class="section-label">INFORMAÇÕES PESSOAIS</span>
-        <div class="info-row"><span class="info-key">Email</span><span>{{ profile.email }}</span></div>
-        <div class="info-row"><span class="info-key">Morada</span><span>{{ profile.address }}</span></div>
-        <div class="info-row"><span class="info-key">Data nasc.</span><span>{{ profile.birthDate }}</span></div>
-        <div class="info-row"><span class="info-key">IBAN</span><span class="iban">{{ profile.iban }}</span></div>
-        <div class="info-row"><span class="info-key">Zona</span><span>{{ profile.zone }}</span></div>
-      </div>
-
-      <div class="info-section">
-        <span class="section-label">VEÍCULO</span>
-        <div class="info-row"><span class="info-key">Tipo</span><span>{{ profile.vehicle.type }}</span></div>
-        <div class="info-row">
-          <span class="info-key">Marca/Modelo</span>
-          <span>{{ profile.vehicle.brand }} {{ profile.vehicle.model }}</span>
+      <div v-else class="info-section edit-section">
+        <span class="section-label">EDITAR INFORMAÇÕES PESSOAIS</span>
+        <div class="field-group">
+          <label>Email</label>
+          <input v-model="editForm.email" class="field-input" type="email" />
         </div>
-        <div class="info-row"><span class="info-key">Cor</span><span>{{ profile.vehicle.color }}</span></div>
-        <div class="info-row" v-if="profile.vehicle.type && profile.vehicle.type.toLowerCase() !== 'bicicleta'"><span class="info-key">Matrícula</span><span>{{ profile.vehicle.plate }}</span></div>
-      </div>
-
-      <div class="info-section">
-        <span class="section-label">GERIR FROTA</span>
-        <button class="add-vehicle-btn" @click.prevent="">
-          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12h14"/><path d="M12 5v14"/></svg>
-          Adicionar Novo Veículo
-        </button>
-      </div>
-
-      <!-- Data change request section -->
-      <div class="info-section change-request-section">
-        <span class="section-label">ALTERAÇÃO DE DADOS</span>
-        
-        <div class="change-info-banner">
-          <div class="change-info-icon">
-            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
-          </div>
-          <p class="change-info-text">
-            Não é possível editar os teus dados diretamente. Para qualquer alteração, 
-            submete um pedido abaixo e o administrador processará a tua solicitação.
-          </p>
+        <div class="field-group">
+          <label>Morada</label>
+          <input v-model="editForm.address" class="field-input" />
+        </div>
+        <div class="field-group">
+          <label>Data Nascimento</label>
+          <input v-model="editForm.birthDate" class="field-input" type="date" />
+        </div>
+        <div class="field-group">
+          <label>IBAN</label>
+          <input v-model="editForm.iban" class="field-input" />
         </div>
 
-        <div v-if="changeRequestSent" class="change-success">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#059669" stroke-width="2"><path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"/><polyline points="22 4 12 14.01 9 11.01"/></svg>
-          <span>Pedido de alteração enviado com sucesso! O administrador irá analisar e proceder à alteração.</span>
-        </div>
 
-        <template v-else>
-          <div class="field-group">
-            <label>O que queres alterar? *</label>
-            <input v-model="changeField" class="field-input" placeholder="Ex: Nome, Morada, IBAN, Veículo, etc." />
-          </div>
-          <div class="field-group">
-            <label>Novo valor pretendido *</label>
-            <input v-model="changeNewValue" class="field-input" placeholder="Ex: Rua Nova da Estação 45, 4710-000 Braga" />
-          </div>
-          <div class="field-group">
-            <label>Motivo da alteração *</label>
-            <textarea v-model="changeReason" class="field-textarea" placeholder="Explica porque precisas de alterar este dado (ex: mudei de morada, erro de digitação, etc.)" rows="3"></textarea>
-          </div>
-          <p v-if="changeError" class="error-msg">{{ changeError }}</p>
-          <button class="change-btn" @click="submitChangeRequest" :disabled="changeSending">
-            {{ changeSending ? 'A enviar...' : 'Submeter pedido de alteração' }}
+
+        <p v-if="changeError" class="error-msg">{{ changeError }}</p>
+
+        <div class="modal-actions" style="margin-top: 16px; gap: 8px; display: flex;">
+          <button class="btn-cancel" @click="isEditing = false" :disabled="changeSending" style="flex: 1; padding: 12px; background: #f3f4f6; border: none; border-radius: 8px;">Cancelar</button>
+          <button class="change-btn" @click="saveProfile" :disabled="changeSending" style="flex: 1; margin: 0; padding: 12px; border: none; border-radius: 8px;">
+            {{ changeSending ? 'A guardar...' : 'Guardar Alterações' }}
           </button>
-        </template>
+        </div>
       </div>
     </div>
 
@@ -132,7 +88,7 @@
 <script setup>
 import { computed, ref } from 'vue';
 import { useRouter } from 'vue-router';
-import { store, logout, submitDataChangeRequest } from '../stores/courierStore.js';
+import { store, logout, updateProfile } from '../stores/courierStore.js';
 import { courierStateLabels } from '../constants.js';
 
 const router = useRouter();
@@ -148,43 +104,49 @@ const profilePhotoUrl = computed(() => {
   return null;
 });
 
-// Change request form
-const changeField = ref('');
-const changeNewValue = ref('');
-const changeReason = ref('');
+const isEditing = ref(false);
 const changeError = ref('');
 const changeSending = ref(false);
-const changeRequestSent = ref(false);
 
-async function submitChangeRequest() {
+const editForm = ref({
+  email: '',
+  address: '',
+  birthDate: '',
+  iban: '',
+});
+
+function startEditing() {
+  editForm.value = {
+    email: profile.value.email || '',
+    address: profile.value.address || '',
+    birthDate: profile.value.birthDate || '',
+    iban: profile.value.iban || '',
+  };
   changeError.value = '';
-  if (!changeField.value.trim() || !changeNewValue.value.trim() || !changeReason.value.trim()) {
-    changeError.value = 'Preenche todos os campos obrigatórios.';
-    return;
-  }
-  if (changeReason.value.trim().length < 10) {
-    changeError.value = 'O motivo deve ter pelo menos 10 caracteres.';
-    return;
-  }
+  isEditing.value = true;
+}
+
+async function saveProfile() {
+  changeError.value = '';
   changeSending.value = true;
   try {
-    await submitDataChangeRequest({
-      field: changeField.value.trim(),
-      newValue: changeNewValue.value.trim(),
-      reason: changeReason.value.trim(),
-    });
-    changeRequestSent.value = true;
-    changeField.value = '';
-    changeNewValue.value = '';
-    changeReason.value = '';
+    const updates = {
+      email: editForm.value.email,
+      address: editForm.value.address,
+      birthDate: editForm.value.birthDate,
+      iban: editForm.value.iban,
+    };
+    await updateProfile(updates);
+    isEditing.value = false;
   } catch (err) {
-    changeError.value = err.message || 'Erro ao enviar pedido.';
+    changeError.value = err.message || 'Erro ao guardar perfil.';
   } finally {
     changeSending.value = false;
   }
 }
 
 function handleLogout() { logout(); router.push('/login'); }
+
 </script>
 
 <style scoped>

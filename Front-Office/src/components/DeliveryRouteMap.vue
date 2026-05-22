@@ -59,7 +59,7 @@ const OSRM_BASE = 'https://router.project-osrm.org/route/v1';
 
 function validCoords() {
   const n = [props.storeLat, props.storeLng, props.destLat, props.destLng];
-  return n.every((v) => typeof v === 'number' && !Number.isNaN(v));
+  return n.every((v) => typeof v === 'number' && !Number.isNaN(v) && v !== 0);
 }
 
 function coordsKey() {
@@ -122,19 +122,14 @@ function polylinePointsForDraw() {
   return straightLineLatLngs();
 }
 
-function svgPinDataUri(fill, glyph) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="42" viewBox="0 0 34 42"><defs><filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,0.35)"/></filter></defs><g filter="url(#s)"><path d="M17 2C9.82 2 4 7.82 4 15c0 8.7 9.83 18.9 12.27 21.31a1 1 0 0 0 1.46 0C20.17 33.9 30 23.7 30 15 30 7.82 24.18 2 17 2z" fill="${fill}"/><circle cx="17" cy="15" r="9" fill="#fff"/><text x="17" y="19" text-anchor="middle" font-size="11" font-family="Arial, sans-serif">${glyph}</text></g></svg>`;
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-}
-
 function getStoreIcon() {
   if (!storeIcon) {
     storeIcon = L.icon({
-      iconUrl: svgPinDataUri('#f59e0b', '🏬'),
-      iconSize: [28, 34],
-      iconAnchor: [14, 34],
-      popupAnchor: [0, -30],
-      className: 'ge-map-marker-icon',
+      iconUrl: '/media/map/continente-pin.png',
+      iconSize: [36, 36],
+      iconAnchor: [18, 36],
+      popupAnchor: [0, -36],
+      className: 'ge-map-marker-icon ge-store-marker-icon',
     });
   }
   return storeIcon;
@@ -143,10 +138,10 @@ function getStoreIcon() {
 function getCustomerIcon() {
   if (!customerIcon) {
     customerIcon = L.icon({
-      iconUrl: svgPinDataUri('#16a34a', '🏠'),
-      iconSize: [28, 34],
-      iconAnchor: [14, 34],
-      popupAnchor: [0, -30],
+      iconUrl: '/media/map/customer-house-pin.png',
+      iconSize: [40, 48],
+      iconAnchor: [20, 48],
+      popupAnchor: [0, -40],
       className: 'ge-map-marker-icon',
     });
   }
@@ -156,10 +151,10 @@ function getCustomerIcon() {
 function getCourierIcon() {
   if (!courierIcon) {
     courierIcon = L.icon({
-      iconUrl: svgPinDataUri('#2563eb', '🛵'),
-      iconSize: [30, 36],
-      iconAnchor: [15, 36],
-      popupAnchor: [0, -32],
+      iconUrl: '/media/map/courier-pin.png',
+      iconSize: [40, 48],
+      iconAnchor: [20, 48],
+      popupAnchor: [0, -40],
       className: 'ge-map-marker-icon ge-map-marker-icon--courier',
     });
   }
@@ -235,7 +230,8 @@ function drawLayers() {
 
   // GPS real do estafeta (prioridade) ou fallback por progresso
   const hasRealGps = props.courierLat != null && props.courierLng != null
-    && Number.isFinite(props.courierLat) && Number.isFinite(props.courierLng);
+    && Number.isFinite(props.courierLat) && Number.isFinite(props.courierLng)
+    && props.courierLat !== 0 && props.courierLng !== 0;
 
   if (hasRealGps) {
     L.marker([props.courierLat, props.courierLng], { icon: getCourierIcon() })
@@ -260,13 +256,17 @@ function drawLayers() {
 }
 
 function initMap() {
-  if (!containerRef.value || !validCoords()) return;
+  if (!containerRef.value) return;
 
   map = L.map(containerRef.value, {
     scrollWheelZoom: props.scrollWheelZoom,
     zoomControl: true,
     attributionControl: true,
   });
+
+  if (!validCoords()) {
+    map.setView([41.15, -8.63], 10);
+  }
 
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
     maxZoom: 19,
@@ -354,6 +354,8 @@ onBeforeUnmount(() => {
 }
 
 .delivery-route-map :deep(.ge-map-marker-icon) {
+  background: transparent !important;
+  border: none !important;
   filter: drop-shadow(0 2px 5px rgba(15, 23, 42, 0.3));
 }
 </style>

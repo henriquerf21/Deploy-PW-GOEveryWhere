@@ -104,7 +104,7 @@ function scheduleRealtimeFullRefresh(delayMs = 450) {
   }, delayMs);
 }
 
-async function handleRealtimeEvent(payload = {}) {
+export async function handleRealtimeEvent(payload = {}) {
   const model = String(payload?.model || '').trim().toLowerCase();
 
   // For order-specific events with a room ID, try targeted refresh first
@@ -370,15 +370,23 @@ export function getCustomerById(id) {
 }
 
 function upsertOrder(order) {
-  const idx = logistics.orders.findIndex((o) => o.id === order.id);
-  if (idx >= 0) logistics.orders.splice(idx, 1, { ...logistics.orders[idx], ...order });
-  else logistics.orders.unshift(order);
+  if (!order || !order.id) return;
+  const idx = logistics.orders.findIndex((o) => String(o.id) === String(order.id) || o.orderId === order.id);
+  if (idx >= 0) {
+    Object.assign(logistics.orders[idx], order);
+  } else {
+    logistics.orders.unshift(order);
+  }
 }
 
 function upsertCourier(courier) {
-  const idx = logistics.couriers.findIndex((c) => c.id === courier.id);
-  if (idx >= 0) logistics.couriers.splice(idx, 1, { ...logistics.couriers[idx], ...courier });
-  else logistics.couriers.unshift(courier);
+  if (!courier || !courier.id) return;
+  const idx = logistics.couriers.findIndex((c) => String(c.id) === String(courier.id) || c.courierId === courier.id);
+  if (idx >= 0) {
+    Object.assign(logistics.couriers[idx], courier);
+  } else {
+    logistics.couriers.unshift(courier);
+  }
 }
 
 function refreshAggregatesForCustomerId(clientId) {

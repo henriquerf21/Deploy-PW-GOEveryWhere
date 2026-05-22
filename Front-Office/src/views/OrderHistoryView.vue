@@ -40,7 +40,7 @@
         <div v-for="order in sortedOrders" :key="order.id" class="order-card">
           <div class="order-top">
             <div>
-              <h3>Encomenda #{{ order.id }}</h3>
+              <h3>Encomenda {{ order.orderId || '#' + order.id }}</h3>
               <span class="order-date">{{ order.date }}</span>
             </div>
             <span class="status" :class="statusClass(order.status)">
@@ -189,16 +189,17 @@ let refreshInterval = null;
 
 onMounted(async () => {
   // Carrega imediatamente ao entrar
-  await Promise.all([fetchUserOrders(), refreshUserProfile()]);
+  await fetchUserOrders();
+  // Atualiza perfil/pontos apenas uma vez ao entrar na página
+  await refreshUserProfile();
 
   // Configura o intervalo de atualização (30 segundos)
+  // Apenas para encomendas ativas — NÃO atualiza o perfil para evitar sobrescrita de pontos
   refreshInterval = setInterval(async () => {
     const terminalStates = ['S-04', 'S-11', 'S-12', 'S-13', 'S-14', 'S-15', 'S-16'];
     const hasActive = store.orderHistory.some(o => !terminalStates.includes(o.status));
-    
-    // Se houver encomendas ativas, atualiza em background
     if (hasActive) {
-      await Promise.all([fetchUserOrders(), refreshUserProfile()]);
+      await fetchUserOrders();
     }
   }, 30000);
 });
@@ -223,10 +224,12 @@ function openRatingModal(order) {
   showRatingModal.value = true;
 }
 
-function submitRating() {
+async function submitRating() {
   if (ratingOrder.value && ratingValue.value > 0) {
-    rateOrder(ratingOrder.value.id, ratingValue.value);
+    await rateOrder(ratingOrder.value.id, ratingValue.value);
     showRatingModal.value = false;
+    // Atualiza pontos após avaliação (ganho de GoPoints por avaliação)
+    await refreshUserProfile();
   }
 }
 

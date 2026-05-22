@@ -132,7 +132,7 @@
             <dt>Matrícula</dt><dd class="bo-mono">{{ c.vehicle?.plate || '—' }}</dd>
           </dl>
           <p v-if="(c.vehicle?.type || '').toLowerCase() === 'bicicleta'" class="bo-muted" style="margin-top: 10px; font-size: 12.5px; font-style: italic;">
-            Veículo bicicleta — matrícula, seguro e inspeção não se aplicam.
+            Veículo bicicleta — matrícula não se aplica.
           </p>
         </div>
       </section>
@@ -264,7 +264,7 @@
           <button v-if="c.state === 'E-01'" type="button" class="bo-btn bo-btn--primary" @click="doVerify">Verificar / Aceitar</button>
           <button v-if="c.state === 'E-01'" type="button" class="bo-btn bo-btn--danger" @click="showRej = true">Rejeitar</button>
           <button v-if="c.state === 'E-01'" type="button" class="bo-btn bo-btn--outline" @click="showInfo = true">Pedir informação</button>
-          <button v-if="['E-02', 'E-05', 'E-06'].includes(c.state)" type="button" class="bo-btn bo-btn--warn" @click="doSuspend">Suspender</button>
+          <button v-if="['E-02', 'E-05', 'E-06', 'E-07'].includes(c.state)" type="button" class="bo-btn bo-btn--warn" @click="doSuspend">Suspender</button>
           <button v-if="c.state === 'E-04' || c.state === 'E-03'" type="button" class="bo-btn bo-btn--outline" @click="doReactivate">Reativar</button>
         </div>
       </div>
@@ -350,6 +350,7 @@ import { computed, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { ArrowLeft } from 'lucide-vue-next';
 import {
+  logistics,
   getCourierById,
   canEditCourierData,
   updateCourierVerified,
@@ -362,6 +363,7 @@ import {
   setCourierMaxConcurrent,
   setCourierAdminNotes,
   clearCourierDataRequest,
+  ORDER_STATUS,
 } from '../stores/logisticsStore.js';
 import { courierStateLabels, COURIER_STATE, ZONES } from '../constants/logistics.js';
 import { toast } from '../utils/notify.js';
@@ -370,7 +372,7 @@ import { boUpload } from '../api/backofficeApi.js';
 const route = useRoute();
 const c = computed(() => getCourierById(route.params.id));
 const canEdit = computed(() => c.value && canEditCourierData(c.value));
-const canGoOnline = computed(() => c.value && ['E-02', 'E-05', 'E-06'].includes(c.value.state));
+const canGoOnline = computed(() => c.value && ['E-02', 'E-05', 'E-06', 'E-07'].includes(c.value.state));
 
 const initials = computed(() => {
   const n = c.value?.name || '';
@@ -389,7 +391,12 @@ const statItems = computed(() => {
   ];
 });
 
-const deliveries = computed(() => Array.isArray(c.value?.deliveries) ? c.value.deliveries : []);
+const deliveries = computed(() => {
+  if (!c.value) return [];
+  // Usa as encomendas já carregadas em logistics.orders (garante que está reativo e atualizado)
+  const delivered = logistics.orders.filter(o => o.courierId === c.value.id && o.status === ORDER_STATUS.DELIVERED);
+  return delivered.sort((a, b) => new Date(b.updatedAt || 0) - new Date(a.updatedAt || 0));
+});
 
 const avgDeliveryRating = computed(() => {
   const rated = deliveries.value.filter((d) => typeof d.rating === 'number' && d.rating > 0);
@@ -410,7 +417,7 @@ function formatDeliveredAt(iso) {
 const edit = reactive({
   name: '', email: '', phone: '', nif: '', cc: '', birthDate: '', address: '', iban: '',
   zones: [],
-  vehicle: { type: '', brand: '', model: '', color: '', plate: '', licenseNumber: '', insuranceRef: '', inspectionValidUntil: '' },
+  vehicle: { type: '', brand: '', model: '', color: '', plate: '' },
 });
 
 const adminNotesDraft = ref('');
@@ -506,9 +513,6 @@ async function doReactivate() {
 
 const uploading = reactive({
   docCcUrl: false,
-  docLicenseUrl: false,
-  docInsuranceUrl: false,
-  docInspectionUrl: false,
   docSelfieUrl: false,
   docIbanUrl: false,
 });
@@ -517,11 +521,11 @@ const docList = computed(() => {
   const u = c.value?.docUrls || {};
   const list = [
     { key: 'docCcUrl', label: 'Cartão de Cidadão', url: u.cc || '' },
-    { key: 'docLicenseUrl', label: 'Carta de Condução', url: u.license || '' },
-    { key: 'docInsuranceUrl', label: 'Apólice de Seguro', url: u.insurance || '' },
-    { key: 'docInspectionUrl', label: 'Certificado de Inspeção', url: u.inspection || '' },
     { key: 'docSelfieUrl', label: 'Selfie', url: u.selfie || '' },
     { key: 'docIbanUrl', label: 'Comprovativo IBAN', url: u.iban || '' },
+    { key: 'docLicenseUrl', label: 'Carta de Condução', url: u.license || '' },
+    { key: 'docInsuranceUrl', label: 'Seguro do Veículo', url: u.insurance || '' },
+    { key: 'docInspectionUrl', label: 'Ficha de Inspeção', url: u.inspection || '' },
   ];
   return list.filter((d) => !!d.url);
 });
@@ -552,6 +556,7 @@ function stateBadgeClass(state) {
     case COURIER_STATE.E04: return 'bo-badge--danger';
     case COURIER_STATE.E05: return 'bo-badge--neutral';
     case COURIER_STATE.E06: return 'bo-badge--success';
+    case COURIER_STATE.E07: return 'bo-badge--warn';
     default: return 'bo-badge--neutral';
   }
 }

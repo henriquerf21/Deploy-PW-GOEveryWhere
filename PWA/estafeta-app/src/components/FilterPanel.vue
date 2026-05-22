@@ -1,5 +1,4 @@
 <template>
-  <Teleport to="body">
     <!-- Overlay backdrop -->
     <Transition name="fade">
       <div v-if="modelValue" class="filter-overlay" @click="$emit('update:modelValue', false)"></div>
@@ -91,7 +90,6 @@
         </div>
       </div>
     </Transition>
-  </Teleport>
 </template>
 
 <script setup>
@@ -138,7 +136,7 @@ function stepTime(delta) {
   top: 0;
   right: 0;
   width: min(360px, 88vw);
-  height: 100dvh;
+  height: 100%;
   background: #fff;
   z-index: 9999;
   display: flex;

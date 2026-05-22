@@ -113,7 +113,7 @@
           </tr>
           <tr v-for="o in rows" :key="o.id" :class="{ 'urgent-row': o.is_urgent }">
             <td>
-              <span class="bo-mono">{{ o.id }}</span>
+              <span class="bo-mono">{{ o.orderId || o.id }}</span>
               <span v-if="o.is_urgent" class="bo-badge bo-badge--danger" style="margin-left: 6px;">Urgente</span>
             </td>
             <td>

@@ -15,26 +15,6 @@
       </div>
     </div>
 
-    <!-- Stats bar -->
-    <div class="stats-bar">
-      <div class="stat-item">
-        <span class="stat-label">Ganhos</span>
-        <span class="stat-value stat-value-green">€{{ store.shiftStats.earnings.toFixed(2) }}</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-label">Entregas</span>
-        <span class="stat-value">{{ store.shiftStats.completed }}</span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-label">Avaliação</span>
-        <span class="stat-value">{{ store.courier.rating }} <svg width="10" height="10" viewBox="0 0 24 24" fill="#f59e0b"><polygon points="12,2 15,9 22,9.5 17,14.5 18.5,22 12,18 5.5,22 7,14.5 2,9.5 9,9"/></svg></span>
-      </div>
-      <div class="stat-item">
-        <span class="stat-label">Aceitação</span>
-        <span class="stat-value">{{ store.courier.onTimeRate }}%</span>
-      </div>
-    </div>
-
     <!-- Filter chips & map -->
     <div class="page-body">
       <!-- Filter chips -->
@@ -110,6 +90,8 @@ import {
   startGpsTracking,
   stopGpsTracking,
 } from '../stores/courierStore.js';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 
 import { deliveryStateLabels } from '../constants.js';
 import DeliveryCard from '../components/DeliveryCard.vue';
@@ -119,7 +101,7 @@ const router = useRouter();
 const showFilters = ref(false);
 const mapEl = ref(null);
 let map = null;
-let leaflet = null;
+let leaflet = L;
 let layer = null;
 
 const courierPaused = computed(() => isPaused());
@@ -169,9 +151,6 @@ onMounted(async () => {
 
   await nextTick();
   if (!mapEl.value) return;
-  const L = await import('leaflet');
-  leaflet = L;
-  await import('leaflet/dist/leaflet.css');
   map = L.map(mapEl.value, { zoomControl: false, attributionControl: false }).setView([41.15, -8.63], 11);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
   layer = L.layerGroup().addTo(map);
@@ -190,13 +169,58 @@ watch(() => store.activeDeliveryId, (newId) => {
   }
 }, { immediate: true });
 
-watch([mapDeliveries, active], () => renderMap(), { deep: true });
+watch([mapDeliveries, active, () => store.gpsCoords], () => renderMap(), { deep: true });
 
 onBeforeUnmount(() => {
   if (pollInterval) clearInterval(pollInterval);
   map?.remove(); map = null; layer = null; leaflet = null;
 });
 
+let storeMapIcon=null;
+let customerMapIcon=null;
+let courierMapIcon=null;
+
+function getStoreMapIcon(){
+  if(!leaflet) return null;
+  if(!storeMapIcon){
+    storeMapIcon=leaflet.icon({
+      iconUrl:'/media/map/continente-pin.png',
+      iconSize:[40,48],
+      iconAnchor:[20,48],
+      popupAnchor:[0,-40],
+      className:'ge-map-marker-icon',
+    });
+  }
+  return storeMapIcon;
+}
+function getCustomerMapIcon(){
+  if(!leaflet) return null;
+  if(!customerMapIcon){
+    customerMapIcon=leaflet.icon({
+      iconUrl:'/media/map/customer-house-pin.png',
+      iconSize:[40,48],
+      iconAnchor:[20,48],
+      popupAnchor:[0,-40],
+      className:'ge-map-marker-icon',
+    });
+  }
+  return customerMapIcon;
+}
+function getCourierMapIcon(){
+  if(!leaflet) return null;
+  if(!courierMapIcon){
+    courierMapIcon=leaflet.icon({
+      iconUrl:'/media/map/courier-pin.png',
+      iconSize:[40,48],
+      iconAnchor:[20,48],
+      popupAnchor:[0,-40],
+      className:'ge-map-marker-icon ge-map-marker-icon--courier',
+    });
+  }
+  return courierMapIcon;
+}
+
+// Replace circle markers with icons in renderMap
 function renderMap() {
   if (!map || !layer || !leaflet) return;
   layer.clearLayers();
@@ -211,12 +235,23 @@ function renderMap() {
       opacity: 0.9, dashArray: isActive ? null : '8 7',
     });
     layer.addLayer(line);
-    layer.addLayer(leaflet.circleMarker([p.lat, p.lng], { radius: 7, fillColor: '#ff9800', color: '#fff', weight: 2, fillOpacity: 0.95 }));
-    layer.addLayer(leaflet.circleMarker([dst.lat, dst.lng], { radius: 7, fillColor: isActive ? '#22c55e' : '#2563eb', color: '#fff', weight: 2, fillOpacity: 0.95 }));
+    // Pickup marker
+    layer.addLayer(leaflet.marker([p.lat, p.lng], { icon: getStoreMapIcon() }));
+    // Destination marker
+    layer.addLayer(leaflet.marker([dst.lat, dst.lng], { icon: getCustomerMapIcon() }));
     points.push([p.lat, p.lng], [dst.lat, dst.lng]);
+    // No longer draw courier from server data
   }
+
+  // Always draw the courier's real-time local GPS location
+  if (store.gpsCoords && store.gpsCoords.lat !== 0) {
+    layer.addLayer(leaflet.marker([store.gpsCoords.lat, store.gpsCoords.lng], { icon: getCourierMapIcon(), zIndexOffset: 1000 }));
+    points.push([store.gpsCoords.lat, store.gpsCoords.lng]);
+  }
+
   if (points.length > 1) map.fitBounds(leaflet.latLngBounds(points), { padding: [20, 20], maxZoom: 13 });
 }
+
 </script>
 
 <style scoped>

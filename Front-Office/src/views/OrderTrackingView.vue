@@ -3,9 +3,16 @@
     <SiteHeader />
 
     <main class="cf-checkout-main tracking-main">
-      <header class="track-head">
-        <p class="cf-checkout-kicker">Em tempo real</p>
-        <h1 class="cf-checkout-title">Acompanhamento</h1>
+      <header class="track-head" style="display: flex; justify-content: space-between; align-items: flex-end;">
+        <div>
+          <p class="cf-checkout-kicker">Em tempo real</p>
+          <h1 class="cf-checkout-title">Acompanhamento</h1>
+        </div>
+        <button class="cf-btn cf-btn-secondary" style="padding: 8px 16px; font-size: 13px; height: auto;" @click="handleManualRefresh" :disabled="isRefreshing">
+          <svg v-if="isRefreshing" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
+          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg>
+          <span style="margin-left: 6px;">Atualizar</span>
+        </button>
       </header>
 
       <div class="cf-tabs" role="tablist">
@@ -42,7 +49,7 @@
 
         <div class="details-card">
           <div class="order-header">
-            <h3>Encomenda #{{ order.id }}</h3>
+            <h3>Encomenda {{ order.orderId || '#' + order.id }}</h3>
             <div class="order-items-list">
               <span v-for="item in order.products" :key="item.name" class="order-items">
                 <svg width="10" height="10" viewBox="0 0 24 24" fill="#10b981" style="margin-right:8px"><circle cx="12" cy="12" r="8"/></svg>
@@ -319,6 +326,14 @@ const toastMessage = ref('');
 let pollingTimer = null;
 let currentOrderRoom = null;
 
+const isRefreshing = ref(false);
+
+async function handleManualRefresh() {
+  isRefreshing.value = true;
+  await fetchUserOrders();
+  setTimeout(() => { isRefreshing.value = false; }, 600);
+}
+
 // ── GPS REAL DO ESTAFETA ────────────────────────────────────────────
 const courierGps = reactive({ lat: null, lng: null });
 const dynamicEta = ref(0);
@@ -444,27 +459,19 @@ const showCourierCard = computed(() => {
   return statusFlow.includes(order.value.status);
 });
 
-async function fetchCourierInfo() {
-  if (!order.value?.documentId) return;
-  try {
-    // Fonte de verdade: Delivery da encomenda.
-    const deliveryRes = await fetch(`${API_URL}/deliveries?filters[order][documentId][$eq]=${order.value.documentId}&populate[courier][populate]=docSelfie&status=published`);
-    const deliveryJson = await deliveryRes.json();
-    const deliveryData = deliveryJson.data?.[0];
+function fetchCourierInfo() {
+  if (!order.value) return;
+  
+  const deliveryData = order.value.delivery || null;
+  const courierData = order.value.courier || null;
 
-    const rawDeliveryStatus = deliveryData?.delivery_status
-      || deliveryData?.attributes?.delivery_status
-      || null;
-    deliveryStatusCode.value = toStatusCode(rawDeliveryStatus);
+  const rawDeliveryStatus = deliveryData?.delivery_status || null;
+  deliveryStatusCode.value = toStatusCode(rawDeliveryStatus);
 
-    const courierRaw = deliveryData?.courier?.data?.attributes || deliveryData?.courier || null;
-    if (courierRaw && courierRaw.fullName && isCourierAcceptedStatus(deliveryStatusCode.value)) {
-      setCourierInfo(courierRaw);
-    } else {
-      courierInfo.value = null;
-    }
-  } catch (err) {
-    console.warn('Failed to fetch courier info:', err);
+  if (courierData && courierData.fullName && isCourierAcceptedStatus(deliveryStatusCode.value)) {
+    setCourierInfo(courierData);
+  } else {
+    courierInfo.value = null;
   }
 }
 
@@ -571,6 +578,24 @@ onMounted(async () => {
     await refreshOrderAndCourierData();
   });
 
+  socket.on('chat_message', (data) => {
+    if (order.value && String(data.room) === String(order.value.documentId)) {
+      order.value.chatHistory = data.chatHistory || [...(order.value.chatHistory || []), data.message];
+      
+      if (!openChat.value && data.message?.sender === 'courier') {
+        showStateToast('Nova mensagem do estafeta!');
+      }
+
+      if (openChat.value) {
+        setTimeout(() => {
+          if (chatContainer.value) {
+            chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
+          }
+        }, 100);
+      }
+    }
+  });
+
   pollingTimer = setInterval(async () => {
     if (order.value && !ORDER_STATES[order.value.status]?.terminal) {
       const oldStatus = order.value.status;
@@ -672,13 +697,15 @@ const timelineSteps = computed(() => {
   const s03WasTriggered = !!order.value.adminMessage;
 
   const flow = [
-    { state: 'S-01', label: 'Pedido Recebido', optional: false },
-    { state: 'S-02', label: 'Em Análise', optional: false },
-    { state: 'S-03', label: 'Info Solicitada', optional: true, triggered: s03WasTriggered },
-    { state: 'S-05', label: 'Aprovada', optional: false },
-    { state: 'S-07', label: 'Preparação', optional: false },
-    { state: 'S-09', label: 'Em Trânsito', optional: false },
-    { state: 'S-11', label: 'Entregue', optional: false },
+    { state: 'S-01', label: 'Pedido recebido, aguarda confirmação', optional: false },
+    { state: 'S-02', label: 'Pedido em análise', optional: false },
+    { state: 'S-03', label: 'Informação adicional solicitada', optional: true, triggered: s03WasTriggered },
+    { state: 'S-05', label: 'Pedido aprovado', optional: false },
+    { state: 'S-07', label: 'Estafeta atribuído', optional: false },
+    { state: 'S-08', label: 'Estafeta na loja a recolher encomenda', optional: false },
+    { state: 'S-09', label: 'Em trânsito para a tua morada', optional: false },
+    { state: 'S-10', label: 'Estafeta chegou ao destino', optional: false },
+    { state: 'S-11', label: 'Entrega concluída ✓', optional: false },
   ];
   const currentFlow = ['S-01','S-02','S-03','S-05','S-06','S-07','S-08','S-09','S-10','S-11'];
   const currentIdx = currentFlow.indexOf(order.value.status);

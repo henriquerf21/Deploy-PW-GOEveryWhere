@@ -128,7 +128,7 @@ import { ref, reactive, onMounted, computed } from 'vue';
 import { useRouter } from 'vue-router';
 import SiteHeader from '../components/SiteHeader.vue';
 import SiteFooter from '../components/SiteFooter.vue';
-import { useAuthStore, isAuthenticated } from '../stores/authStore.js';
+import { useAuthStore, isAuthenticated, fetchMe } from '../stores/authStore.js';
 import { API_URL } from '../config/env.js';
 
 const router = useRouter();
@@ -188,8 +188,8 @@ async function saveSettings() {
         'Authorization': `Bearer ${auth.token}`
       },
       body: JSON.stringify({
-        username: user.value.username, // Obrigatório no esquema
-        email: user.value.email,       // Obrigatório no esquema
+        username: user.value.username,
+        email: user.value.email,
         firstName: firstName,
         lastName: lastName,
         phone:             form.phone,
@@ -207,9 +207,8 @@ async function saveSettings() {
       return;
     }
 
-    // Atualiza o estado global na store para refletir no checkout
-    const updated = await response.json();
-    auth.user = { ...auth.user, ...updated };
+    // Atualiza o estado global na store e no localStorage para refletir no checkout
+    await fetchMe();
 
     // 2. Alterar password se preenchida (apenas para login por email/password) [cite: 17, 121, 123]
     if (user.value?.provider !== 'google' && form.newPassword) {

@@ -17,8 +17,8 @@ export const ORDER_STATES = {
   'S-03': { label: 'Info Adicional Solicitada',  color: '#f97316', icon: '❓' },
   'S-04': { label: 'Rejeitado',                  color: '#ef4444', icon: '❌', terminal: true },
   'S-05': { label: 'Aprovado',                   color: '#3b82f6', icon: '✔️' },
-  'S-06': { label: 'Aguardando Aceitação',       color: '#8b5cf6', icon: '⏳' },
-  'S-07': { label: 'Aceite pelo Estafeta',       color: '#06b6d4', icon: '🧑‍🦺' },
+  'S-06': { label: 'Aprovado',                   color: '#3b82f6', icon: '✔️' },
+  'S-07': { label: 'Estafeta Atribuído',         color: '#06b6d4', icon: '🧑‍🦺' },
   'S-08': { label: 'Em Recolha',                 color: '#0ea5e9', icon: '🏪' },
   'S-09': { label: 'Em Trânsito',                color: '#00c853', icon: '🚀' },
   'S-10': { label: 'No Destino',                 color: '#10b981', icon: '📍' },
@@ -338,6 +338,8 @@ export async function fetchUserOrders() {
         clientReply: clientRep,
         deliveryCoords,
         chatHistory: attr.chatHistory || [],
+        courier: attr.courier || null,
+        delivery: attr.delivery || null,
       };
     });
 
@@ -399,6 +401,10 @@ export async function submitOrder() {
         store_name: store.delivery.assignedStore.name,
         storeLatitude: store.delivery.assignedStore?.lat ?? null,
         storeLongitude: store.delivery.assignedStore?.lng ?? null,
+        deliveryLatitude: store.delivery.gpsLat ?? null,
+        deliveryLongitude: store.delivery.gpsLng ?? null,
+        deliveryAddress: store.delivery.address || '',
+        deliveryCity: store.delivery.city || '',
         items: {
           list: cartProducts.value.map(p => ({ sku: p.sku || '', name: p.name, qty: p.qty })),
           deliveryCoords: {
@@ -415,7 +421,7 @@ export async function submitOrder() {
         estimatedTime: estimatedETA.value,
         user: authState.user.id,
         go_points_redemption: store.payment.goPointsRedemption || null,
-        go_points_used: pointsUsed,
+        go_points_used: Number(pointsUsed) || 0,
         notes: store.delivery.instructions || '',
       }
     };

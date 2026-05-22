@@ -139,6 +139,16 @@
             <span class="meta-item"><Truck :size="15" /> €{{ deliveryFeeFmt }} portes</span>
           </div>
 
+          <button
+            type="button"
+            class="cf-btn-gps"
+            style="margin-bottom: 0.75rem; padding: 0.6rem; font-size: 0.85rem; width: auto; display: inline-flex;"
+            @click="geocodeAddress"
+          >
+            <MapPin :size="14" />
+            Atualizar no mapa
+          </button>
+
           <div class="store-map-wrap">
             <DeliveryRouteMap
               v-if="deliveryDestCoords"
@@ -390,24 +400,52 @@ function geocodeAddress() {
   if (!city && !postal) return;
 
   geocodeTimer = setTimeout(async () => {
-    const query = [address, postal, city, 'Portugal'].filter(Boolean).join(', ');
+    // Array de tentativas de queries: do mais exato para o mais abrangente
+    const queries = [
+      [address, postal, city, 'Portugal'].filter(Boolean).join(', '),
+      [postal, city, 'Portugal'].filter(Boolean).join(', '),
+      [city, 'Portugal'].filter(Boolean).join(', ')
+    ];
+
     try {
-      const response = await fetch(
-        `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=pt`,
-        { headers: { 'Accept-Language': 'pt-PT' } }
-      );
-      const results = await response.json();
-      if (results.length > 0) {
-        const lat = parseFloat(results[0].lat);
-        const lng = parseFloat(results[0].lon);
+      let lat = null;
+      let lng = null;
+
+      for (const query of queries) {
+        if (!query.trim()) continue;
+        const response = await fetch(
+          `https://nominatim.openstreetmap.org/search?format=json&q=${encodeURIComponent(query)}&limit=1&countrycodes=pt`,
+          { headers: { 'Accept-Language': 'pt-PT' } }
+        );
+        const results = await response.json();
+        
+        if (results.length > 0) {
+          lat = parseFloat(results[0].lat);
+          lng = parseFloat(results[0].lon);
+          break; // Encontrou resultado válido, não tenta queries mais abrangentes
+        }
+      }
+
+      if (lat !== null && lng !== null) {
         // Guardar coordenadas do destino para o mapa
         store.delivery.gpsLat = lat;
         store.delivery.gpsLng = lng;
         // Recalcular loja mais próxima com coordenadas reais
         findNearestStore(lat, lng);
+      } else {
+        console.warn('Geocoding falhou para todas as tentativas. Usando coordenadas da loja como fallback.');
+        // Fallback final: usar coordenadas da loja se existirem
+        if (store.delivery.assignedStore?.lat && store.delivery.assignedStore?.lng) {
+            store.delivery.gpsLat = store.delivery.assignedStore.lat;
+            store.delivery.gpsLng = store.delivery.assignedStore.lng;
+        } else {
+            // Centro de Portugal genérico se tudo falhar
+            store.delivery.gpsLat = 39.3999;
+            store.delivery.gpsLng = -8.2245;
+        }
       }
     } catch (err) {
-      console.warn('Geocoding falhou, a usar fallback:', err);
+      console.warn('Erro fatal no Geocoding, a usar fallback:', err);
     }
   }, 800); // Debounce de 800ms para não sobrecarregar a API
 }

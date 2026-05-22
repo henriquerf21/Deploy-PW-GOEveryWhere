@@ -45,6 +45,19 @@ export default factories.createCoreController('api::courier-estafeta.courier-est
       return ctx.forbidden('Entrega não pertence ao estafeta autenticado.');
     }
 
+    // BO-2: Block state updates if the parent order has been cancelled or delivered
+    const parentOrder = target?.order;
+    const orderStatus = String(parentOrder?.order_status || '');
+    const TERMINAL_ORDER_STATUSES = [
+      'S-04 Rejeitado',
+      'S-11 Entregue',
+      'S-13 Cancelado pelo Cliente',
+      'S-14 Cancelado pelo Admin',
+    ];
+    if (TERMINAL_ORDER_STATUSES.some(s => orderStatus === s)) {
+      return ctx.badRequest(`Pedido já está em estado terminal (${orderStatus.split(' ').slice(0, 2).join(' ')}). Não é possível atualizar a entrega.`);
+    }
+
     const payload = (ctx.request.body || {}) as any;
     const data = payload?.data || {};
     const updated = await strapi.documents('api::delivery.delivery').update({
@@ -96,6 +109,10 @@ export default factories.createCoreController('api::courier-estafeta.courier-est
     });
     if (!courier) return ctx.notFound('Estafeta não encontrado.');
 
+    const courierStatus = String((courier as any).courier_status || '');
+    if (courierStatus.startsWith('E-03')) return ctx.forbidden('Conta rejeitada.');
+    if (courierStatus.startsWith('E-04')) return ctx.forbidden('Conta suspensa.');
+
     const payload = (ctx.request.body || {}) as any;
     const data = payload?.data || {};
     const updated = await strapi.documents('api::courier-estafeta.courier-estafeta').update({
@@ -110,6 +127,16 @@ export default factories.createCoreController('api::courier-estafeta.courier-est
   async myDeliveries(ctx: any) {
     const auth = await getCourierAuth(strapi, ctx);
     if (!auth) return ctx.unauthorized('Token de estafeta inválido.');
+
+    const courier = await strapi.db.query('api::courier-estafeta.courier-estafeta').findOne({
+      where: { documentId: auth.courierDocumentId },
+    });
+    if (!courier) return ctx.notFound('Estafeta não encontrado.');
+
+    const courierStatus = String((courier as any).courier_status || '');
+    if (courierStatus.startsWith('E-01')) return ctx.forbidden('Conta pendente de verificação.');
+    if (courierStatus.startsWith('E-03')) return ctx.forbidden('Conta rejeitada.');
+    if (courierStatus.startsWith('E-04')) return ctx.forbidden('Conta suspensa.');
 
     // Fetch all non-terminal deliveries for this courier
     const deliveries = await strapi.documents('api::delivery.delivery').findMany({
@@ -128,7 +155,13 @@ export default factories.createCoreController('api::courier-estafeta.courier-est
       sort: { createdAt: 'desc' } as any,
     });
 
-    ctx.body = { data: deliveries };
+    ctx.body = { 
+      data: deliveries,
+      meta: {
+        courier_status: courierStatus,
+        isOnline: !!(courier as any).isOnline
+      }
+    };
   },
 
   async login(ctx) {

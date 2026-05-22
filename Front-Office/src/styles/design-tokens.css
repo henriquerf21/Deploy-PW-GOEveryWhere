@@ -79,3 +79,12 @@
     transition: none;
   }
 }
+.leaflet-marker-icon { max-width: none !important; max-height: none !important; background: transparent; border: none; outline: none; }
+.ge-map-marker-icon {
+  background: transparent !important;
+  border: none !important;
+}
+.ge-store-marker-icon {
+  border-radius: 50% !important;
+  object-fit: cover !important;
+}

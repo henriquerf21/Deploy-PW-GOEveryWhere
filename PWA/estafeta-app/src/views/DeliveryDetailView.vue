@@ -42,6 +42,7 @@
         </div>
         <div ref="routeMapEl" class="route-map"></div>
         <div class="map-controls">
+          <button v-if="['E-09', 'E-10', 'E-11', 'E-12'].includes(delivery.state)" class="map-zoom" style="width:auto; padding:0 8px; font-size:12px; margin-bottom:8px" @click="handleSimulate">Dev: Simular</button>
           <button class="map-zoom" @click="zoomIn">+</button>
           <button class="map-zoom" @click="zoomOut">−</button>
         </div>
@@ -62,7 +63,7 @@
       </div>
 
       <!-- Client / Destinatário (Figma: avatar + name + phone + chat + call) -->
-      <div class="section-card client-card">
+      <div class="section-card client-card" v-if="delivery.destination.name !== 'Cliente' || delivery.destination.phone">
         <div class="client-avatar">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="1.5"><circle cx="12" cy="8" r="4"/><path d="M20 21a8 8 0 10-16 0"/></svg>
         </div>
@@ -75,7 +76,7 @@
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1b8a4a" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
             <div v-if="unreadCount > 0" class="chat-badge">{{ unreadCount }}</div>
           </a>
-          <a :href="'tel:' + delivery.destination.phone" class="action-btn action-call">
+          <a v-if="delivery.destination.phone" :href="'tel:' + delivery.destination.phone" class="action-btn action-call">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#1b8a4a" stroke-width="2"><path d="M22 16.92v3a2 2 0 01-2.18 2 19.79 19.79 0 01-8.63-3.07 19.5 19.5 0 01-6-6 19.79 19.79 0 01-3.07-8.67A2 2 0 014.11 2h3a2 2 0 012 1.72 12.84 12.84 0 00.7 2.81 2 2 0 01-.45 2.11L8.09 9.91a16 16 0 006 6l1.27-1.27a2 2 0 012.11-.45 12.84 12.84 0 002.81.7A2 2 0 0122 16.92z"/></svg>
           </a>
         </div>
@@ -121,9 +122,18 @@
       <div class="section-card instructions-card" v-if="delivery.instructions">
         <div class="instr-header">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="#f59e0b" stroke="none"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01" fill="none" stroke="#fff" stroke-width="2"/></svg>
-          <span class="instr-title">Instruções especiais</span>
+          <span class="instr-title">Instruções da operação</span>
         </div>
         <p class="instr-text">{{ delivery.instructions }}</p>
+      </div>
+
+      <!-- Notas do Cliente -->
+      <div class="section-card instructions-card" v-if="delivery.deliveryNotes" style="background: #eff6ff; border-color: #bfdbfe;">
+        <div class="instr-header">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="#3b82f6" stroke="none"><circle cx="12" cy="12" r="10"/><path d="M12 8v4M12 16h.01" fill="none" stroke="#fff" stroke-width="2"/></svg>
+          <span class="instr-title" style="color: #1e3a8a;">Notas do cliente</span>
+        </div>
+        <p class="instr-text" style="color: #1e40af;">{{ delivery.deliveryNotes }}</p>
       </div>
 
 
@@ -151,11 +161,17 @@
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
           {{ ctaLabel }}
         </button>
-        <!-- E-11: Cheguei ao destino (amber) -->
-        <button v-else-if="delivery.state === 'E-11'" class="cta-btn cta-amber" @click="handleCTA">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>
-          {{ ctaLabel }}
-        </button>
+        <!-- E-11: Cheguei ao destino (amber) + Waze -->
+        <template v-else-if="delivery.state === 'E-11'">
+          <button class="cta-btn cta-green" @click="handleCTA">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>
+            {{ ctaLabel }}
+          </button>
+          <a :href="wazeRouteFull" target="_blank" rel="noopener" class="cta-btn cta-amber">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
+            Iniciar no Waze
+          </a>
+        </template>
         <!-- E-12: Confirmar entrega (green) -->
         <button v-else class="cta-btn cta-green" @click="handleCTA">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
@@ -241,10 +257,13 @@
 <script setup>
 import { computed, ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
+import L from 'leaflet';
+import 'leaflet/dist/leaflet.css';
 import {
   getDeliveryById, acceptDelivery, advanceDeliveryState,
   markDeliveryImpossible, wazeLink, fetchDeliveries, sendDeliveryChatMessage,
-  declineDeliveryTimeout, startGpsTracking, stopGpsTracking, getLastGpsCoords,
+  declineDeliveryTimeout, startGpsTracking, stopGpsTracking, getLastGpsCoords, 
+  getCurrentRouteGeoJSON, fetchRouteGeoJSON, store, startSimulatedRoute
 } from '../stores/courierStore.js';
 import { DELIVERY_STATE, deliveryStateLabels, STATE_CTA } from '../constants.js';
 import StatusStepper from '../components/StatusStepper.vue';
@@ -252,7 +271,11 @@ import StatusStepper from '../components/StatusStepper.vue';
 const props = defineProps({ id: String });
 const router = useRouter();
 const routeMapEl = ref(null);
-let routeMap = null; let routeLayer = null; let leaflet = null;
+let timerInterval = null;
+let chatPollTimer = null;
+let routeMap = null;
+let routeLayer = null;
+let leaflet = L;
 let pickupMarkerIcon = null;
 let destinationMarkerIcon = null;
 let courierMarkerIcon = null;
@@ -374,7 +397,6 @@ const timeEntries = computed(() => {
 
 // Timer for E-08
 const timerSeconds = ref(300);
-let timerInterval = null;
 const timerDisplay = computed(() => {
   if (timerSeconds.value <= 0) return '0:00';
   const m = Math.floor(timerSeconds.value / 60);
@@ -393,20 +415,15 @@ function calculateRemainingSeconds() {
 function zoomIn() { routeMap?.zoomIn(); }
 function zoomOut() { routeMap?.zoomOut(); }
 
-function svgPinDataUri(fill, glyph) {
-  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="34" height="42" viewBox="0 0 34 42"><defs><filter id="s" x="-20%" y="-20%" width="140%" height="140%"><feDropShadow dx="0" dy="2" stdDeviation="2" flood-color="rgba(0,0,0,0.35)"/></filter></defs><g filter="url(#s)"><path d="M17 2C9.82 2 4 7.82 4 15c0 8.7 9.83 18.9 12.27 21.31a1 1 0 0 0 1.46 0C20.17 33.9 30 23.7 30 15 30 7.82 24.18 2 17 2z" fill="${fill}"/><circle cx="17" cy="15" r="9" fill="#fff"/><text x="17" y="19" text-anchor="middle" font-size="11" font-family="Arial, sans-serif">${glyph}</text></g></svg>`;
-  return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
-}
-
 function getPickupIcon() {
   if (!leaflet) return null;
   if (!pickupMarkerIcon) {
     pickupMarkerIcon = leaflet.icon({
-      iconUrl: svgPinDataUri('#f59e0b', '🏬'),
-      iconSize: [28, 34],
-      iconAnchor: [14, 34],
-      popupAnchor: [0, -30],
-      className: 'ge-map-marker-icon',
+      iconUrl: '/media/map/continente-pin.png',
+      iconSize: [40, 48],
+      iconAnchor: [20, 48],
+      popupAnchor: [0, -40],
+      className: 'ge-map-marker-icon ge-store-marker-icon',
     });
   }
   return pickupMarkerIcon;
@@ -416,10 +433,10 @@ function getDestinationIcon() {
   if (!leaflet) return null;
   if (!destinationMarkerIcon) {
     destinationMarkerIcon = leaflet.icon({
-      iconUrl: svgPinDataUri('#16a34a', '🏠'),
-      iconSize: [28, 34],
-      iconAnchor: [14, 34],
-      popupAnchor: [0, -30],
+      iconUrl: '/media/map/customer-house-pin.png',
+      iconSize: [40, 48],
+      iconAnchor: [20, 48],
+      popupAnchor: [0, -40],
       className: 'ge-map-marker-icon',
     });
   }
@@ -430,10 +447,10 @@ function getCourierIcon() {
   if (!leaflet) return null;
   if (!courierMarkerIcon) {
     courierMarkerIcon = leaflet.icon({
-      iconUrl: svgPinDataUri('#2563eb', '🛵'),
-      iconSize: [30, 36],
-      iconAnchor: [15, 36],
-      popupAnchor: [0, -32],
+      iconUrl: '/media/map/courier-pin.png',
+      iconSize: [40, 48],
+      iconAnchor: [20, 48],
+      popupAnchor: [0, -40],
       className: 'ge-map-marker-icon ge-map-marker-icon--courier',
     });
   }
@@ -464,7 +481,13 @@ onMounted(() => {
   }
 });
 
-let chatPollTimer = null;
+let mapInitTimeout = null;
+
+function handleSimulate() {
+  if (delivery.value) {
+    startSimulatedRoute(delivery.value.pickup, delivery.value.destination);
+  }
+}
 
 onMounted(async () => {
   await nextTick();
@@ -475,10 +498,15 @@ onMounted(async () => {
     fetchDeliveries();
   }, 5000);
 
-  const L = await import('leaflet');
-  leaflet = L;
-  await import('leaflet/dist/leaflet.css');
-  const center = [delivery.value.pickup.lat, delivery.value.pickup.lng];
+  const p = delivery.value.pickup;
+  const d = delivery.value.destination;
+
+  // Pre-fetch the GeoJSON route if we don't have it yet, so we can draw the road line immediately!
+  if (p?.lat && d?.lat && !getCurrentRouteGeoJSON()) {
+    await fetchRouteGeoJSON(p, d);
+  }
+
+  const center = [p.lat, p.lng];
   routeMap = L.map(routeMapEl.value, { zoomControl: false, attributionControl: false }).setView(center, 12);
   L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(routeMap);
   routeLayer = L.layerGroup().addTo(routeMap);
@@ -486,7 +514,7 @@ onMounted(async () => {
   setTimeout(() => routeMap?.invalidateSize(), 160);
 });
 
-watch(delivery, () => renderRouteMap(), { deep: true });
+watch([delivery, () => store.gpsCoords, () => store.currentRouteGeoJSON], () => renderRouteMap(), { deep: true });
 
 onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval);
@@ -522,6 +550,7 @@ async function handleImpossible() {
 
 let lastRenderedState = null;
 let lastRenderedGps = null;
+let lastRenderedRoute = null;
 
 function renderRouteMap() {
   if (!delivery.value || !routeMap || !routeLayer || !leaflet) return;
@@ -533,25 +562,39 @@ function renderRouteMap() {
   const s = delivery.value.state;
   const gps = getLastGpsCoords();
   const gpsKey = gps ? `${gps.lat},${gps.lng}` : null;
+  const routeGeoJSON = getCurrentRouteGeoJSON();
+  const routeKey = routeGeoJSON ? 'has-route' : 'no-route';
   
-  // Only redraw if state or GPS actually changed
-  if (lastRenderedState === s && lastRenderedGps === gpsKey) return;
+  // Only redraw if state, GPS, or Route actually changed
+  if (lastRenderedState === s && lastRenderedGps === gpsKey && lastRenderedRoute === routeKey) return;
   
   routeLayer.clearLayers();
   
   const routeColor = s === 'E-09' ? '#22c55e' : s === 'E-10' ? '#f59e0b' : s === 'E-11' ? '#3b82f6' : '#22c55e';
   const isDashed = !['E-13'].includes(s);
 
-  routeLayer.addLayer(leaflet.polyline([[p.lat, p.lng], [d.lat, d.lng]], {
-    color: routeColor, weight: 5, opacity: 0.92,
-    dashArray: isDashed ? '10 8' : null,
-  }));
+  if (routeGeoJSON) {
+    routeLayer.addLayer(leaflet.geoJSON(routeGeoJSON, {
+      style: {
+        color: routeColor,
+        weight: 5,
+        opacity: 0.92,
+        dashArray: isDashed ? '10 8' : null
+      }
+    }));
+  } else {
+    routeLayer.addLayer(leaflet.polyline([[p.lat, p.lng], [d.lat, d.lng]], {
+      color: routeColor, weight: 5, opacity: 0.92,
+      dashArray: isDashed ? '10 8' : null,
+    }));
+  }
+
   routeLayer.addLayer(leaflet.marker([p.lat, p.lng], { icon: getPickupIcon() }));
   routeLayer.addLayer(leaflet.marker([d.lat, d.lng], { icon: getDestinationIcon() }));
 
   const points = [[p.lat, p.lng], [d.lat, d.lng]];
-  if (['E-09', 'E-10', 'E-11', 'E-12'].includes(s)) {
-    if (gps && gps.lat && gps.lng) {
+  if (['E-07', 'E-08', 'E-09', 'E-10', 'E-11', 'E-12'].includes(s)) {
+    if (gps && gps.lat !== 0 && gps.lng !== 0) {
       routeLayer.addLayer(leaflet.marker([gps.lat, gps.lng], { icon: getCourierIcon() }));
       points.push([gps.lat, gps.lng]);
     }
@@ -559,11 +602,18 @@ function renderRouteMap() {
   
   // Only fitBounds on the very first render or state change
   if (lastRenderedState !== s) {
-    routeMap.fitBounds(leaflet.latLngBounds(points), { padding: [24, 24], maxZoom: 14 });
+    if (routeGeoJSON) {
+        // If we have a GeoJSON route, fit to the GeoJSON bounds
+        const geoJsonLayer = leaflet.geoJSON(routeGeoJSON);
+        routeMap.fitBounds(geoJsonLayer.getBounds(), { padding: [24, 24], maxZoom: 14 });
+    } else {
+        routeMap.fitBounds(leaflet.latLngBounds(points), { padding: [24, 24], maxZoom: 14 });
+    }
   }
   
   lastRenderedState = s;
   lastRenderedGps = gpsKey;
+  lastRenderedRoute = routeKey;
 }
 </script>
 

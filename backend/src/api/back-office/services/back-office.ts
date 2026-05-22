@@ -62,6 +62,7 @@ const DELIVERY_STATUSES = new Set([
 ]);
 
 function toNum(v: any, fallback = 0) {
+  if (typeof v === 'string') v = v.replace(',', '.');
   const n = Number(v);
   return Number.isFinite(n) ? n : fallback;
 }
@@ -178,6 +179,7 @@ function mapCourierStatus(strapiStatus?: string, isOnline?: boolean) {
   if (strapiStatus === COURIER_STATE.E03) return 'E-03';
   if (strapiStatus === COURIER_STATE.E04) return 'E-04';
   if (strapiStatus === COURIER_STATE.E05) return 'E-05';
+  if (strapiStatus === 'E-07 Em Pausa') return 'E-07';
   if (strapiStatus === COURIER_STATE.E06 || isOnline) return 'E-06';
   return 'E-05';
 }
@@ -281,6 +283,7 @@ function buildPublicOrder(entry: any) {
     clientReply: attrs.clientReply || null,
     deliveryAddress: deliveryCoords.address || attrs.deliveryAddress || '',
     deliveryCity: deliveryCoords.city || '',
+    deliveryNotes: attrs.deliveryNotes || null,
     items: Array.isArray(items.list) ? items.list : (Array.isArray(items) ? items : []),
     go_points_used: toNum(attrs.go_points_used, 0),
     go_points_redemption: attrs.go_points_redemption || null,
@@ -357,7 +360,7 @@ function buildPublicCourier(entry: any, assignedCount = 0) {
       model: attrs.vehicleModel || '',
       color: attrs.vehicleColor || '',
       plate: attrs.vehiclePlate || '',
-      licenseNumber: attrs.licenseNumber || '',
+      licenseNumber: attrs.licenseNo || '',
     },
     docs: {
       idDoc: !!ccUrl || !!attrs.cc,
@@ -1272,7 +1275,9 @@ export default ({ strapi }: any) => ({
       (err as any).code = 'no_provider';
       throw err;
     }
-    await emailService.send({ to, subject, text });
+    emailService.send({ to, subject, text }).catch((err: any) => {
+      console.error('[Email Error]', err.message);
+    });
   },
 
   async approveOrder(ctx: BoCtx | undefined, publicId: string, payload: any) {
@@ -1988,6 +1993,15 @@ export default ({ strapi }: any) => ({
       const shouldOnline = !!payload.online;
       patch.isOnline = shouldOnline;
       patch.courier_status = shouldOnline ? COURIER_STATE.E06 : COURIER_STATE.E05;
+    } else if (action === 'change_status') {
+      const s = String(payload.status || '');
+      if (s === 'E-01') { patch.courier_status = COURIER_STATE.E01; patch.isOnline = false; }
+      else if (s === 'E-02') { patch.courier_status = COURIER_STATE.E02; patch.isOnline = false; }
+      else if (s === 'E-03') { patch.courier_status = COURIER_STATE.E03; patch.isOnline = false; }
+      else if (s === 'E-04') { patch.courier_status = COURIER_STATE.E04; patch.isOnline = false; }
+      else if (s === 'E-05') { patch.courier_status = COURIER_STATE.E05; patch.isOnline = false; }
+      else if (s === 'E-06') { patch.courier_status = COURIER_STATE.E06; patch.isOnline = true; }
+      else if (s === 'E-07') { patch.courier_status = 'E-07 Em Pausa'; patch.isOnline = true; }
     } else if (action === 'set_max') {
       patch.maxSimultaneousDeliveries = Math.max(1, Math.min(10, toNum(payload.maxConcurrent, target.maxSimultaneousDeliveries || 1)));
     } else if (action === 'save_notes') {
@@ -2019,7 +2033,7 @@ export default ({ strapi }: any) => ({
     const stores = await this.getContinentStores();
     return {
       stores: stores.filter((s: any) => s.isActive),
-      couriers: couriers.filter((c: any) => c.online || c.state === 'E-06'),
+      couriers: couriers.filter((c: any) => c.online || c.state === 'E-06' || c.state === 'E-07'),
       activeOrders,
     };
   },
@@ -2037,6 +2051,7 @@ export default ({ strapi }: any) => ({
         reviews: {
           select: ['rating'],
         },
+        go_point: true,
       },
     });
     return users.map((u: any) => {
@@ -2055,6 +2070,7 @@ export default ({ strapi }: any) => ({
         zone: u.zone || 'Outro',
         ordersCount: orders.length,
         totalSpent: Math.round(totalSpent * 100) / 100,
+        goPoints: u.go_point?.points || 0,
         lastOrderAt,
         avgRating: Math.round(avgRating * 10) / 10,
         nif: u.nif || '',

@@ -39,11 +39,7 @@
         <h1 class="login-panel__title">Painel Admin</h1>
         <p class="login-panel__sub">Acesso restrito a administradores</p>
 
-        <div v-if="googleClientId" ref="googleBtnRef" class="google-host" />
 
-        <div v-if="googleClientId" class="login-divider">
-          <span>ou com credenciais</span>
-        </div>
 
         <form class="login-form" @submit.prevent="onSubmit">
           <label class="login-label">Email corporativo</label>
@@ -141,49 +137,7 @@ async function onSubmit() {
   }
 }
 
-async function handleGoogleCredential(response) {
-  const p = parseGoogleJwt(response.credential);
-  if (!p?.email) {
-    toast('Resposta Google inválida.', 'error');
-    return;
-  }
-  try {
-    const data = await boLoginGoogle({
-      email: p.email,
-      name: p.name || p.email,
-      picture: p.picture || '',
-      given_name: p.given_name || '',
-      family_name: p.family_name || '',
-    });
-    setBoSession({ ...data.user, jwt: data.jwt });
-    toast('Sessão Google OAuth 2.0.', 'success');
-    goDash();
-  } catch (err) {
-    toast(err.message || 'Falha no login Google.', 'error');
-  }
-}
 
-onMounted(async () => {
-  if (!googleClientId) return;
-  try {
-    await loadGoogleScript();
-    await nextTick();
-    if (!googleBtnRef.value || !window.google?.accounts?.id) return;
-    window.google.accounts.id.initialize({
-      client_id: googleClientId,
-      callback: handleGoogleCredential,
-    });
-    window.google.accounts.id.renderButton(googleBtnRef.value, {
-      theme: 'outline',
-      size: 'large',
-      width: 340,
-      text: 'continue_with',
-      locale: 'pt-PT',
-    });
-  } catch {
-    toast('Não foi possível carregar o Google Sign-In.', 'error');
-  }
-});
 </script>
 
 <style scoped>

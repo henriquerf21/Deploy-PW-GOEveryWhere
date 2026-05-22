@@ -174,7 +174,7 @@ function mapDelivery(d) {
     return {
         id: String(d.id),
         documentId: attrs.documentId || d.documentId,
-        orderId: order.publicId || `#ORD-${d.id}`,
+        orderId: order.publicId || (orderDocId ? `GE-${orderDocId}` : `GE-${attrs.order?.data?.id || attrs.order?.id}`),
         orderStrapiId: attrs.order?.data?.id || attrs.order?.id || null,
         orderDocumentId: orderDocId,
         type: order.priority >= 4 ? 'EXPRESS' : 'STANDARD',
@@ -199,7 +199,7 @@ function mapDelivery(d) {
             distance: distPickup,
         },
         destination: {
-            name: userData.username || userData.fullName|| 'Cliente',
+            name: order.clientName || userData.fullName || userData.username || 'Cliente',
             address: deliveryAddress,
             phone: userData.phone || '',
             lat: parseFloat(destLat),
@@ -210,6 +210,7 @@ function mapDelivery(d) {
         weight: rawItems?.weight || '0.5kg',
         size: rawItems?.size || 'Médio',
         instructions: order.notes || '',
+        deliveryNotes: order.deliveryNotes || order.delivery_notes || '',
         costEuro: parseFloat(order.total_price) || 6.50,
         etaMinutes: order.estimatedTime || 30,
         timestamps: {
@@ -225,6 +226,7 @@ function mapDelivery(d) {
         photos: [],
         timerStart: attrs.createdAt || null,
         chatHistory: Array.isArray(order.chatHistory) ? order.chatHistory : [],
+        rating: order.rating || null,
     };
 }
 
@@ -253,6 +255,8 @@ export const store = reactive({
     },
     loading: false,
     error: null,
+    gpsCoords: null,
+    currentRouteGeoJSON: null,
 
     get shiftStats() {
         const completed = this.completedDeliveries.filter(d => d.state === 'E-13');
@@ -452,6 +456,15 @@ export async function fetchDeliveries() {
         // The generic /deliveries endpoint silently returns empty because the courier
         // JWT (scope:'courier') is not recognized by Strapi's standard auth middleware.
         const res = await apiGet('/courier-estafetas/my-deliveries');
+        
+        // Sync local courier status with backend
+        if (res.meta && res.meta.courier_status) {
+            const serverCode = strapiStatusToCode(res.meta.courier_status);
+            if (serverCode && store.profile.state !== serverCode) {
+                store.profile.state = serverCode;
+                saveState();
+            }
+        }
         
         const apiDeliveries = (res.data || []).map(d => mapDelivery(d));
 
@@ -716,9 +729,9 @@ export function endShift() {
 // ── Actions: Pause / Online Toggle (E-07 / E-06) ────────────────
 
 export async function togglePause() {
-    const wasPaused = store.profile.state === COURIER_STATE.E05 || store.profile.state === 'E-07';
-    const nextState = wasPaused ? COURIER_STATE.E06 : 'E-07';
-    const nextStrapiStatus = wasPaused ? 'E-06 Online' : 'E-05 Offline';
+    const wasPaused = store.profile.state === COURIER_STATE.E05 || store.profile.state === COURIER_STATE.E07;
+    const nextState = wasPaused ? COURIER_STATE.E06 : COURIER_STATE.E07;
+    const nextStrapiStatus = wasPaused ? 'E-06 Online' : 'E-07 Em Pausa';
     const nextIsOnline = wasPaused;
 
     const prevState = store.profile.state;
@@ -739,7 +752,7 @@ export async function togglePause() {
 }
 
 export function isPaused() {
-    return store.profile.state === 'E-07' || store.profile.state === COURIER_STATE.E05;
+    return store.profile.state === COURIER_STATE.E07 || store.profile.state === COURIER_STATE.E05;
 }
 
 async function syncPresenceStatus({ localState, strapiStatus, isOnline }) {
@@ -755,8 +768,8 @@ async function syncPresenceStatus({ localState, strapiStatus, isOnline }) {
 
 export async function setPausedOnAppOpen() {
     await syncPresenceStatus({
-        localState: 'E-07',
-        strapiStatus: 'E-05 Offline',
+        localState: COURIER_STATE.E07,
+        strapiStatus: 'E-07 Em Pausa',
         isOnline: false,
     });
 }
@@ -804,16 +817,32 @@ export function startGpsTracking() {
         return;
     }
 
+    const handlePos = (pos) => {
+        store.gpsCoords = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+    };
+
+    const handleErr = (err) => {
+        console.warn('High-accuracy GPS failed, falling back to low accuracy:', err.message);
+        if (gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId);
+        
+        gpsWatchId = navigator.geolocation.watchPosition(
+            handlePos,
+            (e) => {
+                console.warn('Low-accuracy GPS failed:', e.message);
+                // Desktop development fallback: fake coordinate in Porto if completely failing
+                if (store.gpsCoords.lat === 0 && store.gpsCoords.lng === 0) {
+                    store.gpsCoords = { lat: 41.15, lng: -8.63 }; 
+                }
+            },
+            { enableHighAccuracy: false, timeout: 30000, maximumAge: 10000 }
+        );
+    };
+
     // Use watchPosition for continuous updates
     gpsWatchId = navigator.geolocation.watchPosition(
-        (pos) => {
-            lastGpsCoords = {
-                lat: pos.coords.latitude,
-                lng: pos.coords.longitude,
-            };
-        },
-        (err) => console.warn('GPS error:', err.message),
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 5000 }
+        handlePos,
+        handleErr,
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 5000 }
     );
 
     // Send to Strapi via API every 30 seconds for persistence, but emit to Socket every 5 seconds for real-time tracking
@@ -822,24 +851,52 @@ export function startGpsTracking() {
     }
     
     gpsIntervalId = setInterval(() => {
-        if (lastGpsCoords && store.activeDeliveryId) {
-            const d = store.deliveries.find(x => x.id === store.activeDeliveryId);
-            if (d && d.documentId && ['E-09', 'E-10', 'E-11', 'E-12'].includes(d.state)) {
-                // Emit via WebSocket for real-time tracking (Front-Office)
-                socket.emit('gps_update', {
-                    room: d.orderDocumentId,
-                    lat: lastGpsCoords.lat,
-                    lng: lastGpsCoords.lng
-                });
+        if (store.gpsCoords) {
+            // Do not send or emit if coordinates are exactly 0 (uninitialized)
+            if (store.gpsCoords.lat === 0 && store.gpsCoords.lng === 0) return;
 
-                // Persist to DB occasionally (every 30s instead of 10s to reduce DB load)
-                if (Date.now() % 30000 < 5000) {
-                    apiCourierPut(`/courier-estafetas/deliveries/${d.documentId}`, {
-                        data: {
-                            courierLatitude: lastGpsCoords.lat,
-                            courierLongitude: lastGpsCoords.lng,
-                        }
-                    }).catch(err => console.warn('GPS sync error:', err.message));
+            if (socket.connected) {
+                // Emit a generic courier_gps_update that BO could listen to if needed (optional)
+                socket.emit('courier_gps_update', {
+                    courierId: store.courierId,
+                    lat: store.gpsCoords.lat,
+                    lng: store.gpsCoords.lng
+                });
+                
+                // If on an active delivery, also emit to the order room so the FO client sees the live movement
+                if (store.activeDeliveryId) {
+                    const d = store.deliveries.find(x => x.id === store.activeDeliveryId);
+                    if (d && d.orderDocumentId && ['E-09', 'E-10', 'E-11', 'E-12'].includes(d.state)) {
+                        socket.emit('gps_update', {
+                            room: d.orderDocumentId,
+                            lat: store.gpsCoords.lat,
+                            lng: store.gpsCoords.lng
+                        });
+                    }
+                }
+            }
+
+            // Persist to DB occasionally (every 30s instead of 5s to reduce DB load)
+            if (Date.now() % 30000 < 5000) {
+                // ALWAYS update the courier's own model in the backend, even if they have no active delivery
+                apiCourierPut(`/courier-estafetas/me`, {
+                    data: {
+                        lat: store.gpsCoords.lat,
+                        lng: store.gpsCoords.lng,
+                    }
+                }).catch(err => console.warn('GPS sync error (me):', err.message));
+
+                // Also update the delivery record if there's an active delivery
+                if (store.activeDeliveryId) {
+                    const d = store.deliveries.find(x => x.id === store.activeDeliveryId);
+                    if (d && d.documentId && ['E-09', 'E-10', 'E-11', 'E-12'].includes(d.state)) {
+                        apiCourierPut(`/courier-estafetas/deliveries/${d.documentId}`, {
+                            data: {
+                                courierLatitude: store.gpsCoords.lat,
+                                courierLongitude: store.gpsCoords.lng,
+                            }
+                        }).catch(err => console.warn('GPS sync error (delivery):', err.message));
+                    }
                 }
             }
         }
@@ -895,30 +952,48 @@ export async function declineDeliveryTimeout(deliveryId) {
 
 // ── Actions: Profile (Read-only — changes via request) ───────────
 
-export async function submitDataChangeRequest({ field, newValue, reason }) {
+export async function updateProfile(updates) {
     if (!store.profile.documentId) {
         throw new Error('Perfil não encontrado. Faz login novamente.');
     }
 
-    // Build the change request object
-    const changeRequest = {
-        field,
-        newValue,
-        reason,
-        courierName: store.profile.name,
-        courierPhone: store.profile.phone,
-        submittedAt: new Date().toISOString(),
-        status: 'pending',
-    };
+    // Build the flat Strapi payload
+    const strapiPayload = { ...updates };
 
-    // Save to Strapi as a JSON field on the courier
+    // If vehicle sub-object provided, flatten it to vehicleType/vehicleBrand/…
+    if (updates.vehicle && typeof updates.vehicle === 'object') {
+        if (updates.vehicle.type  != null) strapiPayload.vehicleType  = updates.vehicle.type;
+        if (updates.vehicle.brand != null) strapiPayload.vehicleBrand = updates.vehicle.brand;
+        if (updates.vehicle.model != null) strapiPayload.vehicleModel = updates.vehicle.model;
+        if (updates.vehicle.color != null) strapiPayload.vehicleColor = updates.vehicle.color;
+        if (updates.vehicle.plate != null) strapiPayload.vehiclePlate = updates.vehicle.plate;
+        delete strapiPayload.vehicle;
+    }
+
     try {
-        await apiCourierSelfPut({
-            dataChangeRequest: changeRequest,
-        });
+        await apiCourierSelfPut(strapiPayload);
+
+        // Sync flat scalar fields onto profile
+        const { vehicleType, vehicleBrand, vehicleModel, vehicleColor, vehiclePlate, vehicle: _v, ...rest } = strapiPayload;
+        Object.assign(store.profile, rest);
+
+        // Sync nested vehicle object
+        if (!store.profile.vehicle) store.profile.vehicle = {};
+        if (vehicleType  != null) store.profile.vehicle.type  = vehicleType;
+        if (vehicleBrand != null) store.profile.vehicle.brand = vehicleBrand;
+        if (vehicleModel != null) store.profile.vehicle.model = vehicleModel;
+        if (vehicleColor != null) store.profile.vehicle.color = vehicleColor;
+        if (vehiclePlate != null) store.profile.vehicle.plate = vehiclePlate;
+
+        // Also handle the vehicle sub-object if it was present in updates
+        if (updates.vehicle) {
+            Object.assign(store.profile.vehicle, updates.vehicle);
+        }
+
+        saveState();
     } catch (err) {
-        console.error('Data change request error:', err);
-        throw new Error('Não foi possível enviar o pedido. Tenta novamente.');
+        console.error('Update profile error:', err);
+        throw new Error('Não foi possível atualizar o perfil. Tenta novamente.');
     }
 
     return true;
@@ -968,7 +1043,7 @@ export function getDeliveryById(id) {
 }
 
 export function getLastGpsCoords() {
-    return lastGpsCoords;
+    return store.gpsCoords;
 }
 
 /** Waze deep link */
@@ -980,4 +1055,94 @@ export function wazeLink(lat, lng) {
 if (store.auth.loggedIn && store.courierId) {
     setPausedOnAppOpen();
     fetchDeliveries();
+}
+
+export const isSimulatingRoute = ref(false);
+let simulationIntervalId = null;
+
+export async function fetchRouteGeoJSON(pickup, destination) {
+    if (store.currentRouteGeoJSON) return store.currentRouteGeoJSON;
+    try {
+        const url = `https://router.project-osrm.org/route/v1/driving/${pickup.lng},${pickup.lat};${destination.lng},${destination.lat}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        if (data.routes && data.routes[0]) {
+            store.currentRouteGeoJSON = data.routes[0].geometry; // Save the full GeoJSON geometry
+            return data.routes[0].geometry;
+        }
+    } catch (err) {
+        console.error("OSRM fetch error", err);
+    }
+    return null;
+}
+
+export function stopSimulatedRoute() {
+    if (simulationIntervalId) {
+        clearInterval(simulationIntervalId);
+        simulationIntervalId = null;
+    }
+    isSimulatingRoute.value = false;
+}
+
+export async function startSimulatedRoute(pickup, destination) {
+    if (simulationIntervalId) stopSimulatedRoute();
+    
+    // Stop REAL GPS hardware tracking, but keep the syncing interval running!
+    if (gpsWatchId !== null) {
+        navigator.geolocation.clearWatch(gpsWatchId);
+        gpsWatchId = null;
+    }
+    
+    isSimulatingRoute.value = true;
+    
+    try {
+        let points = [];
+        if (store.gpsCoords && store.gpsCoords.lat !== 0) {
+            points.push(store.gpsCoords);
+        }
+        points.push(pickup);
+        points.push(destination);
+
+        const coordsStr = points.map(p => `${p.lng},${p.lat}`).join(';');
+        const url = `https://router.project-osrm.org/route/v1/driving/${coordsStr}?overview=full&geometries=geojson`;
+        const res = await fetch(url);
+        const data = await res.json();
+        
+        let geometry = null;
+        if (data.routes && data.routes[0]) {
+            geometry = data.routes[0].geometry;
+            store.currentRouteGeoJSON = geometry;
+        }
+        
+        if (geometry && geometry.coordinates) {
+            const coords = geometry.coordinates; // Array of [lng, lat]
+            if (coords.length === 0) return;
+
+            let currentIndex = 0;
+            // Target ~30 steps = ~5 minutes total simulation (10s each step)
+            const step = Math.max(1, Math.floor(coords.length / 30));
+            
+            simulationIntervalId = setInterval(() => {
+                if (currentIndex >= coords.length) {
+                    stopSimulatedRoute();
+                    return;
+                }
+                
+                const [lng, lat] = coords[currentIndex];
+                store.gpsCoords = { lat, lng };
+                
+                // The global gpsIntervalId will automatically pick up store.gpsCoords
+                // and emit/persist it correctly without us doing it manually here.
+                
+                currentIndex += step;
+            }, 10000);
+        }
+    } catch (e) {
+        console.error("Failed to simulate route", e);
+    }
+}
+
+export function getCurrentRouteGeoJSON() {
+    return store.currentRouteGeoJSON;
 }

@@ -31,24 +31,9 @@
         <div class="req-icon">
           <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
         </div>
-        <span class="req-text">É obrigatório registar <strong>fotografia</strong> e <strong>assinatura</strong>, sempre com GPS.</span>
+        <span class="req-text">É obrigatório registar a <strong>assinatura</strong>, sempre com GPS.</span>
       </div>
 
-      <!-- Photo section (always visible) -->
-      <div class="section-card">
-        <span class="section-label">FOTOGRAFIA DA ENTREGA (obrigatório)</span>
-        <div class="capture-area-wrap">
-          <label class="capture-area" :class="{ 'has-photo': photoPreview }">
-            <input ref="photoInput" type="file" accept="image/*" capture="environment" @change="handlePhoto" class="sr-only">
-            <img v-if="photoPreview" :src="photoPreview" alt="Prova">
-            <span v-else class="capture-placeholder">
-              <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" stroke-width="1.5"><path d="M23 19a2 2 0 01-2 2H3a2 2 0 01-2-2V8a2 2 0 012-2h4l2-3h6l2 3h4a2 2 0 012 2z"/><circle cx="12" cy="13" r="4"/></svg>
-              Tirar Fotografia
-            </span>
-          </label>
-        </div>
-        <p v-if="photoPreview" class="proof-status proof-ok">✓ Fotografia capturada</p>
-      </div>
 
       <!-- Signature section (optional proof method) -->
       <div class="section-card">
@@ -101,17 +86,9 @@
       <div class="section-card">
         <span class="section-label">CHECKLIST</span>
         <div class="checklist">
-          <div class="check-item" :class="{ done: hasPhoto }">
-            <span class="check-box"><span v-if="hasPhoto" class="check-mark"></span></span>
-            <span>Fotografia da entrega</span>
-          </div>
           <div class="check-item" :class="{ done: hasSig }">
             <span class="check-box"><span v-if="hasSig" class="check-mark"></span></span>
             <span>Assinatura do cliente</span>
-          </div>
-          <div class="check-item" :class="{ done: hasPhoto && hasSig }">
-            <span class="check-box"><span v-if="hasPhoto && hasSig" class="check-mark"></span></span>
-            <span>Fotografia + Assinatura (ambos obrigatórios)</span>
           </div>
           <div class="check-item" :class="{ done: !!gpsCoords }">
             <span class="check-box"><span v-if="gpsCoords" class="check-mark"></span></span>
@@ -137,7 +114,7 @@
         <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
         Submeter entrega
       </button>
-      <p class="submit-note">Fotografia + Assinatura + Localização GPS são obrigatórios</p>
+      <p class="submit-note">Assinatura e Localização GPS são obrigatórios</p>
     </div>
 
     <!-- Footer -->
@@ -231,18 +208,17 @@ function handleExtraPhotos(e) {
   extraPhotos.value = extraPhotosData.value.map(f => f.name);
 }
 
-const hasAnyProof = computed(() => hasPhoto.value && hasSig.value);
+const hasAnyProof = computed(() => hasSig.value);
 
 // Validation — Requires GPS + at least one proof method
 const canConfirm = computed(() => {
-  return hasPhoto.value && hasSig.value && !!gpsCoords.value;
+  return hasSig.value && !!gpsCoords.value;
 });
 
 async function handleConfirm() {
   error.value = '';
   if (!canConfirm.value) {
     const missing = [];
-    if (!hasPhoto.value) missing.push('fotografia');
     if (!hasSig.value) missing.push('assinatura');
     if (!gpsCoords.value) missing.push('localização GPS');
     error.value = `Falta: ${missing.join(', ')}.`;

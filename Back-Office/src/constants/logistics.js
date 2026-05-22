@@ -58,6 +58,7 @@ export const COURIER_STATE = {
   E04: 'E-04',
   E05: 'E-05',
   E06: 'E-06',
+  E07: 'E-07',
 };
 
 export const courierStateLabels = {
@@ -67,4 +68,5 @@ export const courierStateLabels = {
   'E-04': 'Suspenso',
   'E-05': 'Offline',
   'E-06': 'Online — Disponível',
+  'E-07': 'Em Pausa',
 };

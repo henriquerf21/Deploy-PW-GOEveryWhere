@@ -11,6 +11,10 @@
   },
   "pluginOptions": {},
   "attributes": {
+    "orderId": {
+      "type": "string",
+      "unique": true
+    },
     "order_status": {
       "type": "enumeration",
       "enum": [

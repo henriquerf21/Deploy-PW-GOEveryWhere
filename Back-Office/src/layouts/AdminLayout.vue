@@ -80,7 +80,7 @@
 import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { clearBoSession, getSessionUser } from '../auth/session.js';
-import { logistics, getOrderById, getCourierById, initLogistics } from '../stores/logisticsStore.js';
+import { logistics, getOrderById, getCourierById, initLogistics, handleRealtimeEvent } from '../stores/logisticsStore.js';
 import { ORDER_STATUS, COURIER_STATE } from '../constants/logistics.js';
 import { boOpenStream } from '../api/backofficeApi.js';
 import {
@@ -90,7 +90,6 @@ import {
   Bike,
   MapPinned,
   Users,
-  BarChart3,
   Bell,
   ChevronDown,
   ChevronRight,
@@ -129,7 +128,6 @@ const nav = [
   { name: 'couriers', label: 'Estafetas', icon: Bike },
   { name: 'map', label: 'Mapa', icon: MapPinned },
   { name: 'customers', label: 'Clientes', icon: Users },
-  { name: 'reports', label: 'Relatórios', icon: BarChart3 },
 ];
 
 const pageTitle = computed(() => {
@@ -230,9 +228,21 @@ function connectStream() {
     realtimeStatus.value = 'live';
     stopFallbackPolling();
   });
-  eventSource.addEventListener('change', () => {
+  eventSource.addEventListener('change', (e) => {
     realtimeStatus.value = 'live';
-    scheduleRefresh();
+    try {
+      const payload = JSON.parse(e.data);
+      if (payload && payload.entity) {
+        handleRealtimeEvent({
+          model: payload.entity,
+          room: payload.id
+        });
+      } else {
+        scheduleRefresh();
+      }
+    } catch {
+      scheduleRefresh();
+    }
   });
   eventSource.onerror = () => {
     // EventSource auto-reconecta — apenas marcamos offline e ligamos fallback.
@@ -640,7 +650,7 @@ onBeforeUnmount(() => {
 
 .bo-content {
   flex: 1;
-  padding: 28px 28px 48px;
+  padding: 12px 16px 32px;
   overflow-x: auto;
 }
 

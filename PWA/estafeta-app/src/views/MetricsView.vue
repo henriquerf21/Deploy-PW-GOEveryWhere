@@ -65,13 +65,21 @@
             <span v-for="i in 5" :key="i" class="star" :class="{ on: i <= roundedRating }">★</span>
           </div>
         </div>
+
+        <div class="ratings-history" v-if="ratingsHistory.length > 0">
+          <h4 class="history-title">Histórico de Avaliações</h4>
+          <div v-for="r in ratingsHistory" :key="r.id" class="rating-item">
+            <div class="rating-item-header">
+              <span class="rating-item-stars">
+                <span v-for="i in 5" :key="i" class="star" :class="{ on: i <= r.rating }">★</span>
+              </span>
+              <span class="rating-item-date">{{ r.date }}</span>
+            </div>
+            <p v-if="r.comment" class="rating-item-comment">"{{ r.comment }}"</p>
+          </div>
+        </div>
       </div>
 
-      <!-- Map -->
-      <div class="metric-card">
-        <h3>Mapa de Entregas</h3>
-        <div ref="mapContainer" class="map-container"></div>
-      </div>
     </div>
 
     <!-- Footer -->
@@ -86,13 +94,8 @@
 </template>
 
 <script setup>
-import { computed, ref, onMounted, onBeforeUnmount, nextTick, watch } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import { store, courierMetrics, fetchCompletedDeliveries } from '../stores/courierStore.js';
-
-const mapContainer = ref(null);
-let mapInstance = null;
-let mapLayer = null;
-let leafletLib = null;
 
 const metrics = computed(() => courierMetrics.value);
 const monthlyTargetDeliveries = 40;
@@ -113,65 +116,21 @@ const kmGoalPct = computed(() => {
 });
 const roundedRating = computed(() => Math.max(0, Math.min(5, Math.round(metrics.value.avgRating || 0))));
 
-const deliveriesForMap = computed(() => {
-  const byId = new Map();
-  for (const d of [...(store.completedDeliveries || []), ...store.deliveries]) byId.set(d.id, d);
-  return [...byId.values()].filter((d) => !!d.pickup && !!d.destination);
-});
-
-const mapPoints = computed(() => {
-  const points = [];
-  for (const d of deliveriesForMap.value) {
-    if (d.pickup?.lat != null) points.push({ lat: d.pickup.lat, lng: d.pickup.lng, name: d.pickup.name, type: 'pickup', orderId: d.orderId, state: d.state });
-    if (d.destination?.lat != null) points.push({ lat: d.destination.lat, lng: d.destination.lng, name: d.destination.name, type: 'delivery', orderId: d.orderId, state: d.state });
-  }
-  return points;
+const ratingsHistory = computed(() => {
+  return store.completedDeliveries
+    .filter(d => d.rating)
+    .map(d => ({
+      id: d.id,
+      rating: d.rating,
+      comment: d.ratingComment || d.review || null,
+      date: d.timestamps?.['E-13'] ? new Date(d.timestamps['E-13']).toLocaleDateString('pt-PT') : 'N/A'
+    }))
+    .slice(0, 10);
 });
 
 onMounted(async () => {
   await fetchCompletedDeliveries();
-  await nextTick();
-  if (mapContainer.value && mapPoints.value.length) initMap();
 });
-
-watch(mapPoints, (pts) => {
-  if (!pts.length) { if (mapLayer) mapLayer.clearLayers(); return; }
-  if (mapContainer.value && !mapInstance) { initMap(); return; }
-  if (mapInstance) renderMapPoints();
-}, { deep: true });
-
-onBeforeUnmount(() => { mapInstance?.remove(); mapInstance = null; mapLayer = null; leafletLib = null; });
-
-async function initMap() {
-  try {
-    const L = await import('leaflet');
-    leafletLib = L;
-    await import('leaflet/dist/leaflet.css');
-    const center = mapPoints.value.length ? [mapPoints.value[0].lat, mapPoints.value[0].lng] : [41.1579, -8.6291];
-    mapInstance = L.map(mapContainer.value, { zoomControl: false, attributionControl: false }).setView(center, 13);
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 18 }).addTo(mapInstance);
-    mapLayer = L.layerGroup().addTo(mapInstance);
-    renderMapPoints();
-    setTimeout(() => mapInstance?.invalidateSize(), 200);
-  } catch (err) { console.warn('Map init error:', err); }
-}
-
-function renderMapPoints() {
-  if (!mapInstance || !mapLayer || !leafletLib) return;
-  mapLayer.clearLayers();
-  for (const d of deliveriesForMap.value) {
-    const p = d.pickup; const dst = d.destination;
-    if (!p?.lat || !dst?.lat) continue;
-    const isCompleted = d.state === 'E-13';
-    const routeColor = isCompleted ? '#22c55e' : '#2563eb';
-    mapLayer.addLayer(leafletLib.polyline([[p.lat, p.lng], [dst.lat, dst.lng]], { color: routeColor, weight: 4, opacity: 0.9, dashArray: isCompleted ? null : '10 8' }));
-  }
-  for (const pt of mapPoints.value) {
-    const color = pt.type === 'pickup' ? '#ff9800' : pt.state === 'E-13' ? '#22c55e' : '#2563eb';
-    mapLayer.addLayer(leafletLib.circleMarker([pt.lat, pt.lng], { radius: 7, fillColor: color, color: '#fff', weight: 2, fillOpacity: 0.95 }));
-  }
-  if (mapPoints.value.length > 1) mapInstance.fitBounds(leafletLib.latLngBounds(mapPoints.value.map(p => [p.lat, p.lng])), { padding: [30, 30] });
-}
 </script>
 
 <style scoped>
@@ -317,17 +276,44 @@ function renderMapPoints() {
   font-family: var(--ge-font-display);
 }
 .rating-stars {
-  display: flex; gap: 2px; font-size: 20px;
+  display: flex; gap: 2px;
 }
-.star { color: #e5e7eb; }
-.star.on { color: #fbbf24; }
+.star { color: #e5e7eb; font-size: 24px; transition: color 0.2s; }
+.star.on { color: #f59e0b; }
 
-/* Map */
-.map-container {
-  width: 100%; height: 200px;
-  border-radius: 12px;
-  overflow: hidden;
-  background: var(--ge-page);
+.ratings-history {
+  margin-top: 24px;
+  border-top: 1px solid #e5e7eb;
+  padding-top: 16px;
+}
+.history-title {
+  font-family: var(--ge-font-display);
+  font-size: 13px; font-weight: 600;
+  color: #6b7280;
+  margin-bottom: 12px;
+}
+.rating-item {
+  background: #f9fafb;
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 8px;
+}
+.rating-item-header {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 6px;
+}
+.rating-item-stars .star {
+  font-size: 14px;
+}
+.rating-item-date {
+  font-size: 11px;
+  color: #9ca3af;
+}
+.rating-item-comment {
+  font-size: 13px;
+  color: #4b5563;
+  margin: 0;
+  font-style: italic;
 }
 
 /* Footer */

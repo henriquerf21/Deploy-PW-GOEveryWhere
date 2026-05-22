@@ -1,0 +1,9 @@
+.ge-map-marker-icon {
+  background: transparent !important;
+  border: none !important;
+}
+
+.ge-store-marker-icon {
+  border-radius: 50% !important;
+  object-fit: cover !important;
+}

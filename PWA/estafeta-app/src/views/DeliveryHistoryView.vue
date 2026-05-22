@@ -41,7 +41,12 @@
             </div>
             <span class="hc-time">{{ item.time }} · {{ item.duration }} min</span>
           </div>
-          <span class="hc-price">€{{ item.earning.toFixed(2) }}</span>
+          <div class="hc-right">
+            <span class="hc-price">€{{ item.earning.toFixed(2) }}</span>
+            <span v-if="item.rating" class="hc-rating">
+              {{ item.rating }} <svg width="10" height="10" viewBox="0 0 24 24" fill="#f59e0b"><polygon points="12,2 15,9 22,9.5 17,14.5 18.5,22 12,18 5.5,22 7,14.5 2,9.5 9,9"/></svg>
+            </span>
+          </div>
         </div>
       </div>
     </div>
@@ -71,8 +76,9 @@ const history = computed(() => {
     time: d.timestamps?.['E-09'] ? new Date(d.timestamps['E-09']).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }) : '--:--',
     duration: d.timestamps?.['E-09'] && d.timestamps?.['E-13']
       ? Math.max(1, Math.round((new Date(d.timestamps['E-13']) - new Date(d.timestamps['E-09'])) / 60000))
-      : d.etaMinutes || 20,
+      : 0,
     earning: d.costEuro || 0,
+    rating: d.rating,
   }));
 });
 
@@ -186,11 +192,18 @@ onMounted(async () => {
 .hc-time {
   font-size: 10px; color: #9ca3af;
 }
+.hc-right {
+  display: flex; flex-direction: column; align-items: flex-end;
+  flex-shrink: 0;
+}
 .hc-price {
   font-family: var(--ge-font-display);
   font-size: 14px; font-weight: 700;
   color: #1b8a4a;
-  flex-shrink: 0;
+}
+.hc-rating {
+  font-size: 11px; font-weight: 600; color: #111827;
+  display: flex; align-items: center; gap: 2px; margin-top: 2px;
 }
 
 /* Footer */

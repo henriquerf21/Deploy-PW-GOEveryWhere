@@ -48,7 +48,8 @@
         "E-03 Rejeitado",
         "E-04 Suspenso",
         "E-05 Offline",
-        "E-06 Online"
+        "E-06 Online",
+        "E-07 Em Pausa"
       ]
     },
     "isOnline": {

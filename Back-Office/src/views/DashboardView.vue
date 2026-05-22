@@ -12,6 +12,8 @@
         <button type="button" class="bo-btn bo-btn--outline" :disabled="reportsBusy" @click="syncReports">
           {{ reportsBusy ? 'Relatórios…' : 'Atualizar relatórios' }}
         </button>
+        <button type="button" class="bo-btn bo-btn--outline" @click="exportOrders">Exportar pedidos</button>
+        <button type="button" class="bo-btn bo-btn--outline" @click="exportFull">Exportar relatório</button>
         <RouterLink to="/orders" class="bo-btn bo-btn--outline">Ir para pedidos</RouterLink>
         <RouterLink to="/map" class="bo-btn bo-btn--primary">Abrir mapa</RouterLink>
       </div>
@@ -179,6 +181,49 @@
       <section class="bo-card">
         <header class="bo-card__head">
           <div>
+            <h3 class="bo-card__title">Packs mais vendidos</h3>
+            <p class="bo-card__sub">Ranking de unidades acumuladas por SKU.</p>
+          </div>
+        </header>
+        <div class="bo-card__body">
+          <ol class="packs">
+            <li v-for="(p, i) in logistics.packSales" :key="p.sku" class="packs__row">
+              <span class="packs__rank">{{ i + 1 }}</span>
+              <div class="packs__info">
+                <strong>{{ p.name }}</strong>
+                <span class="bo-mono bo-muted">{{ p.sku }}</span>
+              </div>
+              <span class="packs__units bo-num">{{ p.units }} u.</span>
+            </li>
+            <li v-if="!logistics.packSales.length" class="bo-muted" style="font-size: 13px;">Sem vendas registadas.</li>
+          </ol>
+        </div>
+      </section>
+    </div>
+
+    <div class="bo-grid bo-grid--2">
+      <section class="bo-card">
+        <header class="bo-card__head">
+          <div>
+            <h3 class="bo-card__title">Top zonas (entregas)</h3>
+            <p class="bo-card__sub">Distribuição agregada de pedidos por zona de operação.</p>
+          </div>
+        </header>
+        <div class="bo-card__body">
+          <div class="zones">
+            <div v-for="z in logistics.deliveriesByZone" :key="z.zone" class="zones__row">
+              <span class="zones__label">{{ z.zone }}</span>
+              <div class="zones__track"><div class="zones__fill" :style="{ width: (z.count / maxZones) * 100 + '%' }" /></div>
+              <strong class="bo-num">{{ z.count }}</strong>
+            </div>
+            <p v-if="!logistics.deliveriesByZone.length" class="bo-muted" style="font-size: 13px;">Sem dados para apresentar.</p>
+          </div>
+        </div>
+      </section>
+
+      <section class="bo-card">
+        <header class="bo-card__head">
+          <div>
             <h3 class="bo-card__title">Atividade recente</h3>
             <p class="bo-card__sub">Últimos 12 eventos do painel.</p>
           </div>
@@ -198,13 +243,16 @@
 </template>
 
 <script setup>
-import { computed, ref } from 'vue';
+import { computed, ref, onMounted } from 'vue';
 import {
   logistics,
   kpiSummary,
   monthlyRevenueFromOrders,
   pickupsByStore,
   refreshServerReports,
+  cancellationRatePct,
+  exportOrdersCsv,
+  exportFullReportCsv,
   ORDER_STATUS,
   orderStatusLabels,
 } from '../stores/logisticsStore.js';
@@ -224,6 +272,29 @@ async function syncReports() {
   }
 }
 
+onMounted(() => {
+  void syncReports();
+});
+
+function download(filename, text) {
+  const blob = new Blob([text], { type: 'text/csv;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+  toast(`Ficheiro ${filename} gerado.`, 'success');
+}
+
+function exportOrders() {
+  download(`goeverywhere_pedidos_${Date.now()}.csv`, exportOrdersCsv());
+}
+
+function exportFull() {
+  download(`goeverywhere_relatorio_${Date.now()}.csv`, exportFullReportCsv());
+}
+
 const sla = computed(() => logistics.slaMetrics || null);
 const slaBacklog = computed(() => (Array.isArray(sla.value?.backlogStuckByZone) ? sla.value.backlogStuckByZone : []));
 const maxBacklog = computed(() => Math.max(...slaBacklog.value.map((z) => z.count), 1));
@@ -237,7 +308,10 @@ const hasHourlyData = computed(() => logistics.hourlyVolume.some((h) => h > 0));
 const maxH = computed(() => Math.max(...logistics.hourlyVolume, 1));
 const maxRev = computed(() => Math.max(...monthlyRevenueFromOrders.value.map((m) => m.k), 0.1));
 const maxZ = computed(() => Math.max(...logistics.deliveriesByZone.map((z) => z.count), 1));
+const maxZones = computed(() => Math.max(...logistics.deliveriesByZone.map((z) => z.count), 1));
 const maxStore = computed(() => Math.max(...pickupsByStore.value.map((s) => s.count), 1));
+const cancelPct = computed(() => cancellationRatePct());
+const activeCouriers = computed(() => logistics.couriers.filter((c) => c.online).length);
 
 const kpiItems = computed(() => {
   const k = kpiSummary.value;
@@ -247,10 +321,10 @@ const kpiItems = computed(() => {
     { label: 'Estafetas online', value: k.online, hint: 'E-06 com sessão ativa' },
     { label: 'Custo em pipeline', value: `€${k.revenuePipeline.toFixed(2)}`, hint: 'Soma custos: aprovado + atribuído + em trânsito' },
     { label: 'Custo entregues', value: `€${k.revenueDelivered.toFixed(2)}`, hint: 'Soma custos dos pedidos entregues' },
-    { label: 'Produtos ativos', value: `${k.productsActive} / ${k.totalProducts}`, hint: 'SKU ativos no catálogo' },
-    { label: 'Alertas stock', value: k.lowStockCount, hint: 'Ativos com stock abaixo do limiar' },
+    { label: 'Taxa cancelamento', value: `${cancelPct.value}%`, hint: 'Rácio de pedidos rejeitados sobre o total' },
     { label: 'Clientes', value: k.totalCustomers, hint: 'Registos na base' },
-    { label: 'Rejeitados', value: `${k.rejectedCount} (${k.rejectionRatePct}%)`, hint: 'Pedidos rejeitados / total' },
+    { label: 'Estafetas operacionais', value: activeCouriers.value, hint: 'E-05/E-06 com sessão ativa' },
+    { label: 'Produtos ativos', value: `${k.productsActive} / ${k.totalProducts}`, hint: 'SKU ativos no catálogo' },
   ];
 });
 
@@ -496,5 +570,82 @@ const donutStyle = computed(() => {
 .activity__text {
   flex: 1;
   line-height: 1.45;
+}
+
+.packs {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.packs__row {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--bo-border);
+}
+
+.packs__row:last-child { border-bottom: none; }
+
+.packs__rank {
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  background: var(--bo-brand-soft);
+  color: var(--bo-brand-hover);
+  font-weight: 800;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 13px;
+  font-family: var(--bo-font-display);
+}
+
+.packs__info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.packs__info strong { font-size: 13.5px; }
+
+.packs__units {
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--bo-text);
+  white-space: nowrap;
+}
+
+.zones {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.zones__row {
+  display: grid;
+  grid-template-columns: 150px 1fr 50px;
+  gap: 12px;
+  align-items: center;
+  font-size: 13.5px;
+}
+
+.zones__label { color: var(--bo-text); font-weight: 500; }
+
+.zones__track {
+  height: 10px;
+  background: var(--bo-page);
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.zones__fill {
+  height: 100%;
+  background: var(--bo-brand);
+  border-radius: 999px;
+  transition: width 0.4s ease;
 }
 </style>

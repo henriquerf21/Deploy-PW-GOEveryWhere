@@ -15,17 +15,17 @@
 
     <div class="card-body">
       <div class="location-row">
-        <span class="loc-icon" v-html="SVG.store"></span>
+        <span class="loc-icon">🏪</span>
         <div class="loc-info">
-          <span class="loc-name">{{ delivery.pickup.name }}</span>
+          <span class="loc-name">{{ delivery.pickup.address || delivery.pickup.name }}</span>
           <span class="loc-distance">{{ delivery.pickup.distance }} km</span>
         </div>
       </div>
       <div class="route-line"></div>
       <div class="location-row">
-        <span class="loc-icon" v-html="SVG.mapPin"></span>
+        <span class="loc-icon">🏠</span>
         <div class="loc-info">
-          <span class="loc-name">{{ delivery.destination.name }}</span>
+          <span class="loc-name">{{ delivery.destination.name }} - {{ delivery.destination.address }}</span>
           <span class="loc-distance">{{ delivery.destination.distance }} km</span>
         </div>
       </div>
@@ -37,7 +37,6 @@
         <span class="cost">€{{ delivery.costEuro?.toFixed(2) }}</span>
       </div>
       <div class="footer-actions">
-        <button class="btn btn-secondary btn-sm" @click.stop="$emit('details', delivery.id)">Detalhes</button>
         <button class="btn btn-primary btn-sm" @click.stop="$emit('accept', delivery.id)">Aceitar</button>
       </div>
     </div>

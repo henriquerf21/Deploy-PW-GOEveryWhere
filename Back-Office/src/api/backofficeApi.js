@@ -43,7 +43,7 @@ export async function boLoginGoogle(payload) {
 }
 
 export async function boBootstrap() {
-  return request('/bo/bootstrap');
+  return request(`/bo/bootstrap?_t=${Date.now()}`);
 }
 
 export async function boListOrders(filters = {}) {

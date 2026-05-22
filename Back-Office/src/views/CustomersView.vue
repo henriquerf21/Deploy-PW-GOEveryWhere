@@ -39,7 +39,7 @@
             <td colspan="9" class="bo-table__empty">
               <div class="bo-empty">
                 <h3 class="bo-empty__title">Sem clientes</h3>
-                <p class="bo-empty__hint">Adiciona o primeiro cliente ou ajusta a pesquisa.</p>
+                <p class="bo-empty__hint">Nenhum cliente encontrado. Ajusta a pesquisa ou aguarda novos registos via Front-Office.</p>
               </div>
             </td>
           </tr>
@@ -89,7 +89,7 @@
             <button type="button" class="bo-modal__close" @click="viewCustomer = null">×</button>
           </header>
           <div class="bo-modal__body bo-stack">
-            <dl class="bo-dl">
+              <dl class="bo-dl">
               <dt>ID</dt><dd class="bo-mono">{{ viewCustomer.id }}</dd>
               <dt>Email</dt><dd>{{ viewCustomer.email }}</dd>
               <dt>Telefone</dt><dd>{{ viewCustomer.phone || '—' }}</dd>
@@ -100,6 +100,7 @@
               <dt>Notas internas</dt><dd>{{ viewCustomer.notes || '—' }}</dd>
               <dt>Encomendas</dt><dd>{{ viewCustomer.ordersCount }}</dd>
               <dt>Gasto total (entregues)</dt><dd>{{ formatMoney(viewCustomer.totalSpent) }}</dd>
+              <dt>GO Points</dt><dd class="bo-mono" style="color: var(--bo-brand); font-weight: 700;">{{ viewCustomer.goPoints || 0 }} pts</dd>
               <dt>Última encomenda</dt><dd>{{ viewCustomer.lastOrderAt?.slice(0, 19).replace('T', ' ') || '—' }}</dd>
               <dt>Avaliação média</dt><dd>{{ (Number(viewCustomer.avgRating) || 0).toFixed(1) }} / 5</dd>
             </dl>

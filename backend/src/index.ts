@@ -73,16 +73,77 @@ export default {
     strapi.db.lifecycles.subscribe({
       models: ['api::order.order', 'api::courier-estafeta.courier-estafeta'],
       afterCreate(event) {
+        const roomId = event.result.documentId || String(event.result.id);
         strapi.io?.emit('global_order_status_update', { 
           action: 'create', 
-          model: event.model.singularName 
+          model: event.model.singularName,
+          room: roomId
         });
+        const { emitBoChange } = require('./api/back-office/utils/bo-event-bus');
+        emitBoChange({ entity: event.model.singularName === 'order' ? 'order' : 'courier', id: roomId, action: 'create' });
       },
       afterUpdate(event) {
+        const roomId = event.result.documentId || String(event.result.id);
         strapi.io?.emit('global_order_status_update', { 
           action: 'update', 
-          model: event.model.singularName 
+          model: event.model.singularName,
+          room: roomId
         });
+        const { emitBoChange } = require('./api/back-office/utils/bo-event-bus');
+        emitBoChange({ entity: event.model.singularName === 'order' ? 'order' : 'courier', id: roomId, action: 'update' });
+
+        // NE Extra: Send delivery confirmation email when order is delivered
+        if (event.model.singularName === 'order') {
+          const newStatus = event.result?.order_status;
+          if (newStatus === 'S-11 Entregue') {
+            // Run async without blocking the lifecycle
+            (async () => {
+              try {
+                const order = await strapi.db.query('api::order.order').findOne({
+                  where: { id: event.result.id },
+                  populate: { user: true },
+                });
+                const userEmail = order?.user?.email;
+                const publicId = order?.orderId || order?.publicId || `#${event.result.id}`;
+                if (userEmail && process.env.RESEND_API_KEY) {
+                  const res = await fetch('https://api.resend.com/emails', {
+                    method: 'POST',
+                    headers: {
+                      'Authorization': `Bearer ${process.env.RESEND_API_KEY}`,
+                      'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({
+                      from: 'GoEverywhere <no-reply@goeverywhere.pt>',
+                      to: [userEmail],
+                      subject: `GoEverywhere — Encomenda ${publicId} entregue! (Fatura)`,
+                      html: `
+                        <div style="font-family:sans-serif;max-width:520px;margin:0 auto;padding:24px;">
+                          <h2 style="color:#22c55e;">✅ Encomenda entregue!</h2>
+                          <p>Olá,</p>
+                          <p>A tua encomenda <strong>${publicId}</strong> foi entregue com sucesso.</p>
+                          <p>A fatura detalhada encontra-se disponível na tua área de cliente.</p>
+                          <p>Obrigado por escolheres a <strong>GoEverywhere</strong>!</p>
+                          <hr style="border:none;border-top:1px solid #e5e7eb;margin:20px 0;">
+                          <p style="color:#6b7280;font-size:12px;">GoEverywhere, Lda. — Entregas rápidas e de confiança.</p>
+                        </div>
+                      `
+                    })
+                  });
+                  
+                  if (!res.ok) {
+                    const errRes = await res.text();
+                    throw new Error(`Resend Error: ${errRes}`);
+                  }
+                  strapi.log.info(`[BO] Fatura / Email de entrega enviado via Resend para ${userEmail} (pedido ${publicId})`);
+                } else if (userEmail) {
+                  strapi.log.warn('[BO] RESEND_API_KEY não configurada. Fatura/Email não enviado.');
+                }
+              } catch (emailErr) {
+                strapi.log.warn('[BO] Falha ao enviar email de entrega:', emailErr?.message || emailErr);
+              }
+            })();
+          }
+        }
       },
     });
 

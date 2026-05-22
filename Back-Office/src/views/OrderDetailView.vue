@@ -13,7 +13,7 @@
     <header class="bo-page-head">
       <div class="bo-page-head__main">
         <p class="bo-page-head__eyebrow">Pedido · {{ orderTypeLabels[order.type] }}</p>
-        <h1 class="bo-page-head__title">{{ order.id }}</h1>
+        <h1 class="bo-page-head__title">{{ order.orderId || order.id }}</h1>
         <p class="bo-page-head__sub">
           Cliente <strong>{{ order.clientName }}</strong> · {{ order.clientEmail }} · zona {{ order.zone }}
         </p>
@@ -100,12 +100,12 @@
             <DeliveryRouteMap
               v-if="order"
               :key="order.id"
-              :store-lat="Number(ap.storeId ? logistics.continentStores.find(s => s.id === ap.storeId)?.lat || 41.15 : order.pickupLat || 41.15)"
-              :store-lng="Number(ap.storeId ? logistics.continentStores.find(s => s.id === ap.storeId)?.lng || -8.61 : order.pickupLng || -8.61)"
-              :dest-lat="Number(order.destLat || order.pickupLat || 41.15)"
-              :dest-lng="Number(order.destLng || order.pickupLng || -8.61)"
-              :courier-lat="order.courierId && getCourierById(order.courierId)?.lat != null ? Number(getCourierById(order.courierId).lat) : null"
-              :courier-lng="order.courierId && getCourierById(order.courierId)?.lng != null ? Number(getCourierById(order.courierId).lng) : null"
+              :store-lat="mapStoreLat"
+              :store-lng="mapStoreLng"
+              :dest-lat="Number(order.destLat)"
+              :dest-lng="Number(order.destLng)"
+              :courier-lat="mapCourierLat"
+              :courier-lng="mapCourierLng"
               height="300px"
             />
           </div>
@@ -377,6 +377,14 @@ const infoText = ref('');
 const pickCourier = ref('');
 const adminPatch = reactive({ deliveryAddress: '', deliveryCity: '', internalNote: '' });
 const cancelReasonText = ref('');
+
+const mapStore = computed(() => logistics.continentStores.find(s => s.id === ap.storeId) || null);
+const mapStoreLat = computed(() => mapStore.value?.lat != null ? Number(mapStore.value.lat) : Number(order.value?.pickupLat));
+const mapStoreLng = computed(() => mapStore.value?.lng != null ? Number(mapStore.value.lng) : Number(order.value?.pickupLng));
+
+const mapCourier = computed(() => order.value?.courierId ? getCourierById(order.value.courierId) : null);
+const mapCourierLat = computed(() => mapCourier.value?.lat != null ? Number(mapCourier.value.lat) : null);
+const mapCourierLng = computed(() => mapCourier.value?.lng != null ? Number(mapCourier.value.lng) : null);
 
 const suggested = computed(() => {
   const list = order.value?.suggestedCouriers;

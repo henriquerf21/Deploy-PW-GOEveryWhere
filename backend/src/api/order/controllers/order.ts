@@ -146,7 +146,7 @@ export default factories.createCoreController('api::order.order', ({ strapi }) =
 
     const entries = await strapi.documents('api::order.order').findMany({
       filters: { user: userFilter },
-      populate: '*',
+      populate: ['user', 'courier.docSelfie', 'delivery', 'review'],
       sort: 'createdAt:desc'
     });
 

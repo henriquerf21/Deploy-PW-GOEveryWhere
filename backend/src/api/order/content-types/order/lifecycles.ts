@@ -1,4 +1,17 @@
 export default {
+  async beforeCreate(event: any) {
+    const { data } = event.params;
+    
+    if (!data.orderId) {
+      const lastOrder = await strapi.db.query('api::order.order').findOne({
+        orderBy: { id: 'desc' },
+      });
+      const nextId = (lastOrder ? lastOrder.id + 1 : 1).toString().padStart(4, '0');
+      const year = new Date().getFullYear();
+      data.orderId = `#GG-${year}-${nextId}`;
+    }
+  },
+
   async afterCreate(event: any) {
     const { result } = event;
     const pointsUsed = result.go_points_used || 0;
@@ -59,6 +72,78 @@ export default {
 
     if (!result?.order_status) return;
     const status = result.order_status;
+
+    if (status.startsWith('S-13') || status.startsWith('S-14')) {
+      try {
+        const orderToCancel = await strapi.documents('api::order.order').findOne({
+          documentId: result.documentId,
+          populate: ['delivery']
+        });
+        const delivery = orderToCancel?.delivery;
+        if (delivery && delivery.documentId) {
+          const dStatus = delivery.delivery_status || '';
+          if (!dStatus.startsWith('E-13') && !dStatus.startsWith('E-14')) {
+            console.log(`[Lifecycle] Encomenda cancelada. Marcando delivery ${delivery.documentId} como E-14 Entrega Impossível`);
+            await strapi.documents('api::delivery.delivery').update({
+              documentId: delivery.documentId,
+              data: {
+                delivery_status: 'E-14 Entrega Impossível',
+                notes: `Cancelado devido ao estado da encomenda: ${status}`
+              }
+            });
+          }
+        }
+      } catch (err) {
+        console.error('[Lifecycle] Erro ao cancelar delivery associada:', err);
+      }
+    }
+
+    if (status.startsWith('S-15') && result.rating) {
+      try {
+        const orderFull = await strapi.documents('api::order.order').findOne({
+          documentId: result.documentId,
+          populate: ['user', 'courier', 'review']
+        });
+
+        if (orderFull && orderFull.courier && !orderFull.review) {
+          console.log(`[Lifecycle] Criando review para a encomenda ${orderFull.id} com rating ${result.rating}`);
+          
+          await strapi.documents('api::review.review').create({
+            data: {
+              rating: result.rating,
+              review_createdAt: new Date().toISOString(),
+              order: orderFull.documentId,
+              user: (orderFull.user as any)?.documentId,
+              courier: (orderFull.courier as any)?.documentId,
+              publishedAt: new Date().toISOString()
+            }
+          });
+
+          // Recalcular rating do estafeta
+          const courierDocId = (orderFull.courier as any).documentId;
+          const allCourierReviews = await strapi.documents('api::review.review').findMany({
+            filters: { courier: { documentId: courierDocId } },
+            populate: []
+          });
+
+          if (allCourierReviews && allCourierReviews.length > 0) {
+            const sum = allCourierReviews.reduce((acc: number, r: any) => acc + (r.rating || 0), 0);
+            const avgRating = sum / allCourierReviews.length;
+            
+            await strapi.documents('api::courier-estafeta.courier-estafeta').update({
+              documentId: courierDocId,
+              data: {
+                rating: avgRating
+              }
+            });
+            console.log(`[Lifecycle] Rating do estafeta ${courierDocId} atualizado para ${avgRating}`);
+          }
+        }
+      } catch (err) {
+        console.error('[Lifecycle] Erro ao criar review ou atualizar rating:', err);
+      }
+    }
+
     if (!status.startsWith('S-11')) return;
 
     const order = await strapi.documents('api::order.order').findOne({
@@ -103,6 +188,29 @@ export default {
           }],
         },
       });
+    }
+
+    // Configurar Webhook/Email para encomenda concluída
+    console.log(`[Webhook] Disparando webhook/email para a encomenda ${order.orderId || order.id} (S-11 Concluída)`);
+    try {
+      // Simulação do envio de email: cria o registo em communications se existisse a coleção
+      // Como alternativa, fazemos um mock fetch a um webhook.
+      await fetch('https://webhook.site/go-everywhere-completed', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          event: 'order.completed',
+          orderId: order.orderId || order.id,
+          customerName: (order as any).clientName || (order as any).deliveryName || 'Cliente',
+          email: (order.user as any)?.email,
+          total: order.total_price,
+          earnedPoints: earnedPoints
+        })
+      }).catch(err => {
+        console.log('[Webhook] Simulação falhou silenciosamente (esperado se webhook não existe)', err.message);
+      });
+    } catch (e) {
+      console.error('[Webhook] Falha ao enviar email/webhook:', e.message);
     }
   },
 };
