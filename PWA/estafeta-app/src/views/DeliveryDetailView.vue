@@ -263,8 +263,9 @@ import {
   getDeliveryById, acceptDelivery, advanceDeliveryState,
   markDeliveryImpossible, wazeLink, fetchDeliveries, sendDeliveryChatMessage,
   declineDeliveryTimeout, startGpsTracking, stopGpsTracking, getLastGpsCoords, 
-  getCurrentRouteGeoJSON, fetchRouteGeoJSON, store, startSimulatedRoute
+  getCurrentRouteGeoJSON, fetchRouteGeoJSON, store, startSimulatedRoute, socket
 } from '../stores/courierStore.js';
+import { requestNotificationPermission, sendNotification } from '../utils/notifications.js';
 import { DELIVERY_STATE, deliveryStateLabels, STATE_CTA } from '../constants.js';
 import StatusStepper from '../components/StatusStepper.vue';
 
@@ -491,12 +492,29 @@ function handleSimulate() {
 
 onMounted(async () => {
   await nextTick();
+  
+  requestNotificationPermission();
+
   if (!routeMapEl.value || !delivery.value) return;
   
   // Set up polling for chat while viewing the delivery
   chatPollTimer = setInterval(() => {
     fetchDeliveries();
   }, 5000);
+
+  // Real-time chat via WebSockets
+  socket.emit('join_room', delivery.value.orderDocumentId);
+  socket.on('chat_message', (data) => {
+    if (delivery.value && String(data.room) === String(delivery.value.orderDocumentId)) {
+      if (data.message?.sender === 'client') {
+        fetchDeliveries(); // update local history to get the new message
+        sendNotification('GoEverywhere — Nova Mensagem do Cliente', {
+          body: data.message.text,
+          onClick: () => { openChat.value = true; }
+        });
+      }
+    }
+  });
 
   const p = delivery.value.pickup;
   const d = delivery.value.destination;
@@ -519,6 +537,10 @@ watch([delivery, () => store.gpsCoords, () => store.currentRouteGeoJSON], () => 
 onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval);
   if (chatPollTimer) clearInterval(chatPollTimer);
+  socket.off('chat_message');
+  if (delivery.value?.orderDocumentId) {
+    socket.emit('leave_room', delivery.value.orderDocumentId);
+  }
   routeMap?.remove(); routeMap = null; routeLayer = null; leaflet = null;
   // GPS tracking is managed at app level, don't stop here
 });

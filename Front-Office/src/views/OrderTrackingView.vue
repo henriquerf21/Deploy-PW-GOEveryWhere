@@ -310,7 +310,7 @@ import { getDestinationLatLng } from '../utils/mapCoords.js';
 import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useOrderStore, ORDER_STATES, DELIVERY_ACCEPTED_STATUSES, fetchUserOrders, cancelActiveOrder, replyToInfoRequest, sendChatMessage, socket, acknowledgeActiveOrder } from '../stores/orderStore.js';
-import { requestNotificationPermission, notifyOrderStateChange } from '../utils/notifications.js';
+import { requestNotificationPermission, notifyOrderStateChange, sendNotification } from '../utils/notifications.js';
 import { API_URL, BACKEND_URL } from '../config/env.js';
 
 const router = useRouter();
@@ -571,8 +571,14 @@ onMounted(async () => {
     if (order.value && String(data.room) === String(order.value.documentId)) {
       order.value.chatHistory = data.chatHistory || [...(order.value.chatHistory || []), data.message];
       
-      if (!openChat.value && data.message?.sender === 'courier') {
-        showStateToast('Nova mensagem do estafeta!');
+      if (data.message?.sender === 'courier') {
+        if (!openChat.value) {
+          showStateToast('Nova mensagem do estafeta!');
+        }
+        sendNotification('GoEverywhere — Nova Mensagem', {
+          body: data.message.text,
+          onClick: () => { openChat.value = true; }
+        });
       }
 
       if (openChat.value) {
