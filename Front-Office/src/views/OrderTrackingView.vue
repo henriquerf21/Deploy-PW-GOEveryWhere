@@ -668,6 +668,13 @@ watch(routeProgress, (newVal) => {
   animationFrame = requestAnimationFrame(animate);
 }, { immediate: true });
 
+// Reset the "sent" success message if the order status transitions back to S-03 (new admin request)
+watch(() => order.value?.status, (newStatus, oldStatus) => {
+  if (newStatus === 'S-03' && oldStatus !== 'S-03') {
+    s03Sent.value = false;
+  }
+});
+
 const trackingMapCoords = computed(() => {
   const o = order.value;
   if (!o) return null;
