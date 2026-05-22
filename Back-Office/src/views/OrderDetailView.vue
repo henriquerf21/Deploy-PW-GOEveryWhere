@@ -25,8 +25,12 @@
       </div>
     </header>
 
-    <div v-if="order.priority === 5" class="urgent-banner" role="alert">
+    <div v-if="order.priority === 5" class="urgent-banner" role="alert" style="margin-bottom: 16px;">
       <strong>Prioridade máxima 5 — Urgente.</strong> Tratamento imediato obrigatório.
+    </div>
+
+    <div v-if="order.deliveryImpossibleReason && order.status === 'UNDELIVERABLE'" class="urgent-banner" role="alert" style="margin-bottom: 16px;">
+      <strong>Aviso do Estafeta (Entrega Impossível):</strong> {{ order.deliveryImpossibleReason }}
     </div>
 
     <div class="layout">
