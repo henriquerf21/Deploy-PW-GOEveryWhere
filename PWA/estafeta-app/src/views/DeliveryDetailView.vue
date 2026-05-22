@@ -283,7 +283,7 @@ let courierMarkerIcon = null;
 const delivery = computed(() => getDeliveryById(props.id));
 const ctaLabel = computed(() => delivery.value ? STATE_CTA[delivery.value.state] : null);
 const canMarkImpossible = computed(() =>
-  delivery.value && ['E-09', 'E-10', 'E-11', 'E-12'].includes(delivery.value.state)
+  delivery.value && ['E-09', 'E-10'].includes(delivery.value.state)
 );
 
 const stateLabel = computed(() => {

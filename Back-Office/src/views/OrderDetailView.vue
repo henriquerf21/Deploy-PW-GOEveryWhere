@@ -497,9 +497,9 @@ const canApprove = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].i
 const canEditPriority = computed(() => order.value && !terminalStatuses.includes(order.value.status));
 const canReject = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].includes(order.value.status));
 const canRequestInfo = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].includes(order.value.status));
-const canAssignSection = computed(() => order.value && ['APPROVED', 'ASSIGNED'].includes(order.value.status));
+const canAssignSection = computed(() => order.value && ['APPROVED', 'ASSIGNED', 'UNDELIVERABLE'].includes(order.value.status));
 const canAdminCorrect = computed(() => order.value && !terminalStatuses.includes(order.value.status));
-const canCancelAdmin = computed(() => order.value && ['APPROVED', 'ASSIGNED', 'IN_TRANSIT'].includes(order.value.status));
+const canCancelAdmin = computed(() => order.value && ['APPROVED', 'ASSIGNED', 'IN_TRANSIT', 'UNDELIVERABLE'].includes(order.value.status));
 const available = computed(() => (order.value ? availableCouriersForOrder(order.value.id) : []));
 
 
