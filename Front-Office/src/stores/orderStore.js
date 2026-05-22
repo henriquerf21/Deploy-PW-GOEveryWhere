@@ -368,10 +368,8 @@ export async function fetchUserOrders() {
       store.activeOrder = null;
     }
 
-    // 4. Atualiza o histórico apenas se houver mudanças reais
-    if (JSON.stringify(allOrders) !== JSON.stringify(store.orderHistory)) {
-      store.orderHistory = allOrders;
-    }
+    // Update history
+    store.orderHistory = allOrders;
 
   } catch (error) {
     console.error('Erro ao procurar encomendas:', error);
@@ -440,7 +438,7 @@ export async function submitOrder() {
     if (response.ok) {
       // Atualiza o histórico imediatamente após a compra
       await fetchUserOrders();
-      socket.emit('global_order_status_update', { status: 'S-01' });
+      // Strapi lifecycle hook already notifies admin_room
       return { success: true };
     } else {
       return { success: false, error: result.error?.message || 'Erro na criação da encomenda' };
@@ -483,7 +481,7 @@ export async function cancelActiveOrder(orderId, reason) {
     if (response.ok) {
       await fetchUserOrders();
       socket.emit('order_status_update', { room: orderId, status: 'S-13' });
-      socket.emit('global_order_status_update', { status: 'S-13' });
+      // Strapi lifecycle hook already notifies admin_room
       return { success: true };
     }
 
@@ -529,7 +527,7 @@ export async function replyToInfoRequest(documentId, reply) {
     if (response.ok) {
       await fetchUserOrders();
       socket.emit('order_status_update', { room: documentId, status: 'S-02' });
-      socket.emit('global_order_status_update', { status: 'S-02' });
+      // Strapi lifecycle hook already notifies admin_room
       return { success: true };
     }
 

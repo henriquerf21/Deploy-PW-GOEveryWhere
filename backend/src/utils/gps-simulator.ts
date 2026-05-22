@@ -1,4 +1,4 @@
-import fetch from 'node-fetch';
+// Using global native fetch available in Node.js 18+
 
 export async function startGpsSimulator(strapi: any, orderId: number | string, startLat: number, startLng: number, endLat: number, endLng: number) {
   try {

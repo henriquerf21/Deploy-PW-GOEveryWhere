@@ -49,6 +49,12 @@ export default {
         strapi.log.info(`[Socket.io] Socket ${socket.id} joined room ${room}`);
       });
 
+      // Back-Office joins a dedicated admin room for targeted updates
+      socket.on('join_admin', () => {
+        socket.join('admin_room');
+        strapi.log.info(`[Socket.io] Socket ${socket.id} joined admin_room`);
+      });
+
       socket.on('chat_message', (data) => {
         io.to(data.room).emit('chat_message', data);
       });
@@ -59,7 +65,8 @@ export default {
 
       socket.on('order_status_update', (data) => {
         io.to(data.room).emit('order_status_update', data);
-        io.emit('global_order_status_update', data); // broadcast to BO
+        // Notify only admin_room instead of broadcasting to ALL clients
+        io.to('admin_room').emit('data_changed', { action: 'update', model: 'order', room: data.room });
       });
 
       socket.on('disconnect', () => {
@@ -74,7 +81,8 @@ export default {
       models: ['api::order.order', 'api::courier-estafeta.courier-estafeta'],
       afterCreate(event) {
         const roomId = event.result.documentId || String(event.result.id);
-        strapi.io?.emit('global_order_status_update', { 
+        // Notify only admin_room instead of broadcasting globally
+        strapi.io?.to('admin_room').emit('data_changed', { 
           action: 'create', 
           model: event.model.singularName,
           room: roomId
@@ -84,7 +92,8 @@ export default {
       },
       afterUpdate(event) {
         const roomId = event.result.documentId || String(event.result.id);
-        strapi.io?.emit('global_order_status_update', { 
+        // Notify only admin_room instead of broadcasting globally
+        strapi.io?.to('admin_room').emit('data_changed', { 
           action: 'update', 
           model: event.model.singularName,
           room: roomId

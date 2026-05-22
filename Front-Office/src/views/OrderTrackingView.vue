@@ -8,11 +8,6 @@
           <p class="cf-checkout-kicker">Em tempo real</p>
           <h1 class="cf-checkout-title">Acompanhamento</h1>
         </div>
-        <button class="cf-btn cf-btn-secondary" style="padding: 8px 16px; font-size: 13px; height: auto;" @click="handleManualRefresh" :disabled="isRefreshing">
-          <svg v-if="isRefreshing" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="spin"><path d="M21 12a9 9 0 11-6.219-8.56"/></svg>
-          <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 2v6h-6"/><path d="M3 12a9 9 0 0115-6.7L21 8"/><path d="M3 22v-6h6"/><path d="M21 12a9 9 0 01-15 6.7L3 16"/></svg>
-          <span style="margin-left: 6px;">Atualizar</span>
-        </button>
       </header>
 
       <div class="cf-tabs" role="tablist">
@@ -315,7 +310,7 @@ import { getDestinationLatLng } from '../utils/mapCoords.js';
 import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import { useOrderStore, ORDER_STATES, DELIVERY_ACCEPTED_STATUSES, fetchUserOrders, cancelActiveOrder, replyToInfoRequest, sendChatMessage, socket, acknowledgeActiveOrder } from '../stores/orderStore.js';
-import { requestNotificationPermission, notifyOrderStateChange } from '../utils/notifications.js';
+import { requestNotificationPermission, notifyOrderStateChange, sendNotification } from '../utils/notifications.js';
 import { API_URL, BACKEND_URL } from '../config/env.js';
 
 const router = useRouter();
@@ -326,13 +321,7 @@ const toastMessage = ref('');
 let pollingTimer = null;
 let currentOrderRoom = null;
 
-const isRefreshing = ref(false);
-
-async function handleManualRefresh() {
-  isRefreshing.value = true;
-  await fetchUserOrders();
-  setTimeout(() => { isRefreshing.value = false; }, 600);
-}
+// Removed manual refresh variables
 
 // ── GPS REAL DO ESTAFETA ────────────────────────────────────────────
 const courierGps = reactive({ lat: null, lng: null });
@@ -582,8 +571,14 @@ onMounted(async () => {
     if (order.value && String(data.room) === String(order.value.documentId)) {
       order.value.chatHistory = data.chatHistory || [...(order.value.chatHistory || []), data.message];
       
-      if (!openChat.value && data.message?.sender === 'courier') {
-        showStateToast('Nova mensagem do estafeta!');
+      if (data.message?.sender === 'courier') {
+        if (!openChat.value) {
+          showStateToast('Nova mensagem do estafeta!');
+        }
+        sendNotification('GoEverywhere — Nova Mensagem', {
+          body: data.message.text,
+          onClick: () => { openChat.value = true; }
+        });
       }
 
       if (openChat.value) {
@@ -667,6 +662,13 @@ watch(routeProgress, (newVal) => {
   }
   animationFrame = requestAnimationFrame(animate);
 }, { immediate: true });
+
+// Reset the "sent" success message if the order status transitions back to S-03 (new admin request)
+watch(() => order.value?.status, (newStatus, oldStatus) => {
+  if (newStatus === 'S-03' && oldStatus !== 'S-03') {
+    s03Sent.value = false;
+  }
+});
 
 const trackingMapCoords = computed(() => {
   const o = order.value;

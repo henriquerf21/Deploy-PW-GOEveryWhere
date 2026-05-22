@@ -876,8 +876,11 @@ export function startGpsTracking() {
                 }
             }
 
-            // Persist to DB occasionally (every 30s instead of 5s to reduce DB load)
-            if (Date.now() % 30000 < 5000) {
+            // Persist to DB every 30s using a proper counter (6 intervals × 5s = 30s)
+            if (!window.__gpsDbCounter) window.__gpsDbCounter = 0;
+            window.__gpsDbCounter++;
+            if (window.__gpsDbCounter >= 6) {
+                window.__gpsDbCounter = 0;
                 // ALWAYS update the courier's own model in the backend, even if they have no active delivery
                 apiCourierPut(`/courier-estafetas/me`, {
                     data: {
@@ -913,6 +916,7 @@ export function stopGpsTracking() {
         gpsIntervalId = null;
     }
     lastGpsCoords = null;
+    window.__gpsDbCounter = 0;
 }
 
 // ── Actions: Timer expiry (E-08 → decline) ──────────────────────
@@ -941,7 +945,7 @@ export async function declineDeliveryTimeout(deliveryId) {
                     data: { order_status: 'S-06 Aguardando Aceitação' }
                 });
                 socket.emit('order_status_update', { room: d.orderDocumentId, status: 'S-06' });
-                socket.emit('global_order_status_update', { status: 'S-06' });
+                // Strapi lifecycle hook already notifies admin_room
             }
         } catch (err) {
             console.error('declineDeliveryTimeout sync error:', err);

@@ -12,6 +12,77 @@ export default {
     }
   },
 
+  async beforeUpdate(event: any) {
+    const { data, where } = event.params;
+    
+    if (data.order_status) {
+      try {
+        const currentOrder = await strapi.db.query('api::order.order').findOne({
+          where,
+          select: ['order_status', 'items'],
+          populate: { courier: true, user: true }
+        });
+
+        if (currentOrder && currentOrder.order_status !== data.order_status) {
+          const newStatus = data.order_status;
+          
+          let boInjectedEvent = false;
+          if (data.items && data.items.boMeta && Array.isArray(data.items.boMeta.events)) {
+             const existingEvents = Array.isArray(currentOrder.items?.boMeta?.events) ? currentOrder.items.boMeta.events : [];
+             if (data.items.boMeta.events.length > existingEvents.length) {
+                boInjectedEvent = true;
+             }
+          }
+          
+          if (!boInjectedEvent) {
+            let actorName = 'Sistema';
+            let actionKind = 'status_update';
+            let kind = 'info';
+
+            if (['S-07', 'S-08', 'S-09', 'S-10', 'S-11', 'S-12'].some(p => newStatus.startsWith(p))) {
+               actorName = currentOrder.courier ? (currentOrder.courier.fullName || `${currentOrder.courier.firstName || ''} ${currentOrder.courier.lastName || ''}`.trim() || 'Estafeta') : 'Estafeta';
+               actionKind = 'courier_status';
+               kind = 'transit';
+            } 
+            else if (['S-03', 'S-04', 'S-05', 'S-14'].some(p => newStatus.startsWith(p))) {
+               actorName = 'Operador (Back-Office)';
+               actionKind = 'admin_status';
+               kind = 'info';
+            }
+            else if (['S-01', 'S-02', 'S-06', 'S-13', 'S-15', 'S-16'].some(p => newStatus.startsWith(p))) {
+               actorName = currentOrder.user ? `${currentOrder.user.firstName || ''} ${currentOrder.user.lastName || ''}`.trim() || 'Cliente' : 'Cliente';
+               actionKind = 'client_status';
+               kind = 'created';
+            }
+
+            const eventEntry = {
+              at: new Date().toISOString(),
+              action: actionKind,
+              actor: { name: actorName, id: null, email: null },
+              meta: { status: newStatus, fromStatus: currentOrder.order_status }
+            };
+
+            let itemsObj = data.items;
+            if (!itemsObj && typeof currentOrder.items === 'object') {
+               itemsObj = JSON.parse(JSON.stringify(currentOrder.items));
+            }
+            if (!itemsObj || Array.isArray(itemsObj)) {
+               itemsObj = { list: Array.isArray(itemsObj) ? itemsObj : [] };
+            }
+            const boMeta = itemsObj.boMeta || {};
+            const eventsList = Array.isArray(boMeta.events) ? boMeta.events : [];
+            boMeta.events = [...eventsList, eventEntry];
+            itemsObj.boMeta = boMeta;
+            
+            data.items = itemsObj;
+          }
+        }
+      } catch (err) {
+        console.error('[Lifecycle] Erro ao gravar timeline no beforeUpdate:', err);
+      }
+    }
+  },
+
   async afterCreate(event: any) {
     const { result } = event;
     const pointsUsed = result.go_points_used || 0;

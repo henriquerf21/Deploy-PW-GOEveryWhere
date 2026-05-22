@@ -277,6 +277,7 @@ function buildPublicOrder(entry: any) {
       : null,
     rejectionReason: attrs.rejectionReason || null,
     cancelReason: attrs.cancelReason || null,
+    deliveryImpossibleReason: attrs.delivery?.notes || null,
     communicationLog: Array.isArray(bo.communicationLog) ? bo.communicationLog : [],
     adminInternalNote: bo.adminInternalNote || null,
     infoRequestMessage: bo.infoRequestMessage || null,
@@ -754,7 +755,7 @@ export default ({ strapi }: any) => ({
 
   async getOrdersRaw() {
     const rows = await strapi.db.query('api::order.order').findMany({
-      populate: { user: true, courier: true, review: true },
+      populate: { user: true, courier: true, review: true, delivery: true },
       orderBy: { createdAt: 'desc' },
     });
     return dedupeByDocumentId(rows);

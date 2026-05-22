@@ -25,8 +25,12 @@
       </div>
     </header>
 
-    <div v-if="order.priority === 5" class="urgent-banner" role="alert">
+    <div v-if="order.priority === 5" class="urgent-banner" role="alert" style="margin-bottom: 16px;">
       <strong>Prioridade máxima 5 — Urgente.</strong> Tratamento imediato obrigatório.
+    </div>
+
+    <div v-if="order.deliveryImpossibleReason && order.status === 'UNDELIVERABLE'" class="urgent-banner" role="alert" style="margin-bottom: 16px;">
+      <strong>Aviso do Estafeta (Entrega Impossível):</strong> {{ order.deliveryImpossibleReason }}
     </div>
 
     <div class="layout">
@@ -114,7 +118,7 @@
         <section v-if="order.clientReply || order.infoRequestMessage" class="bo-card s03-card">
           <header class="bo-card__head">
             <div>
-              <h3 class="bo-card__title">Esclarecimento S-03</h3>
+              <h3 class="bo-card__title">Histórico do pedido de informação extra solicitada</h3>
               <p class="bo-card__sub">Diálogo com o cliente sobre informação adicional solicitada.</p>
             </div>
           </header>
@@ -141,6 +145,15 @@
             </div>
           </header>
           <div class="bo-card__body">
+            <div v-if="timelineEntries.length" class="timeline-legend">
+              <span class="legend-item" title="Ações feitas pelo Cliente"><span class="legend-dot" style="background: #6366f1;"></span> Cliente</span>
+              <span class="legend-item" title="Ações feitas pelo Estafeta"><span class="legend-dot" style="background: #0ea5e9;"></span> Estafeta</span>
+              <span class="legend-item" title="Ações e atualizações feitas pelo Operador/Sistema"><span class="legend-dot" style="background: #8b5cf6;"></span> Admin</span>
+              <span class="legend-item" title="Avisos e Trânsito"><span class="legend-dot" style="background: #f97316;"></span> Em Trânsito / Avisos</span>
+              <span class="legend-item" title="Entrega concluída ou Sucesso"><span class="legend-dot" style="background: #10b981;"></span> Concluído</span>
+              <span class="legend-item" title="Rejeições ou Cancelamentos"><span class="legend-dot" style="background: #ef4444;"></span> Cancelado</span>
+            </div>
+            
             <ol v-if="timelineEntries.length" class="timeline">
               <li v-for="(ev, idx) in timelineEntries" :key="idx" class="timeline__row" :class="`timeline__row--${ev.kind}`">
                 <span class="timeline__dot" aria-hidden="true" />
@@ -161,28 +174,6 @@
           </div>
         </section>
 
-        <section class="bo-card">
-          <header class="bo-card__head">
-            <div>
-              <h3 class="bo-card__title">Comunicações ao cliente</h3>
-            </div>
-          </header>
-          <div class="bo-card__body">
-            <ul class="mail-list">
-              <li v-for="m in orderMails" :key="m.id" class="mail-list__row">
-                <div class="mail-list__head">
-                  <span class="bo-badge bo-badge--info">{{ m.kind }}</span>
-                  <span v-if="m.emailSent === false" class="bo-badge bo-badge--warn">SMTP não confirmado</span>
-                  <span class="bo-mono bo-muted">{{ m.to }}</span>
-                  <span class="bo-mono bo-muted">{{ (m.at || '').slice(0, 16).replace('T', ' ') }}</span>
-                </div>
-                <p v-if="m.emailError" class="bo-muted" style="font-size: 12px; margin: 0 0 6px;">{{ m.emailError }}</p>
-                <p class="mail-list__body">{{ (m.body || '').slice(0, 240) }}{{ (m.body || '').length > 240 ? '…' : '' }}</p>
-              </li>
-              <li v-if="!orderMails.length" class="bo-muted" style="font-size: 13px;">Nenhuma comunicação registada para este pedido.</li>
-            </ul>
-          </div>
-        </section>
       </div>
 
       <aside class="layout__side bo-stack">
@@ -421,16 +412,21 @@ onMounted(() => { void syncOrderDetail(); });
 watch(orderId, () => { void syncOrderDetail(); });
 
 const TIMELINE_LABELS = {
-  created: { title: 'Pedido criado', kind: 'created' },
-  approve: { title: 'Pedido aprovado', kind: 'approved' },
-  reject: { title: 'Pedido rejeitado', kind: 'rejected' },
-  request_info: { title: 'Informação solicitada ao cliente', kind: 'info' },
-  assign_courier: { title: 'Estafeta atribuído', kind: 'assigned' },
-  start_transit: { title: 'Em trânsito', kind: 'transit' },
-  complete: { title: 'Entrega concluída', kind: 'delivered' },
-  set_priority: { title: 'Prioridade alterada', kind: 'priority' },
-  cancel_admin: { title: 'Cancelado pela operação', kind: 'rejected' },
-  admin_patch: { title: 'Correção administrativa', kind: 'info' },
+  created: { title: 'Pedido criado', kind: 'client' },
+  approve: { title: 'Pedido aprovado', kind: 'admin' },
+  reject: { title: 'Pedido rejeitado', kind: 'admin_danger' },
+  request_info: { title: 'Informação solicitada ao cliente', kind: 'admin_warn' },
+  assign_courier: { title: 'Estafeta atribuído', kind: 'admin' },
+  start_transit: { title: 'Em trânsito', kind: 'admin_transit' },
+  complete: { title: 'Entrega concluída', kind: 'admin_success' },
+  set_priority: { title: 'Prioridade alterada', kind: 'admin_warn' },
+  cancel_admin: { title: 'Cancelado pela operação', kind: 'admin_danger' },
+  admin_patch: { title: 'Correção administrativa', kind: 'admin' },
+  
+  courier_status: { title: 'Atualização', kind: 'courier' },
+  client_status: { title: 'Atualização', kind: 'client' },
+  admin_status: { title: 'Atualização', kind: 'admin' },
+  status_update: { title: 'Atualização de Estado', kind: 'generic' }
 };
 
 const timelineEntries = computed(() => {
@@ -440,6 +436,8 @@ const timelineEntries = computed(() => {
     const cfg = TIMELINE_LABELS[ev.action] || { title: ev.action || '—', kind: 'generic' };
     const meta = ev.meta || {};
     let detail = '';
+    let title = cfg.title;
+
     switch (ev.action) {
       case 'approve':
         detail = [meta.storeName ? `Loja: ${meta.storeName}` : null, meta.costEuro != null ? `Custo: ${Number(meta.costEuro).toFixed(2)}€` : null, meta.etaMinutes != null ? `ETA: ${meta.etaMinutes} min` : null]
@@ -463,11 +461,21 @@ const timelineEntries = computed(() => {
       case 'admin_patch':
         detail = Array.isArray(meta.fields) ? `Campos: ${meta.fields.join(', ')}` : '';
         break;
+      case 'courier_status':
+      case 'client_status':
+      case 'admin_status':
+      case 'status_update':
+        if (meta.status) title = meta.status;
+        if (meta.fromStatus && meta.status) {
+          detail = `${meta.fromStatus.split(' ')[0]} → ${meta.status.split(' ')[0]}`;
+        }
+        break;
       default:
         detail = '';
     }
+
     return {
-      title: cfg.title,
+      title,
       kind: cfg.kind,
       at: ev.at,
       actorName: ev.actor?.name || 'Sistema',
@@ -493,26 +501,11 @@ const canApprove = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].i
 const canEditPriority = computed(() => order.value && !terminalStatuses.includes(order.value.status));
 const canReject = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].includes(order.value.status));
 const canRequestInfo = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].includes(order.value.status));
-const canAssignSection = computed(() => order.value && ['APPROVED', 'ASSIGNED'].includes(order.value.status));
+const canAssignSection = computed(() => order.value && ['APPROVED', 'ASSIGNED', 'UNDELIVERABLE'].includes(order.value.status));
 const canAdminCorrect = computed(() => order.value && !terminalStatuses.includes(order.value.status));
-const canCancelAdmin = computed(() => order.value && ['APPROVED', 'ASSIGNED', 'IN_TRANSIT'].includes(order.value.status));
+const canCancelAdmin = computed(() => order.value && ['APPROVED', 'ASSIGNED', 'IN_TRANSIT', 'UNDELIVERABLE'].includes(order.value.status));
 const available = computed(() => (order.value ? availableCouriersForOrder(order.value.id) : []));
-const orderMails = computed(() => {
-  const o = order.value;
-  const fromServer = o?.communicationLog;
-  if (Array.isArray(fromServer) && fromServer.length) {
-    return fromServer.map((c) => ({
-      id: c.id || `${c.at}-${c.kind}`,
-      kind: c.kind || c.channel || 'registo',
-      to: c.to || '',
-      at: c.at || '',
-      body: c.body || '',
-      emailSent: c.emailSent,
-      emailError: c.emailError || '',
-    }));
-  }
-  return logistics.emailLog.filter((e) => e.orderId === orderId.value);
-});
+
 
 function statusBadgeClass(status) {
   switch (status) {
@@ -821,31 +814,6 @@ async function doCancelAdmin() {
   font-size: 13px;
 }
 
-.mail-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
-
-.mail-list__row {
-  padding: 12px 14px;
-  border: 1px solid var(--bo-border);
-  border-radius: 10px;
-  background: var(--bo-surface);
-}
-
-.mail-list__head {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: wrap;
-  margin-bottom: 6px;
-}
-
-.mail-list__body {
-  margin: 0;
-  font-size: 13px;
-  line-height: 1.55;
-  color: var(--bo-text);
-  white-space: pre-wrap;
-}
-
 .timeline {
   list-style: none;
   margin: 0;
@@ -884,14 +852,41 @@ async function doCancelAdmin() {
   box-shadow: 0 0 0 1px var(--bo-border, #e2e8f0);
 }
 
-.timeline__row--created .timeline__dot { background: #6366f1; }
-.timeline__row--approved .timeline__dot { background: #10b981; }
-.timeline__row--rejected .timeline__dot { background: #ef4444; }
-.timeline__row--info .timeline__dot { background: #a855f7; }
-.timeline__row--assigned .timeline__dot { background: #0ea5e9; }
-.timeline__row--transit .timeline__dot { background: #f59e0b; }
-.timeline__row--delivered .timeline__dot { background: #22c55e; }
-.timeline__row--priority .timeline__dot { background: #ec4899; }
+.timeline__row--client .timeline__dot { background: #6366f1; } /* Indigo for Client */
+.timeline__row--courier .timeline__dot { background: #0ea5e9; } /* Light Blue for Courier */
+.timeline__row--admin .timeline__dot { background: #8b5cf6; } /* Purple for Admin actions */
+.timeline__row--admin_warn .timeline__dot { background: #f59e0b; } /* Amber for Admin warnings */
+.timeline__row--admin_danger .timeline__dot { background: #ef4444; } /* Red for Admin reject/cancel */
+.timeline__row--admin_transit .timeline__dot { background: #f97316; } /* Orange for Admin transit */
+.timeline__row--admin_success .timeline__dot { background: #10b981; } /* Emerald for Admin success */
+.timeline__row--admin_info .timeline__dot { background: #a855f7; }
+.timeline__row--generic .timeline__dot { background: #94a3b8; }
+
+.timeline-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 20px;
+  padding-bottom: 14px;
+  border-bottom: 1px dashed var(--bo-border);
+}
+
+.legend-item {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  color: var(--bo-text-secondary);
+  font-weight: 500;
+}
+
+.legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+  box-shadow: 0 0 0 1px var(--bo-border, #e2e8f0);
+}
 
 .timeline__content {
   display: flex;
