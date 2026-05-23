@@ -15,7 +15,7 @@
 
     <div class="card-body">
       <div class="location-row">
-        <span class="loc-icon">🏪</span>
+        <span class="loc-icon" v-html="SVG.store"></span>
         <div class="loc-info">
           <span class="loc-name">{{ delivery.pickup.address || delivery.pickup.name }}</span>
           <span class="loc-distance">{{ delivery.pickup.distance }} km</span>
@@ -23,7 +23,7 @@
       </div>
       <div class="route-line"></div>
       <div class="location-row">
-        <span class="loc-icon">🏠</span>
+        <span class="loc-icon" v-html="SVG.mapPin"></span>
         <div class="loc-info">
           <span class="loc-name">{{ delivery.destination.name }} - {{ delivery.destination.address }}</span>
           <span class="loc-distance">{{ delivery.destination.distance }} km</span>
