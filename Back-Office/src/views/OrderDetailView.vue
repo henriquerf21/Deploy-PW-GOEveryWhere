@@ -139,7 +139,7 @@
           </div>
         </section>
 
-        <section v-if="showClientComms" class="bo-card comm-hub">
+        <section class="bo-card comm-hub">
           <header class="bo-card__head">
             <div>
               <h3 class="bo-card__title">Comunicação</h3>
@@ -182,11 +182,12 @@
                   rows="2"
                   placeholder="Descreva a informação que precisa do cliente…"
                   @keydown.ctrl.enter.prevent="sendBoChat"
+                  :disabled="!canRequestInfo"
                 />
                 <button
                   type="button"
                   class="bo-btn bo-btn--primary comm-compose__btn"
-                  :disabled="!boChatText.trim() || boChatSending"
+                  :disabled="!boChatText.trim() || boChatSending || !canRequestInfo"
                   @click="sendBoChat"
                 >
                   {{ boChatSending ? 'A enviar…' : 'Enviar ao cliente' }}
@@ -373,21 +374,6 @@
           </div>
         </section>
 
-        <section v-if="canRequestInfo" class="bo-card">
-          <header class="bo-card__head">
-            <div>
-              <h3 class="bo-card__title">Pedir informação adicional</h3>
-              <p class="bo-card__sub">Email enviado ao cliente; estado passa a "Info adicional solicitada".</p>
-            </div>
-          </header>
-          <div class="bo-card__body bo-stack">
-            <fieldset class="bo-stack" :disabled="!canRequestInfo" style="border: none; padding: 0; margin: 0;">
-              <textarea v-model="infoText" class="bo-textarea" rows="3" placeholder="O que precisas do cliente?" />
-              <button type="button" class="bo-btn bo-btn--outline" :disabled="!infoText.trim()" @click="doInfo">Enviar pedido de info</button>
-            </fieldset>
-          </div>
-        </section>
-
 
         <section v-if="canAdminCorrect" class="bo-card">
           <header class="bo-card__head">
@@ -480,7 +466,6 @@ const order = computed(() => getOrderById(orderId.value));
 const ap = reactive({ storeId: '', costEuro: 0, etaMinutes: 0 });
 const pri = ref(3);
 const rejectText = ref('');
-const infoText = ref('');
 const pickCourier = ref('');
 const adminPatch = reactive({ deliveryAddress: '', deliveryCity: '', internalNote: '' });
 const cancelReasonText = ref('');
@@ -821,10 +806,11 @@ async function sendBoChat() {
   if (!id || !text) return;
   boChatSending.value = true;
   try {
-    await boPostOrderChatMessage(id, text, 'info_adicional');
+    const r = await requestOrderInfo(id, text);
+    if (!r.ok) throw new Error(r.error || 'Erro ao enviar pedido de informação.');
     boChatText.value = '';
     await refreshOrderFromServer(id, { silent: true });
-    toast.success('Mensagem guardada.');
+    toast.success('Pedido de informação enviado.');
   } catch (e) {
     toast.error(e?.message || 'Não foi possível enviar a mensagem.');
   } finally {
@@ -832,18 +818,7 @@ async function sendBoChat() {
   }
 }
 
-const showClientComms = computed(() => {
-  const o = order.value;
-  if (!o) return true;
-  return (
-    operationsThread.value.length > 0
-    || courierThread.value.length > 0
-    || o.status === ORDER_STATUS.INFO_REQUESTED
-    || !!o.infoRequestMessage
-    || hasClientReply.value
-    || !!o.courierName
-  );
-});
+
 
 function statusBadgeClass(status) {
   switch (status) {
@@ -882,11 +857,7 @@ async function doReject() {
   toast(r.ok ? 'Pedido rejeitado.' : r.error, r.ok ? 'success' : 'error');
   if (r.ok) { rejectText.value = ''; void syncOrderDetail(); }
 }
-async function doInfo() {
-  const r = await requestOrderInfo(order.value.id, infoText.value);
-  toast(r.ok ? 'Pedido de informação enviado.' : r.error, r.ok ? 'success' : 'error');
-  if (r.ok) { infoText.value = ''; void syncOrderDetail(); }
-}
+
 async function doAssign() {
   const r = await assignCourierToOrder(order.value.id, pickCourier.value);
   toast(r.ok ? 'Estafeta atribuído.' : r.error, r.ok ? 'success' : 'error');
