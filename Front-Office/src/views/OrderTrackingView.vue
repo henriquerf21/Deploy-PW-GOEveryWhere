@@ -136,12 +136,12 @@
                 rows="3"
               ></textarea>
               <div class="s03-reply-actions">
-                <span class="s03-char-count" :class="{ 'min-reached': s03ReplyText.trim().length >= 10 }">
-                  {{ s03ReplyText.trim().length }} / mín. 10 caracteres
+                <span class="s03-char-count" :class="{ 'min-reached': s03ReplyText.trim().length >= 3 }">
+                  {{ s03ReplyText.trim().length }} / mín. 3 caracteres
                 </span>
                 <button
                   class="s03-btn-send"
-                  :disabled="s03ReplyText.trim().length < 10 || s03Sending"
+                  :disabled="s03ReplyText.trim().length < 3 || s03Sending"
                   @click="submitS03Reply"
                 >
                   {{ s03Sending ? 'A enviar...' : 'Enviar Resposta' }}
@@ -547,7 +547,7 @@ function setCourierInfo(raw, displayName) {
 }
 
 async function submitS03Reply() {
-  if (!order.value || s03ReplyText.value.trim().length < 10) return;
+  if (!order.value || s03ReplyText.value.trim().length < 3) return;
   s03Sending.value = true;
   const result = await replyToInfoRequest(order.value.documentId, s03ReplyText.value.trim());
   if (result.success) {
