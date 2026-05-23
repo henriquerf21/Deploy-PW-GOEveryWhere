@@ -173,6 +173,7 @@ async function handleAccept(id) {
   const ok = await acceptDelivery(id);
   if (!ok) return;
   await requestDeviceLocation({ force: true });
+  goToDetail(id);
 }
 function goToDetail(id) {
   teardownListMap();

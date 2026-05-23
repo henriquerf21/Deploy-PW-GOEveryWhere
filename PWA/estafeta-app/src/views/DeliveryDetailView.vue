@@ -10,7 +10,7 @@
 
     <!-- Order banner (Figma: < #ORD-2850 URGENTE €6.50 / state) -->
     <div class="order-banner" v-if="!isNavigating">
-      <button class="ob-back" type="button" aria-label="Voltar à lista" @click="$router.push('/deliveries')">
+      <button v-if="delivery.state === 'E-08' || delivery.state === 'E-14'" class="ob-back" type="button" aria-label="Voltar à lista" @click="$router.push('/deliveries')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111827" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
       <div class="ob-info">

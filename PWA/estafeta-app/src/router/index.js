@@ -77,6 +77,19 @@ router.beforeEach((to, _from, next) => {
     if (to.meta.guest && store.auth.loggedIn) {
         return next('/deliveries');
     }
+
+    // Force courier to stay on active delivery pages
+    if (store.auth.loggedIn && store.activeDeliveryId) {
+        const allowed = [
+            `/deliveries/${store.activeDeliveryId}`,
+            `/confirm/${store.activeDeliveryId}`,
+            `/completed/${store.activeDeliveryId}`
+        ];
+        if (!allowed.includes(to.path) && !to.path.startsWith('/completed/')) {
+            return next(`/deliveries/${store.activeDeliveryId}`);
+        }
+    }
+
     next();
 });
 
