@@ -1440,6 +1440,8 @@ exports.default = ({ strapi }) => ({
         const updated = await this.patchOrder(publicId, {
             data: {
                 order_status: ORDER_STATE.INFO_REQUESTED,
+                adminMessage: message,
+                clientReply: null,
                 items: {
                     boMeta: {
                         infoRequestMessage: message,

@@ -479,6 +479,13 @@ const s03ReplyText = ref('');
 const s03Sending = ref(false);
 const s03Sent = ref(false);
 
+watch(() => order.value?.status, (newStatus) => {
+  if (newStatus === 'S-03') {
+    s03Sent.value = false;
+    s03ReplyText.value = '';
+  }
+});
+
 // --- Courier info (visible from S-05 onwards) ---
 const courierInfo = ref(null);
 const deliveryStatusCode = ref(null);
