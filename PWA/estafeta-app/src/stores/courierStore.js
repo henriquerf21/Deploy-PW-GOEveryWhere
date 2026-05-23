@@ -1,7 +1,7 @@
 import { reactive, computed, ref, watch } from 'vue';
 import { io } from 'socket.io-client';
 import { DELIVERY_STATE, COURIER_STATE, NEXT_STATE } from '../constants.js';
-import { API_URL, BACKEND_URL, SOCKET_URL } from '../config/env.js';
+import { API_URL, BACKEND_URL, SOCKET_URL, isApiMixedContentRisk } from '../config/env.js';
 import { resolveStoreCoords } from '../data/continent-stores.js';
 import { haversineKm, isGpsNearDelivery, isValidGpsPoint } from '../utils/geo.js';
 import {
@@ -405,6 +405,9 @@ export const store = reactive({
     gpsFromDevice: false,
     gpsSimulated: false,
     gpsUpdatedAt: null,
+    /** unknown | granted | denied | prompt | unsupported | insecure */
+    gpsPermission: 'unknown',
+    gpsErrorMessage: null,
     currentRouteGeoJSON: null,
 
     get shiftStats() {
@@ -586,8 +589,8 @@ export async function login(phone, countryCode, password) {
             fetchDeliveries({ silent: true }),
             fetchCompletedDeliveries(),
         ]);
-        if (hasActiveDeliveryInProgress() && !isPaused()) {
-            startGpsTracking();
+        if (!isPaused()) {
+            void requestDeviceLocation();
         }
 
         return { success: true };
@@ -989,9 +992,9 @@ export async function togglePause() {
         store.error = 'Não foi possível atualizar o estado. Tenta sair e voltar a entrar.';
         return prevState;
     }
-    if (nextIsOnline && hasActiveDeliveryInProgress()) {
-        startGpsTracking();
-    } else if (!nextIsOnline) {
+    if (nextIsOnline) {
+        void requestDeviceLocation();
+    } else {
         stopGpsTracking();
     }
 
@@ -1046,6 +1049,99 @@ const SIM_GPS_PERSIST_MS = 5000;
 const GPS_WATCH_HIGH = { enableHighAccuracy: true, timeout: 25000, maximumAge: 0 };
 const GPS_WATCH_LOW = { enableHighAccuracy: false, timeout: 30000, maximumAge: 3000 };
 
+export function getGpsEnvironment() {
+    if (typeof window === 'undefined') {
+        return { ok: false, reason: 'unsupported', message: 'GPS indisponível.' };
+    }
+    if (!('geolocation' in navigator)) {
+        return {
+            ok: false,
+            reason: 'unsupported',
+            message: 'Este browser não suporta localização.',
+        };
+    }
+    if (!window.isSecureContext) {
+        return {
+            ok: false,
+            reason: 'insecure',
+            message: 'No telemóvel o GPS só funciona em HTTPS ou localhost. Usa https:// no URL da app (ex.: vite --host com certificado) ou um túnel (ngrok). Abrir por http://192.168.x.x bloqueia a localização.',
+        };
+    }
+    return { ok: true, reason: null, message: null };
+}
+
+function describeGpsError(err) {
+    const code = err?.code;
+    if (code === 1) {
+        return 'Permissão negada. Nas definições do telemóvel, permite localização para o browser ou para esta página.';
+    }
+    if (code === 2) {
+        return 'Não foi possível obter a posição. Verifica se o GPS do telemóvel está ligado.';
+    }
+    if (code === 3) {
+        return 'Tempo esgotado ao pedir localização. Tenta outra vez ao ar livre.';
+    }
+    return err?.message || 'Erro ao obter localização.';
+}
+
+export const gpsNeedsAttention = computed(() => {
+    if (isSimulatingRoute.value) return false;
+    if (store.gpsFromDevice && isValidGpsPoint(store.gpsCoords)) return false;
+    if (isApiMixedContentRisk()) return true;
+    return ['unknown', 'denied', 'prompt', 'unsupported', 'insecure'].includes(store.gpsPermission);
+});
+
+export const gpsStatusLabel = computed(() => {
+    if (isApiMixedContentRisk()) {
+        return 'A app está em HTTPS mas o backend está em HTTP (mixed content). Remove VITE_BACKEND_URL do .env.local e reinicia com npm run dev, ou usa um túnel HTTPS para o Strapi.';
+    }
+    if (store.gpsErrorMessage) return store.gpsErrorMessage;
+    if (store.gpsFromDevice) return 'Localização activa';
+    if (store.gpsPermission === 'granted') return 'A obter posição…';
+    return 'Localização necessária para mapas e entrega.';
+});
+
+/**
+ * Pede permissão de localização (tem de ser por gesto do utilizador no telemóvel).
+ * Depois inicia watchPosition + envio ao servidor.
+ */
+export function requestDeviceLocation({ force = false } = {}) {
+    if (isSimulatingRoute.value) return Promise.resolve({ ok: true });
+    const env = getGpsEnvironment();
+    if (!env.ok) {
+        store.gpsPermission = env.reason;
+        store.gpsErrorMessage = env.message;
+        return Promise.resolve({ ok: false, reason: env.reason, message: env.message });
+    }
+    if (!force && store.gpsFromDevice && isValidGpsPoint(store.gpsCoords)) {
+        store.gpsPermission = 'granted';
+        store.gpsErrorMessage = null;
+        startGpsTracking();
+        return Promise.resolve({ ok: true });
+    }
+    store.gpsPermission = 'prompt';
+    store.gpsErrorMessage = null;
+    return new Promise((resolve) => {
+        navigator.geolocation.getCurrentPosition(
+            (pos) => {
+                applyGpsPosition(pos);
+                store.gpsPermission = 'granted';
+                store.gpsErrorMessage = null;
+                startGpsTracking();
+                resolve({ ok: true });
+            },
+            (err) => {
+                const reason = err?.code === 1 ? 'denied' : 'error';
+                store.gpsPermission = reason === 'denied' ? 'denied' : 'prompt';
+                store.gpsErrorMessage = describeGpsError(err);
+                console.warn('[GPS] requestDeviceLocation:', store.gpsErrorMessage);
+                resolve({ ok: false, reason, message: store.gpsErrorMessage });
+            },
+            { enableHighAccuracy: true, timeout: 20000, maximumAge: 0 },
+        );
+    });
+}
+
 export function hasActiveDeliveryInProgress() {
     return store.deliveries.some((d) => ['E-09', 'E-10', 'E-11', 'E-12'].includes(d.state));
 }
@@ -1092,6 +1188,8 @@ function applyGpsPosition(pos) {
     store.gpsFromDevice = true;
     store.gpsSimulated = false;
     store.gpsUpdatedAt = Date.now();
+    store.gpsPermission = 'granted';
+    store.gpsErrorMessage = null;
     lastGpsCoords = store.gpsCoords;
 
     if (active) {
@@ -1137,9 +1235,17 @@ export function applySimulatedGps(lat, lng, { emitSocket = true } = {}) {
     }
 }
 
-function applyDevGpsFallback() {
+function applyDevGpsFallback(err) {
     if (store.gpsFromDevice || store.gpsSimulated) return;
-    console.warn('[GPS] Localização indisponível — activa a permissão no browser (sem fallback para Porto).');
+    const env = getGpsEnvironment();
+    if (!env.ok) {
+        store.gpsPermission = env.reason;
+        store.gpsErrorMessage = env.message;
+    } else if (err) {
+        store.gpsPermission = err?.code === 1 ? 'denied' : 'prompt';
+        store.gpsErrorMessage = describeGpsError(err);
+    }
+    console.warn('[GPS] Localização indisponível:', store.gpsErrorMessage || 'sem permissão');
 }
 
 function ensureGpsVisibilityListener() {
@@ -1166,8 +1272,8 @@ export function restartGpsTracking() {
 export function startGpsTracking() {
     if (isSimulatingRoute.value) return;
     if (gpsWatchId !== null) return;
-    if (!('geolocation' in navigator)) {
-        console.warn('Geolocation not available');
+    const env = getGpsEnvironment();
+    if (!env.ok) {
         applyDevGpsFallback();
         return;
     }
@@ -1176,13 +1282,15 @@ export function startGpsTracking() {
 
     const handleErr = (err) => {
         console.warn('High-accuracy GPS failed, falling back to low accuracy:', err?.message || err);
+        store.gpsPermission = err?.code === 1 ? 'denied' : 'prompt';
+        store.gpsErrorMessage = describeGpsError(err);
         if (gpsWatchId !== null) navigator.geolocation.clearWatch(gpsWatchId);
 
         gpsWatchId = navigator.geolocation.watchPosition(
             applyGpsPosition,
             (e) => {
                 console.warn('Low-accuracy GPS failed:', e?.message || e);
-                applyDevGpsFallback();
+                applyDevGpsFallback(e);
             },
             GPS_WATCH_LOW,
         );
@@ -1434,12 +1542,11 @@ if (store.auth.loggedIn && store.courierId) {
         fetchDeliveries({ silent: true }),
         fetchCompletedDeliveries(),
     ]).then(() => {
-        if (hasActiveDeliveryInProgress()) {
-            if (!isPaused()) restartGpsTracking();
-            else if (store.profile.state !== COURIER_STATE.E07) {
-                store.profile.state = COURIER_STATE.E06;
-                saveState();
-            }
+        if (!isPaused()) {
+            void requestDeviceLocation();
+        } else if (store.profile.state !== COURIER_STATE.E07) {
+            store.profile.state = COURIER_STATE.E06;
+            saveState();
         }
     });
 }
@@ -1524,12 +1631,7 @@ export async function fetchRouteGeoJSON(pickup, destination) {
 /** Força leitura imediata do GPS real do telemóvel */
 export function refreshDeviceGps() {
     if (isSimulatingRoute.value) return;
-    if (!('geolocation' in navigator)) return;
-    navigator.geolocation.getCurrentPosition(
-        applyGpsPosition,
-        (err) => console.warn('[GPS] getCurrentPosition:', err?.message || err),
-        { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
-    );
+    void requestDeviceLocation({ force: true });
 }
 
 export function stopSimulatedRoute() {

@@ -1,10 +1,22 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { VitePWA } from 'vite-plugin-pwa';
+import basicSsl from '@vitejs/plugin-basic-ssl';
 
 export default defineConfig({
     base: './',
+    server: {
+        host: true,
+        port: 5175,
+        https: true,
+        proxy: {
+            '/api': { target: 'http://127.0.0.1:1337', changeOrigin: true },
+            '/uploads': { target: 'http://127.0.0.1:1337', changeOrigin: true },
+            '/socket.io': { target: 'http://127.0.0.1:1337', ws: true, changeOrigin: true },
+        },
+    },
     plugins: [
+        basicSsl(),
         vue(),
         VitePWA({
             registerType: 'autoUpdate',

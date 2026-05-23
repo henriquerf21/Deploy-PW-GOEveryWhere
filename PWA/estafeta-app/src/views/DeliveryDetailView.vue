@@ -6,6 +6,8 @@
       <span class="header-title">GoEverywhere</span>
     </div>
 
+    <LocationPermissionBanner v-if="!isNavigating" />
+
     <!-- Order banner (Figma: < #ORD-2850 URGENTE €6.50 / state) -->
     <div class="order-banner" v-if="!isNavigating">
       <button class="ob-back" type="button" aria-label="Voltar à lista" @click="$router.push('/deliveries')">
@@ -346,13 +348,14 @@ import { useMapboxDeliveryMap } from '../composables/useMapboxDeliveryMap.js';
 import {
   getDeliveryById, ensureDeliveryLoaded, acceptDelivery, advanceDeliveryState,
   markDeliveryImpossible, sendDeliveryChatMessage, joinOrderRoom,
-  declineDeliveryTimeout, startGpsTracking, restartGpsTracking, getLastGpsCoords,
+  declineDeliveryTimeout, requestDeviceLocation, restartGpsTracking, getLastGpsCoords,
   isPaused, store, startQuickDeliverySimulation, stopSimulatedRoute,
   isSimulatingRoute, getMapCourierPosition, setActiveDeliveryForView, refreshDeviceGps,
 } from '../stores/courierStore.js';
 import { isValidGpsPoint } from '../utils/geo.js';
 import { DELIVERY_STATE, deliveryStateLabels, STATE_CTA } from '../constants.js';
 import StatusStepper from '../components/StatusStepper.vue';
+import LocationPermissionBanner from '../components/LocationPermissionBanner.vue';
 import NavManeuverIcon from '../components/NavManeuverIcon.vue';
 import { formatNavDistance, formatNavDuration, getNavStreetName } from '../utils/navManeuver.js';
 import { ENABLE_COURIER_SIM } from '../config/env.js';
@@ -620,7 +623,7 @@ onMounted(async () => {
       }
     }, 1000);
   } else if (!['E-08', 'E-13', 'E-14'].includes(resolved.state)) {
-    startGpsTracking();
+    void requestDeviceLocation({ force: true });
   }
 
   await nextTick();
@@ -685,7 +688,7 @@ onUnmounted(() => {
 function handleAccept() {
   if (timerInterval) clearInterval(timerInterval);
   acceptDelivery(props.id);
-  startGpsTracking(); // Begin GPS tracking on accept
+  void requestDeviceLocation({ force: true });
 }
 
 async function handleCTA() {
