@@ -142,55 +142,84 @@
         <section v-if="showClientComms" class="bo-card comm-hub">
           <header class="bo-card__head">
             <div>
-              <h3 class="bo-card__title">Comunicação com o cliente</h3>
-              <p class="bo-card__sub">Pedidos de esclarecimento (S-03), emails e respostas — num único diálogo cronológico.</p>
+              <h3 class="bo-card__title">Comunicação</h3>
+              <p class="bo-card__sub">AdminGoEveryWhere ↔ cliente (informação adicional) e estafeta ↔ cliente (entrega).</p>
             </div>
-            <span v-if="clientThread.length" class="comm-hub__count">{{ clientThread.length }} mensagens</span>
           </header>
-          <div class="bo-card__body">
-            <div v-if="order.status === ORDER_STATUS.INFO_REQUESTED && !hasClientReply" class="comm-hub__await">
-              <MessageSquare :size="18" />
-              <span>Aguarda resposta do cliente ao pedido de informação.</span>
+          <div class="bo-card__body comm-hub__grid">
+            <div class="comm-panel comm-panel--ops">
+              <header class="comm-panel__head">
+                <h4 class="comm-panel__title">AdminGoEveryWhere ↔ Cliente</h4>
+                <p class="comm-panel__sub">Pedidos de informação adicional.</p>
+                <span v-if="operationsThread.length" class="comm-hub__count">{{ operationsThread.length }}</span>
+              </header>
+              <div v-if="order.status === ORDER_STATUS.INFO_REQUESTED && !hasClientReply" class="comm-hub__await">
+                <MessageSquare :size="18" />
+                <span>Aguarda resposta do cliente ao pedido de informação.</span>
+              </div>
+              <div v-if="operationsThread.length" class="comm-thread">
+                <article
+                  v-for="msg in operationsThread"
+                  :key="msg.id"
+                  class="comm-bubble"
+                  :class="`comm-bubble--${msg.direction}`"
+                >
+                  <div class="comm-bubble__meta">
+                    <span class="comm-bubble__who">{{ msg.who }}</span>
+                    <span class="comm-bubble__tag">{{ msg.label }}</span>
+                    <time class="comm-bubble__time">{{ formatTimelineDate(msg.at) }}</time>
+                  </div>
+                  <p class="comm-bubble__text">{{ msg.body }}</p>
+                </article>
+              </div>
+              <p v-else class="comm-hub__empty">Sem pedidos de informação adicional.</p>
+              <div class="comm-compose">
+                <label class="comm-compose__label" for="bo-chat-input">Pedido de informação adicional</label>
+                <textarea
+                  id="bo-chat-input"
+                  v-model="boChatText"
+                  class="bo-textarea comm-compose__input"
+                  rows="2"
+                  placeholder="Descreva a informação que precisa do cliente…"
+                  @keydown.ctrl.enter.prevent="sendBoChat"
+                />
+                <button
+                  type="button"
+                  class="bo-btn bo-btn--primary comm-compose__btn"
+                  :disabled="!boChatText.trim() || boChatSending"
+                  @click="sendBoChat"
+                >
+                  {{ boChatSending ? 'A enviar…' : 'Enviar ao cliente' }}
+                </button>
+              </div>
             </div>
-            <div v-if="clientThread.length" class="comm-thread">
-              <article
-                v-for="msg in clientThread"
-                :key="msg.id"
-                class="comm-bubble"
-                :class="`comm-bubble--${msg.direction}`"
-              >
-                <div class="comm-bubble__meta">
-                  <span class="comm-bubble__who">{{ msg.who }}</span>
-                  <span class="comm-bubble__tag">{{ msg.label }}</span>
-                  <time class="comm-bubble__time">{{ formatTimelineDate(msg.at) }}</time>
-                </div>
-                <p class="comm-bubble__text">{{ msg.body }}</p>
-                <p v-if="msg.to" class="comm-bubble__to">Para {{ msg.to }}</p>
-                <p v-if="msg.emailError" class="comm-bubble__err">{{ msg.emailError }}</p>
-                <span v-else-if="msg.emailSent === false" class="comm-bubble__warn">Envio por email não confirmado</span>
-              </article>
-            </div>
-            <p v-else-if="!hasClientReply && order.status !== ORDER_STATUS.INFO_REQUESTED" class="comm-hub__empty">
-              Ainda não há mensagens registadas para este pedido.
-            </p>
-            <div class="comm-compose">
-              <label class="comm-compose__label" for="bo-chat-input">Nova mensagem (cliente / estafeta)</label>
-              <textarea
-                id="bo-chat-input"
-                v-model="boChatText"
-                class="bo-textarea comm-compose__input"
-                rows="2"
-                placeholder="Escreve uma mensagem…"
-                @keydown.ctrl.enter.prevent="sendBoChat"
-              />
-              <button
-                type="button"
-                class="bo-btn bo-btn--primary comm-compose__btn"
-                :disabled="!boChatText.trim() || boChatSending"
-                @click="sendBoChat"
-              >
-                {{ boChatSending ? 'A enviar…' : 'Enviar mensagem' }}
-              </button>
+
+            <div class="comm-panel comm-panel--courier">
+              <header class="comm-panel__head">
+                <h4 class="comm-panel__title">Estafeta ↔ Cliente</h4>
+                <p class="comm-panel__sub">Chat durante a entrega — só leitura no Back-Office.</p>
+                <span v-if="courierThread.length" class="comm-hub__count comm-hub__count--green">{{ courierThread.length }}</span>
+              </header>
+              <p v-if="!order.courierName" class="comm-hub__empty">Ainda sem estafeta atribuído.</p>
+              <div v-else-if="courierThread.length" class="comm-thread">
+                <article
+                  v-for="msg in courierThread"
+                  :key="msg.id"
+                  class="comm-bubble"
+                  :class="`comm-bubble--${msg.direction}`"
+                >
+                  <div class="comm-bubble__meta">
+                    <span class="comm-bubble__who">{{ msg.who }}</span>
+                    <span class="comm-bubble__tag">{{ msg.label }}</span>
+                    <time class="comm-bubble__time">{{ formatTimelineDate(msg.at) }}</time>
+                  </div>
+                  <p class="comm-bubble__text">{{ msg.body }}</p>
+                </article>
+              </div>
+              <p v-else class="comm-hub__empty">Sem mensagens entre estafeta e cliente.</p>
+              <p class="comm-panel__readonly">
+                O admin não participa neste chat. O cliente e o estafeta comunicam na app.
+              </p>
             </div>
           </div>
         </section>
@@ -553,8 +582,8 @@ function resolveTimelineActorRole(ev) {
   if (ev.action === 'created') return 'Cliente';
   const name = ev.actor?.name || '';
   if (!name || name === 'Sistema') return 'Sistema';
-  if (ev.action === 'assign_courier') return 'Operação';
-  return 'Operação';
+  if (ev.action === 'assign_courier') return 'AdminGoEveryWhere';
+  return 'AdminGoEveryWhere';
 }
 
 function buildTimelineFacts(action, meta) {
@@ -611,7 +640,7 @@ const timelineEntries = computed(() => {
 });
 
 const COMM_KIND_LABELS = {
-  info_adicional: 'Pedido de informação',
+  info_adicional: 'Informação adicional',
   approval: 'Aprovação',
   rejection: 'Rejeição',
   delivery: 'Entrega',
@@ -642,22 +671,6 @@ const canAssignSection = computed(() => order.value && ['APPROVED', 'ASSIGNED'].
 const canAdminCorrect = computed(() => order.value && !terminalStatuses.includes(order.value.status));
 const canCancelAdmin = computed(() => order.value && ['APPROVED', 'ASSIGNED', 'IN_TRANSIT'].includes(order.value.status));
 const available = computed(() => (order.value ? availableCouriersForOrder(order.value.id) : []));
-const orderMails = computed(() => {
-  const o = order.value;
-  const fromServer = o?.communicationLog;
-  if (Array.isArray(fromServer) && fromServer.length) {
-    return fromServer.map((c) => ({
-      id: c.id || `${c.at}-${c.kind}`,
-      kind: c.kind || c.channel || 'registo',
-      to: c.to || '',
-      at: c.at || '',
-      body: c.body || '',
-      emailSent: c.emailSent,
-      emailError: c.emailError || '',
-    }));
-  }
-  return logistics.emailLog.filter((e) => e.orderId === orderId.value);
-});
 
 function normalizeBody(text) {
   return String(text || '').trim().toLowerCase();
@@ -676,27 +689,45 @@ function chatSenderLabel(sender, o) {
   const s = String(sender || '').toLowerCase();
   if (s === 'client') return o.clientName || 'Cliente';
   if (s === 'courier') return o.courierName || 'Estafeta';
-  if (s === 'admin' || s === 'bo') return 'Operação (Back-Office)';
+  if (s === 'admin' || s === 'bo') return 'AdminGoEveryWhere';
   return 'Sistema';
 }
 
-function chatDirection(sender) {
-  const s = String(sender || '').toLowerCase();
-  if (s === 'client') return 'in';
-  if (s === 'courier') return 'in';
-  return 'out';
+function isOperationsChatRecord(m) {
+  const sender = String(m?.sender || '').toLowerCase();
+  const channel = String(m?.channel || '').toLowerCase();
+  if (channel === 'info_adicional') return true;
+  if (sender === 'admin' || sender === 'bo') return true;
+  return false;
+}
+
+function isCourierChatRecord(m) {
+  const sender = String(m?.sender || '').toLowerCase();
+  const channel = String(m?.channel || '').toLowerCase();
+  if (channel === 'delivery') return true;
+  if (sender === 'courier') return true;
+  if (sender === 'client' && !isOperationsChatRecord(m)) return true;
+  return false;
 }
 
 function chatLabel(sender, channel) {
   const s = String(sender || '').toLowerCase();
-  if (s === 'courier') return 'Chat — estafeta';
-  if (s === 'client') return 'Chat — cliente';
+  if (s === 'courier') return 'Mensagem';
+  if (s === 'client') return 'Mensagem';
   if (channel) return commKindLabel(channel);
   return 'Mensagem';
 }
 
-const clientThread = computed(() => {
-  const o = order.value;
+function sortThreadItems(items) {
+  return items.sort((a, b) => {
+    const ta = a.at ? new Date(a.at).getTime() : 0;
+    const tb = b.at ? new Date(b.at).getTime() : 0;
+    if (ta !== tb) return ta - tb;
+    return String(a.id).localeCompare(String(b.id));
+  });
+}
+
+function buildOperationsThread(o) {
   if (!o) return [];
   const items = [];
   const seenIds = new Set();
@@ -713,30 +744,16 @@ const clientThread = computed(() => {
   };
 
   for (const m of o.chatHistory || []) {
+    if (!isOperationsChatRecord(m)) continue;
     const sender = String(m.sender || '').toLowerCase();
+    const direction = sender === 'client' ? 'in' : 'out';
     pushMsg({
       id: m.id || `chat-${m.time}-${sender}`,
       at: m.time || o.createdAt,
-      direction: chatDirection(sender),
+      direction,
       who: m.actorName || chatSenderLabel(sender, o),
       label: chatLabel(sender, m.channel),
       body: m.text,
-    });
-  }
-
-  for (const m of orderMails.value) {
-    const key = `admin|${normalizeBody(m.body)}`;
-    if (chatBodyKeys.has(key)) continue;
-    pushMsg({
-      id: m.id,
-      at: m.at || o.createdAt,
-      direction: 'out',
-      who: 'Operação (Back-Office)',
-      label: commKindLabel(m.kind),
-      body: m.body,
-      to: m.to,
-      emailSent: m.emailSent,
-      emailError: m.emailError,
     });
   }
 
@@ -745,10 +762,9 @@ const clientThread = computed(() => {
       id: 'info-request',
       at: findTimelineAt('request_info') || o.createdAt,
       direction: 'out',
-      who: 'Operação (Back-Office)',
-      label: 'Pedido de informação (S-03)',
+      who: 'AdminGoEveryWhere',
+      label: 'Informação adicional',
       body: o.infoRequestMessage,
-      to: o.clientEmail,
     });
   }
 
@@ -758,18 +774,46 @@ const clientThread = computed(() => {
       at: findTimelineAt('approve') || o.createdAt,
       direction: 'in',
       who: o.clientName || 'Cliente',
-      label: 'Resposta do cliente (legado)',
+      label: 'Informação adicional',
       body: o.clientReply,
     });
   }
 
-  return items.sort((a, b) => {
-    const ta = a.at ? new Date(a.at).getTime() : 0;
-    const tb = b.at ? new Date(b.at).getTime() : 0;
-    if (ta !== tb) return ta - tb;
-    return String(a.id).localeCompare(String(b.id));
-  });
-});
+  return sortThreadItems(items);
+}
+
+function buildCourierThread(o) {
+  if (!o) return [];
+  const items = [];
+  const seenIds = new Set();
+
+  const pushMsg = (msg) => {
+    if (!msg?.body || !String(msg.body).trim()) return;
+    const id = msg.id || `msg-${msg.at}-${msg.direction}-${normalizeBody(msg.body).slice(0, 24)}`;
+    if (seenIds.has(id)) return;
+    seenIds.add(id);
+    items.push({ ...msg, id });
+  };
+
+  for (const m of o.chatHistory || []) {
+    if (!isCourierChatRecord(m)) continue;
+    const sender = String(m.sender || '').toLowerCase();
+    const direction = sender === 'courier' ? 'out' : 'in';
+    pushMsg({
+      id: m.id || `chat-${m.time}-${sender}`,
+      at: m.time || o.createdAt,
+      direction,
+      who: m.actorName || chatSenderLabel(sender, o),
+      label: sender === 'courier' ? 'Estafeta' : 'Cliente',
+      body: m.text,
+    });
+  }
+
+  return sortThreadItems(items);
+}
+
+const operationsThread = computed(() => buildOperationsThread(order.value));
+const courierThread = computed(() => buildCourierThread(order.value));
 
 async function sendBoChat() {
   const id = orderId.value;
@@ -777,7 +821,7 @@ async function sendBoChat() {
   if (!id || !text) return;
   boChatSending.value = true;
   try {
-    await boPostOrderChatMessage(id, text);
+    await boPostOrderChatMessage(id, text, 'info_adicional');
     boChatText.value = '';
     await refreshOrderFromServer(id, { silent: true });
     toast.success('Mensagem guardada.');
@@ -792,11 +836,12 @@ const showClientComms = computed(() => {
   const o = order.value;
   if (!o) return true;
   return (
-    clientThread.value.length > 0
+    operationsThread.value.length > 0
+    || courierThread.value.length > 0
     || o.status === ORDER_STATUS.INFO_REQUESTED
     || !!o.infoRequestMessage
     || hasClientReply.value
-    || (o.chatHistory?.length > 0)
+    || !!o.courierName
   );
 });
 
@@ -1088,6 +1133,68 @@ async function doCancelAdmin() {
   box-shadow: var(--bo-shadow-md);
 }
 
+.comm-hub__grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+  align-items: start;
+}
+
+@media (max-width: 960px) {
+  .comm-hub__grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.comm-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  min-height: 280px;
+  padding: 14px;
+  border-radius: var(--bo-radius-sm);
+  border: 1px solid var(--bo-border);
+  background: #fafafa;
+}
+
+.comm-panel--ops {
+  border-top: 3px solid #7c3aed;
+}
+
+.comm-panel--courier {
+  border-top: 3px solid #059669;
+}
+
+.comm-panel__head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.comm-panel__title {
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--bo-text);
+}
+
+.comm-panel__sub {
+  margin: 0;
+  font-size: 12px;
+  color: var(--bo-text-secondary);
+  line-height: 1.4;
+}
+
+.comm-panel__readonly {
+  margin: 8px 0 0;
+  padding: 10px 12px;
+  font-size: 12px;
+  color: #64748b;
+  background: #f1f5f9;
+  border-radius: 8px;
+  border: 1px dashed #cbd5e1;
+}
+
 .comm-hub__count {
   font-size: 12px;
   font-weight: 600;
@@ -1095,6 +1202,12 @@ async function doCancelAdmin() {
   background: #f5f3ff;
   border-radius: 999px;
   padding: 4px 10px;
+  align-self: flex-start;
+}
+
+.comm-hub__count--green {
+  color: #047857;
+  background: #ecfdf5;
 }
 
 .comm-hub__await {
@@ -1144,7 +1257,8 @@ async function doCancelAdmin() {
   display: flex;
   flex-direction: column;
   gap: 14px;
-  max-height: 420px;
+  flex: 1;
+  max-height: 360px;
   overflow-y: auto;
   padding: 4px 2px 8px;
 }
