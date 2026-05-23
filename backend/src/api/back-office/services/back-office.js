@@ -1475,24 +1475,32 @@ exports.default = ({ strapi }) => ({
             return { ok: false, error: 'Estafeta inválido.' };
         console.log('[AssignCourier] Iniciando atribuição:', { orderId: publicId, courierDocId: courierToken });
         const orderRaw = await this.getOrder(ctx, publicId);
-        if (!orderRaw)
+        if (!orderRaw) {
+            console.log('[AssignCourier] ERRO: Pedido não encontrado:', publicId);
             return { ok: false, error: 'Pedido não encontrado.' };
+        }
         if (!['APPROVED', 'ASSIGNED'].includes(orderRaw.status)) {
+            console.log('[AssignCourier] ERRO: Estado do pedido inválido:', orderRaw.status);
             return { ok: false, error: 'Aprova o pedido antes de atribuir estafeta.' };
         }
         // Usar Document Service para encontrar o estafeta
         const courierEntity = await strapi.documents('api::courier-estafeta.courier-estafeta').findOne({
             documentId: courierToken,
+            status: 'published',
         });
         if (!courierEntity) {
             console.error('[AssignCourier] Estafeta não encontrado no Document Service:', courierToken);
             return { ok: false, error: 'Estafeta não encontrado.' };
         }
         const courier = buildPublicCourier(courierEntity);
-        if (courier.state !== 'E-06' || !courier.online)
+        if (courier.state !== 'E-06' || !courier.online) {
+            console.log('[AssignCourier] ERRO: Estafeta indisponível. Estado:', courier.state, 'Online:', courier.online);
             return { ok: false, error: 'Estafeta indisponível.' };
-        if (!courier.zones.includes(orderRaw.zone))
+        }
+        if (!courier.zones.includes(orderRaw.zone)) {
+            console.log('[AssignCourier] ERRO: Estafeta não cobre a zona. CourierZones:', courier.zones, 'OrderZone:', orderRaw.zone);
             return { ok: false, error: 'Estafeta não cobre a zona.' };
+        }
         // Atualizar a Encomenda
         const updated = await this.patchOrder(publicId, {
             data: {
