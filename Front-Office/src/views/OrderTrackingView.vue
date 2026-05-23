@@ -699,15 +699,12 @@ onUnmounted(() => {
 });
 
 // ── COMPUTED ────────────────────────────────────────────────────────
-function deliveryStatusCode(o) {
-  const del = o?.delivery;
+const isImpossibleReview = computed(() => {
+  if (order.value?.status !== 'S-06') return false;
+  const del = order.value.delivery;
   const raw = del?.delivery_status || del?.attributes?.delivery_status || '';
-  return String(raw).substring(0, 4);
-}
-
-const isImpossibleReview = computed(() => (
-  order.value?.status === 'S-06' && deliveryStatusCode(order.value) === 'E-14'
-));
+  return toStatusCode(raw) === 'E-14';
+});
 
 const currentStateData = computed(() => order.value ? ORDER_STATES[order.value.status] : null);
 

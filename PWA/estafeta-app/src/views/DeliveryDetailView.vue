@@ -98,7 +98,7 @@
               :class="{ 'map-sim-btn--active': isSimulatingRoute }"
               @click="handleQuickSim"
             >
-              {{ isSimulatingRoute ? 'Parar sim' : 'Sim 2+2 min' }}
+              {{ isSimulatingRoute ? 'Parar' : 'Simular' }}
             </button>
             <p v-if="simContinueHint" class="map-sim-hint">{{ simContinueHint }}</p>
           </template>
@@ -121,21 +121,21 @@
           >
             Abrir navegação
           </button>
-          <div
+          <button
             v-if="enableCourierSim && ['E-09', 'E-10', 'E-11', 'E-12'].includes(delivery.state)"
-            class="map-dev-row"
+            type="button"
+            class="map-sim-subtle"
+            :class="{ 'map-sim-subtle--active': isSimulatingRoute }"
+            @click="handleQuickSim"
           >
-            <span class="map-dev-label">Teste</span>
-            <button
-              type="button"
-              class="map-dev-btn"
-              :class="{ 'map-dev-btn--active': isSimulatingRoute }"
-              @click="handleQuickSim"
-            >
-              {{ isSimulatingRoute ? 'Parar sim' : 'Sim 2+2 min' }}
-            </button>
-            <p v-if="simContinueHint" class="map-sim-hint map-sim-hint--inline">{{ simContinueHint }}</p>
-          </div>
+            {{ isSimulatingRoute ? 'Parar' : 'Simular' }}
+          </button>
+          <p
+            v-if="enableCourierSim && simContinueHint && !isNavigating"
+            class="map-sim-hint map-sim-hint--below-cta"
+          >
+            {{ simContinueHint }}
+          </p>
         </div>
       </div>
 
@@ -1009,36 +1009,28 @@ async function handleImpossible() {
   cursor: pointer;
   box-shadow: 0 2px 8px rgba(27, 138, 74, 0.35);
 }
-.map-dev-row {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.map-dev-label {
-  font-size: 10px;
-  font-weight: 600;
+.map-sim-subtle {
+  margin-top: 4px;
+  padding: 0;
+  border: none;
+  background: none;
+  font-size: 12px;
+  font-weight: 500;
   color: #9ca3af;
-  text-transform: uppercase;
-  letter-spacing: 0.04em;
-}
-.map-dev-btn {
-  padding: 6px 10px;
-  border-radius: 8px;
-  border: 0.72px solid #e5e7eb;
-  background: #f9fafb;
-  font-size: 11px;
-  font-weight: 600;
-  color: #374151;
   cursor: pointer;
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
-.map-dev-btn--active {
-  background: #2563eb;
-  border-color: #1d4ed8;
-  color: #fff;
+.map-sim-subtle--active {
+  color: #2563eb;
+  font-weight: 600;
 }
-.map-dev-btn--muted {
-  opacity: 0.9;
+.map-sim-hint--below-cta {
+  margin: 4px 0 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #9ca3af;
+  text-align: left;
 }
 .map-sim-hint {
   margin: 6px 0 0;
@@ -1066,19 +1058,18 @@ async function handleImpossible() {
 .map-sim-btn {
   width: auto;
   min-width: 32px;
-  padding: 0 10px;
+  padding: 0 8px;
   font-size: 11px;
-  font-weight: 600;
+  font-weight: 500;
   white-space: nowrap;
+  color: #6b7280;
+  background: rgba(255, 255, 255, 0.92);
 }
 .map-sim-btn--active {
   background: #2563eb;
   color: #fff;
   border-color: #1d4ed8;
-}
-.map-sim-btn--muted {
-  font-size: 10px;
-  opacity: 0.85;
+  font-weight: 600;
 }
 .map-zoom {
   width: 32px; height: 32px;
