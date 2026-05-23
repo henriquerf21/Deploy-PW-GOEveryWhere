@@ -18,7 +18,7 @@
         <div class="progress-track">
           <div class="progress-fill" :style="{ width: `${monthlyObjectivePct}%` }"></div>
         </div>
-        <p class="metric-desc">Atingiste {{ monthlyObjectivePct }}% de entregas mensais estipuladas.</p>
+        <p class="metric-desc">Atingiste {{ monthlyObjectivePct }}% do objetivo de entregas deste mês.</p>
       </div>
 
       <!-- Taxa de Faturação -->
@@ -32,8 +32,8 @@
             </div>
           </div>
           <div class="ring-side">
-            <div class="ring-main">{{ metrics.totalEarnings.toFixed(0) }}<small>/{{ billingGoalEuro }}</small></div>
-            <p class="metric-desc">Atingiste {{ billingGoalPct }}% do teu objetivo de faturação semanal.</p>
+            <div class="ring-main">{{ metrics.earningsThisWeek.toFixed(0) }}<small>/{{ billingGoalEuro }}</small></div>
+            <p class="metric-desc">Atingiste {{ billingGoalPct }}% do objetivo de faturação desta semana.</p>
           </div>
         </div>
       </div>
@@ -48,7 +48,7 @@
           </svg>
           <div class="semi-center">
             <small>Total</small>
-            <strong>{{ metrics.totalDistanceKm }}km</strong>
+            <strong>{{ metrics.distanceKmThisWeek }}km</strong>
           </div>
         </div>
       </div>
@@ -103,15 +103,15 @@ const billingGoalEuro = 500;
 const weeklyKmGoal = 200;
 
 const monthlyObjectivePct = computed(() => {
-  const p = Math.round((metrics.value.completedDeliveries / monthlyTargetDeliveries) * 100);
+  const p = Math.round((metrics.value.completedDeliveriesThisMonth / monthlyTargetDeliveries) * 100);
   return Math.max(0, Math.min(100, p));
 });
 const billingGoalPct = computed(() => {
-  const p = Math.round((metrics.value.totalEarnings / billingGoalEuro) * 100);
+  const p = Math.round((metrics.value.earningsThisWeek / billingGoalEuro) * 100);
   return Math.max(0, Math.min(100, p));
 });
 const kmGoalPct = computed(() => {
-  const p = (metrics.value.totalDistanceKm / weeklyKmGoal) * 100;
+  const p = (metrics.value.distanceKmThisWeek / weeklyKmGoal) * 100;
   return Math.max(0, Math.min(100, p));
 });
 const roundedRating = computed(() => Math.max(0, Math.min(5, Math.round(metrics.value.avgRating || 0))));
@@ -122,7 +122,7 @@ const ratingsHistory = computed(() => {
     .map(d => ({
       id: d.id,
       rating: d.rating,
-      comment: d.ratingComment || d.review || null,
+      comment: d.ratingComment || null,
       date: d.timestamps?.['E-13'] ? new Date(d.timestamps['E-13']).toLocaleDateString('pt-PT') : 'N/A'
     }))
     .slice(0, 10);

@@ -116,7 +116,8 @@ const userInitials = computed(() => {
   return (n.slice(0, 2) || 'AD').toUpperCase();
 });
 
-const shellBusy = computed(() => !!logistics.loading || (logistics.busyCount || 0) > 0);
+/** Overlay bloqueante só no carregamento inicial — sync SSE/socket corre em background */
+const shellBusy = computed(() => !!logistics.loading);
 
 const frontOfficeUrl = import.meta.env.VITE_FRONT_OFFICE_URL || 'http://localhost:5173';
 
@@ -194,7 +195,7 @@ function scheduleRefresh() {
   refreshDebounce = setTimeout(async () => {
     refreshDebounce = null;
     try {
-      await initLogistics({ force: true });
+      await initLogistics({ force: true, silent: true });
     } catch (err) {
       // ignore — SSE may have raced with a transient backend hiccup
       void err;
@@ -205,7 +206,7 @@ function scheduleRefresh() {
 function startFallbackPolling() {
   if (fallbackPollHandle) return;
   fallbackPollHandle = setInterval(() => {
-    initLogistics({ force: true }).catch(() => {});
+    initLogistics({ force: true, silent: true }).catch(() => {});
   }, 60000);
 }
 

@@ -21,28 +21,30 @@
         <span class="today-amount">€{{ todayTotal.toFixed(2) }}</span>
         <span class="today-divider"></span>
         <div class="today-details">
-          <span class="today-count">{{ history.length }} entregas</span>
-          <span class="today-avg">Média: €{{ avgPerDelivery }}/entrega</span>
+          <span class="today-count">{{ todayHistory.length }} entregas</span>
+          <span class="today-avg">Média: €{{ avgPerDeliveryToday }}/entrega</span>
         </div>
       </div>
     </div>
 
     <!-- History list -->
     <div class="page-body">
+      <p v-if="!isLoading && history.length === 0" class="empty-hint">Ainda não tens entregas concluídas.</p>
       <div class="history-list">
-        <div v-for="item in history" :key="item.id" class="history-card">
-          <div class="hc-avatar">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
+        <div v-for="item in history" :key="item.id" class="history-card" :class="{ failed: item.isFailed }">
+          <div class="hc-avatar" :class="{ failed: item.isFailed }">
+            <svg v-if="item.isFailed" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#dc2626" stroke-width="2"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            <svg v-else width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#22c55e" stroke-width="2"><path d="M20 6L9 17l-5-5"/></svg>
           </div>
           <div class="hc-info">
             <div class="hc-top">
               <span class="hc-name">{{ item.clientName }}</span>
               <span class="hc-order">{{ item.orderId }}</span>
             </div>
-            <span class="hc-time">{{ item.time }} · {{ item.duration }} min</span>
+            <span class="hc-time">{{ item.dateLabel }} · {{ item.time }} · {{ item.duration }} min</span>
           </div>
           <div class="hc-right">
-            <span class="hc-price">€{{ item.earning.toFixed(2) }}</span>
+            <span class="hc-price" :class="{ muted: item.isFailed }">€{{ item.earning.toFixed(2) }}</span>
             <span v-if="item.rating" class="hc-rating">
               {{ item.rating }} <svg width="10" height="10" viewBox="0 0 24 24" fill="#f59e0b"><polygon points="12,2 15,9 22,9.5 17,14.5 18.5,22 12,18 5.5,22 7,14.5 2,9.5 9,9"/></svg>
             </span>
@@ -65,25 +67,42 @@
 <script setup>
 import { computed, ref, onMounted } from 'vue';
 import { store, fetchCompletedDeliveries } from '../stores/courierStore.js';
+import { deliveryCompletedAtIso, isDeliveryOnDate } from '../utils/deliveryDistance.js';
 
 const isLoading = ref(true);
 
-const history = computed(() => {
-  return store.completedDeliveries.map(d => ({
+function mapHistoryItem(d) {
+  const completedAt = deliveryCompletedAtIso(d);
+  const isFailed = d.state === 'E-14';
+  return {
     id: d.id,
     clientName: d.destination?.name || 'Cliente',
     orderId: d.orderId || `#ORD-${d.id}`,
-    time: d.timestamps?.['E-09'] ? new Date(d.timestamps['E-09']).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' }) : '--:--',
-    duration: d.timestamps?.['E-09'] && d.timestamps?.['E-13']
-      ? Math.max(1, Math.round((new Date(d.timestamps['E-13']) - new Date(d.timestamps['E-09'])) / 60000))
+    completedAt,
+    isToday: isDeliveryOnDate(completedAt),
+    isFailed,
+    dateLabel: completedAt
+      ? new Date(completedAt).toLocaleDateString('pt-PT', { day: '2-digit', month: 'short' })
+      : '',
+    time: completedAt
+      ? new Date(completedAt).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' })
+      : '--:--',
+    duration: d.timestamps?.['E-09'] && completedAt
+      ? Math.max(1, Math.round((new Date(completedAt) - new Date(d.timestamps['E-09'])) / 60000))
       : 0,
     earning: d.costEuro || 0,
     rating: d.rating,
-  }));
-});
+  };
+}
 
-const todayTotal = computed(() => history.value.reduce((s, h) => s + h.earning, 0));
-const avgPerDelivery = computed(() => history.value.length ? (todayTotal.value / history.value.length).toFixed(2) : '0.00');
+const history = computed(() => store.completedDeliveries.map(mapHistoryItem));
+
+const todayHistory = computed(() => history.value.filter((h) => h.isToday));
+
+const todayTotal = computed(() => todayHistory.value.reduce((s, h) => s + h.earning, 0));
+const avgPerDeliveryToday = computed(() => (
+  todayHistory.value.length ? (todayTotal.value / todayHistory.value.length).toFixed(2) : '0.00'
+));
 
 onMounted(async () => {
   try {
@@ -158,6 +177,13 @@ onMounted(async () => {
   color: rgba(255,255,255,0.4);
 }
 
+.empty-hint {
+  font-size: 12px;
+  color: #9ca3af;
+  text-align: center;
+  margin: 8px 0 16px;
+}
+
 /* History list */
 .history-list {
   display: flex; flex-direction: column; gap: 12px;
@@ -169,12 +195,18 @@ onMounted(async () => {
   border: 0.72px solid #e5e7eb;
   border-radius: 16px;
 }
+.history-card.failed {
+  border-color: #fecaca;
+}
 .hc-avatar {
   width: 36px; height: 36px;
   background: #dcfce7;
   border-radius: 50%;
   display: flex; align-items: center; justify-content: center;
   flex-shrink: 0;
+}
+.hc-avatar.failed {
+  background: #fee2e2;
 }
 .hc-info {
   flex: 1; min-width: 0;
@@ -200,6 +232,9 @@ onMounted(async () => {
   font-family: var(--ge-font-display);
   font-size: 14px; font-weight: 700;
   color: #1b8a4a;
+}
+.hc-price.muted {
+  color: #9ca3af;
 }
 .hc-rating {
   font-size: 11px; font-weight: 600; color: #111827;

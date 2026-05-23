@@ -17,7 +17,7 @@ export const ORDER_STATES = {
   'S-03': { label: 'Info Adicional Solicitada',  color: '#f97316', icon: '❓' },
   'S-04': { label: 'Rejeitado',                  color: '#ef4444', icon: '❌', terminal: true },
   'S-05': { label: 'Aprovado',                   color: '#3b82f6', icon: '✔️' },
-  'S-06': { label: 'Aprovado',                   color: '#3b82f6', icon: '✔️' },
+  'S-06': { label: 'Aguarda nova atribuição',    color: '#3b82f6', icon: '🔄' },
   'S-07': { label: 'Estafeta Atribuído',         color: '#06b6d4', icon: '🧑‍🦺' },
   'S-08': { label: 'Em Recolha',                 color: '#0ea5e9', icon: '🏪' },
   'S-09': { label: 'Em Trânsito',                color: '#00c853', icon: '🚀' },
@@ -276,15 +276,28 @@ export async function refreshUserProfile() {
   await fetchMe();
 }
 
-export async function fetchUserOrders() {
+function normalizeStrapiEntity(entry) {
+  if (!entry) return null;
+  if (entry.data != null) return normalizeStrapiEntity(entry.data);
+  if (entry.attributes) {
+    return { ...entry.attributes, id: entry.id, documentId: entry.documentId };
+  }
+  return entry;
+}
+
+export async function fetchUserOrders({ silent = false } = {}) {
   if (!authState.user || !authState.token) return;
 
-  if (store.orderHistory.length === 0) {
+  if (!silent && store.orderHistory.length === 0) {
     store.loading = true;
   }
 
   try {
-    const response = await fetch(`${API_URL}/orders?populate=*`, {
+    const populate = [
+      'populate[courier][populate][0]=docSelfie',
+      'populate[delivery]=*',
+    ].join('&');
+    const response = await fetch(`${API_URL}/orders?${populate}`, {
       headers: { 'Authorization': `Bearer ${authState.token}` }
     });
     const res = await response.json();
@@ -337,9 +350,25 @@ export async function fetchUserOrders() {
         rejectionReason: attr.rejectionReason || null,
         clientReply: clientRep,
         deliveryCoords,
+        storeLatitude: attr.storeLatitude != null ? Number(attr.storeLatitude) : null,
+        storeLongitude: attr.storeLongitude != null ? Number(attr.storeLongitude) : null,
+        deliveryLatitude: attr.deliveryLatitude != null ? Number(attr.deliveryLatitude) : null,
+        deliveryLongitude: attr.deliveryLongitude != null ? Number(attr.deliveryLongitude) : null,
         chatHistory: attr.chatHistory || [],
-        courier: attr.courier || null,
-        delivery: attr.delivery || null,
+        courier: normalizeStrapiEntity(attr.courier),
+        delivery: normalizeStrapiEntity(attr.delivery),
+        courierGpsLat: (() => {
+          const del = normalizeStrapiEntity(attr.delivery);
+          const lat = Number(del?.courierLatitude);
+          const lng = Number(del?.courierLongitude);
+          return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0) ? lat : null;
+        })(),
+        courierGpsLng: (() => {
+          const del = normalizeStrapiEntity(attr.delivery);
+          const lat = Number(del?.courierLatitude);
+          const lng = Number(del?.courierLongitude);
+          return Number.isFinite(lat) && Number.isFinite(lng) && !(lat === 0 && lng === 0) ? lng : null;
+        })(),
       };
     });
 
@@ -368,14 +397,24 @@ export async function fetchUserOrders() {
       store.activeOrder = null;
     }
 
-    // Update history
-    store.orderHistory = allOrders;
+    // 4. Atualiza o histórico apenas se houver mudanças reais
+    if (JSON.stringify(allOrders) !== JSON.stringify(store.orderHistory)) {
+      store.orderHistory = allOrders;
+    }
 
   } catch (error) {
     console.error('Erro ao procurar encomendas:', error);
   } finally {
-    store.loading = false;
+    if (!silent) store.loading = false;
   }
+}
+
+/** Atualiza só a encomenda ativa no histórico — sem loading global */
+export function patchActiveOrderFields(patch = {}) {
+  if (!store.activeOrder) return;
+  Object.assign(store.activeOrder, patch);
+  const idx = store.orderHistory.findIndex((o) => o.id === store.activeOrder.id);
+  if (idx >= 0) Object.assign(store.orderHistory[idx], patch);
 }
 
 export async function submitOrder() {
@@ -438,7 +477,7 @@ export async function submitOrder() {
     if (response.ok) {
       // Atualiza o histórico imediatamente após a compra
       await fetchUserOrders();
-      // Strapi lifecycle hook already notifies admin_room
+      socket.emit('global_order_status_update', { status: 'S-01' });
       return { success: true };
     } else {
       return { success: false, error: result.error?.message || 'Erro na criação da encomenda' };
@@ -481,7 +520,7 @@ export async function cancelActiveOrder(orderId, reason) {
     if (response.ok) {
       await fetchUserOrders();
       socket.emit('order_status_update', { room: orderId, status: 'S-13' });
-      // Strapi lifecycle hook already notifies admin_room
+      socket.emit('global_order_status_update', { status: 'S-13' });
       return { success: true };
     }
 
@@ -527,7 +566,7 @@ export async function replyToInfoRequest(documentId, reply) {
     if (response.ok) {
       await fetchUserOrders();
       socket.emit('order_status_update', { room: documentId, status: 'S-02' });
-      // Strapi lifecycle hook already notifies admin_room
+      socket.emit('global_order_status_update', { status: 'S-02' });
       return { success: true };
     }
 
@@ -577,6 +616,11 @@ export async function sendChatMessage(documentId, text, sender = 'client') {
       if (targetOrder) {
         targetOrder.chatHistory = currentHistory;
       }
+      socket.emit('chat_message', {
+        room: documentId,
+        message: newMessage,
+        chatHistory: currentHistory,
+      });
       return { success: true };
     }
     

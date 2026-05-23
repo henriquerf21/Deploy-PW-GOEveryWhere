@@ -90,7 +90,18 @@
               <div class="field-group"><label>Ano</label><input v-model="form.vehicleYear" type="tel" class="field-input" placeholder="Ex: 2021" @input="handleNumber(4, 'vehicleYear', $event)"></div>
             </div>
             <div class="form-row">
-              <div class="field-group"><label>Matrícula</label><input v-model="form.vehiclePlate" class="field-input" placeholder="AA-00-AA" style="text-transform: uppercase;"></div>
+              <div class="field-group">
+                <label>Matrícula</label>
+                <input
+                  :value="form.vehiclePlate"
+                  class="field-input"
+                  placeholder="AA-00-AA"
+                  maxlength="8"
+                  autocomplete="off"
+                  style="text-transform: uppercase;"
+                  @input="onVehiclePlateInput"
+                >
+              </div>
             </div>
           </div>
         </div>
@@ -281,6 +292,7 @@ import { computed, ref, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { ZONES } from '../constants.js';
 import { API_URL } from '../config/env.js';
+import { validatePtPlate, onPlateInput } from '../utils/ptPlate.js';
 
 const router = useRouter();
 const step = ref(1);
@@ -305,6 +317,10 @@ function handleSelfieCapture(e) {
   const reader = new FileReader();
   reader.onload = () => { selfiePreview.value = reader.result; };
   reader.readAsDataURL(file);
+}
+
+function onVehiclePlateInput(e) {
+  onPlateInput(e, (v) => { form.vehiclePlate = v; });
 }
 
 function handleNumber(max, field, e) {
@@ -537,11 +553,12 @@ function nextStep() {
       error.value = 'Preenche os dados obrigatórios do veículo (Marca, Modelo, Matrícula).';
       return;
     }
-    const plateRegex = /^([A-Z]{2}-[0-9]{2}-[0-9]{2}|[0-9]{2}-[A-Z]{2}-[0-9]{2}|[0-9]{2}-[0-9]{2}-[A-Z]{2}|[A-Z]{2}-[0-9]{2}-[A-Z]{2})$/i;
-    if (!plateRegex.test(form.vehiclePlate)) {
-      error.value = 'Matrícula com formato inválido (ex: AA-00-AA).';
+    const plate = validatePtPlate(form.vehiclePlate, { required: true });
+    if (!plate.ok) {
+      error.value = plate.error;
       return;
     }
+    form.vehiclePlate = plate.value;
   }
 
   if (step.value === 3) {

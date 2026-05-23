@@ -52,6 +52,11 @@ export function deliveryLegsStraightLine(courier, store, dest) {
  * @param {[number,number]} store
  * @param {[number,number]} dest
  */
+export async function fetchStoreToDestLeg(store, dest, signal) {
+  const r = await fetchRouteThroughPoints([store, dest], signal);
+  return r?.coordinates?.length ? r.coordinates : straightLinePoints(store, dest);
+}
+
 export async function fetchDeliveryLegs(courier, store, dest, signal) {
   try {
     const [r1, r2] = await Promise.all([

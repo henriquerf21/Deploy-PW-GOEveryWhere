@@ -90,7 +90,15 @@
             </div>
             <div class="bo-field">
               <label class="bo-field__label">Matrícula</label>
-              <input v-model="f.plate" class="bo-input" placeholder="00-AA-00" />
+              <input
+                :value="f.plate"
+                class="bo-input bo-input--mono"
+                placeholder="AA-00-AA"
+                maxlength="8"
+                autocomplete="off"
+                :disabled="isBike"
+                @input="onPlateInput"
+              />
             </div>
             <div class="bo-field">
               <label class="bo-field__label">Carta de condução (n.º) <span class="bo-required">*</span></label>
@@ -161,16 +169,24 @@
 </template>
 
 <script setup>
-import { reactive } from 'vue';
+import { computed, reactive } from 'vue';
 import { useRouter } from 'vue-router';
 import { ArrowLeft } from 'lucide-vue-next';
 import { registerCourier } from '../stores/logisticsStore.js';
 import { ZONES } from '../constants/logistics.js';
 import { toast } from '../utils/notify.js';
-import { validateEmail, validatePtIban, validatePtNif, validatePtPhone, validatePtPlate } from '../utils/boPtValidation.js';
+import {
+  validateEmail, validatePtIban, validatePtNif, validatePtPhone, validatePtPlate, onPlateInput as onPlateInputUtil,
+} from '../utils/boPtValidation.js';
 import { boUpload } from '../api/backofficeApi.js';
 
 const router = useRouter();
+
+const isBike = computed(() => String(f.vehicleType || '').toLowerCase() === 'bicicleta');
+
+function onPlateInput(e) {
+  onPlateInputUtil(e, (v) => { f.plate = v; });
+}
 
 const f = reactive({
   name: '',
@@ -266,8 +282,13 @@ async function onSubmit() {
   if (!iban.ok) { toast(iban.error, 'error'); return; }
   const phone = validatePtPhone(f.phone);
   if (!phone.ok) { toast(phone.error, 'error'); return; }
-  const plate = validatePtPlate(f.plate);
-  if (!plate.ok) { toast(plate.error, 'error'); return; }
+  if (!isBike.value) {
+    const plate = validatePtPlate(f.plate, { required: true });
+    if (!plate.ok) { toast(plate.error, 'error'); return; }
+    f.plate = plate.value;
+  } else {
+    f.plate = '';
+  }
 
   try {
     await registerCourier({

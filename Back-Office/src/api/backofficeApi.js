@@ -87,6 +87,10 @@ export async function boMarkAppNotificationRead(documentId) {
   });
 }
 
+export async function boGetCourier(id) {
+  return request(`/bo/couriers/${encodeURIComponent(id)}`);
+}
+
 export async function boCreateCourier(payload) {
   return request('/bo/couriers', {
     method: 'POST',

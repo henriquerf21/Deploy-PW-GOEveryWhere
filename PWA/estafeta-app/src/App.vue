@@ -6,17 +6,20 @@
 </template>
 
 <script setup>
-import { computed } from 'vue';
+import { computed, watch } from 'vue';
 import { useRoute } from 'vue-router';
 import { store } from './stores/courierStore.js';
 import BottomNav from './components/BottomNav.vue';
+import { requestNotificationPermission } from './utils/notifications.js';
 
 const route = useRoute();
 const showNav = computed(() => {
-  const isAuth = store.auth.loggedIn && !['Login', 'Register'].includes(route.name);
-  // Escondemos a navegação se houver uma entrega ativa para manter o foco
-  return isAuth && !store.activeDeliveryId;
+  return store.auth.loggedIn && !['Login', 'Register'].includes(route.name);
 });
+
+watch(() => store.auth.loggedIn, (loggedIn) => {
+  if (loggedIn) void requestNotificationPermission();
+}, { immediate: true });
 </script>
 
 <style scoped>

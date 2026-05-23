@@ -45,7 +45,8 @@
       <div v-if="active" class="active-banner" @click="goToActive">
         <div class="ab-left">
           <span class="ab-state">{{ deliveryStateLabels[active.state] }}</span>
-          <span class="ab-order">{{ active.orderId }} — {{ active.destination.name }}</span>
+          <span v-if="courierPaused" class="ab-pause-hint">· estafeta em pausa</span>
+          <span class="ab-order">{{ active.orderId }} — {{ active.destination.address || active.pickup.name }}</span>
         </div>
         <svg class="ab-arrow" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24"><path d="M9 18l6-6-6-6"/></svg>
       </div>
@@ -57,7 +58,10 @@
       </div>
 
       <!-- Delivery cards -->
-      <div class="delivery-list">
+      <div class="delivery-list" :class="{ 'is-syncing': deliveriesSyncing }">
+        <div v-if="deliveriesSyncing" class="list-sync-overlay" aria-hidden="true">
+          <span class="list-sync-spinner"></span>
+        </div>
         <DeliveryCard
           v-for="d in list"
           :key="d.id"
@@ -78,7 +82,7 @@
 
 <script setup>
 import { ref, computed, onMounted, onBeforeUnmount, watch, nextTick } from 'vue';
-import { useRouter } from 'vue-router';
+import { useRouter, useRoute, onBeforeRouteLeave } from 'vue-router';
 import {
   store,
   filteredDeliveries,
@@ -89,30 +93,70 @@ import {
   isPaused,
   startGpsTracking,
   stopGpsTracking,
+  getMapCourierPosition,
+  deliveriesSyncing,
 } from '../stores/courierStore.js';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import {
+  mapboxgl,
+  MAP_STYLES,
+  isValidCoord,
+  fetchMapboxRoute,
+  fetchDeliveryRouteLegs,
+  toRouteFeature,
+  safeFitBounds,
+} from '../utils/mapbox.js';
+import { setDeliveryMapPins, clearDeliveryMapPins } from '../utils/mapPinLayers.js';
 
 import { deliveryStateLabels } from '../constants.js';
 import DeliveryCard from '../components/DeliveryCard.vue';
 import FilterPanel from '../components/FilterPanel.vue';
 
 const router = useRouter();
+const route = useRoute();
 const showFilters = ref(false);
 const mapEl = ref(null);
 let map = null;
-let leaflet = L;
-let layer = null;
+let listMapRenderSeq = 0;
+let listMapMounted = false;
+let listMapStylePending = false;
+let listGpsRenderTimer = null;
+
+function canUseListMap(seq, mapRef) {
+  return (
+    listMapMounted &&
+    seq === listMapRenderSeq &&
+    mapRef &&
+    map === mapRef &&
+    mapRef.isStyleLoaded()
+  );
+}
+
+function teardownListMap() {
+  listMapMounted = false;
+  listMapRenderSeq += 1;
+  listMapStylePending = false;
+  if (listGpsRenderTimer) {
+    clearTimeout(listGpsRenderTimer);
+    listGpsRenderTimer = null;
+  }
+  clearDeliveryMapPins(map);
+  try {
+    map?.remove();
+  } catch { /* */ }
+  map = null;
+}
 
 const courierPaused = computed(() => isPaused());
 
 const list = computed(() => filteredDeliveries.value);
 const active = computed(() => activeDelivery.value);
+/** Mini-mapa: com entrega ativa só essa; senão pedidos disponíveis */
 const mapDeliveries = computed(() => {
-  const byId = new Map();
-  for (const d of list.value) byId.set(d.id, d);
-  if (active.value) byId.set(active.value.id, active.value);
-  return [...byId.values()].filter((d) => d.pickup && d.destination);
+  if (active.value?.pickup && active.value?.destination) {
+    return [active.value];
+  }
+  return list.value.filter((d) => d.pickup && d.destination);
 });
 
 function toggleFilter(type) {
@@ -125,131 +169,172 @@ function toggleDistance() {
 async function handleAccept(id) {
   const ok = await acceptDelivery(id);
   if (!ok) return;
-  startGpsTracking(); // Start GPS when delivery accepted
+  startGpsTracking();
+}
+function goToDetail(id) {
+  teardownListMap();
   router.push(`/deliveries/${id}`);
 }
-function goToDetail(id) { router.push(`/deliveries/${id}`); }
-function goToActive() { if (active.value) router.push(`/deliveries/${active.value.id}`); }
+function goToActive() {
+  if (!active.value) return;
+  teardownListMap();
+  router.push(`/deliveries/${active.value.id}`);
+}
 
 async function handleTogglePause() {
   await togglePause();
 }
 
-function zoomIn() { map?.zoomIn(); }
-function zoomOut() { map?.zoomOut(); }
+function zoomIn() { map?.zoomTo(map.getZoom() + 1); }
+function zoomOut() { map?.zoomTo(map.getZoom() - 1); }
+
+function clearListRouteLayers() {
+  for (const id of ['list-route-leg1', 'list-route-leg2', 'list-route-line']) {
+    try {
+      if (map?.getLayer(`${id}-line`)) map.removeLayer(`${id}-line`);
+      if (map?.getSource(id)) map.removeSource(id);
+    } catch { /* */ }
+  }
+}
+
+function setListRouteLayer(sourceId, feature, color, dash = null) {
+  if (!map?.isStyleLoaded() || !feature) return;
+  const layerId = `${sourceId}-line`;
+  if (map.getSource(sourceId)) {
+    map.getSource(sourceId).setData(feature);
+    map.setPaintProperty(layerId, 'line-color', color);
+  } else {
+    map.addSource(sourceId, { type: 'geojson', data: feature });
+    map.addLayer({
+      id: layerId,
+      type: 'line',
+      source: sourceId,
+      paint: {
+        'line-color': color,
+        'line-width': sourceId.includes('leg1') ? 4 : 5,
+        'line-opacity': 0.9,
+        ...(dash ? { 'line-dasharray': dash } : {}),
+      },
+    });
+  }
+}
 
 let pollInterval = null;
 
 onMounted(async () => {
-  if (store.activeDeliveryId) {
-    router.replace(`/deliveries/${store.activeDeliveryId}`);
-    return;
-  }
-
-  // Refresh deliveries from Strapi
+  listMapMounted = true;
   await fetchDeliveries();
 
   await nextTick();
-  if (!mapEl.value) return;
-  map = L.map(mapEl.value, { zoomControl: false, attributionControl: false }).setView([41.15, -8.63], 11);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(map);
-  layer = L.layerGroup().addTo(map);
-  renderMap();
-  setTimeout(() => map?.invalidateSize(), 120);
+  if (!listMapMounted || !mapEl.value) return;
+  map = new mapboxgl.Map({
+    container: mapEl.value,
+    style: MAP_STYLES.overview,
+    center: [-8.63, 41.15],
+    zoom: 11,
+    attributionControl: false,
+  });
+  map.on('dragstart', () => { listMapViewLocked = true; });
+  map.on('zoomstart', (ev) => { if (ev?.originalEvent) listMapViewLocked = true; });
+  map.on('load', () => {
+    if (listMapMounted) scheduleListMapRender({ refit: true });
+  });
+  setTimeout(() => {
+    if (listMapMounted) map?.resize();
+  }, 120);
 
   // Poll for new deliveries every 15s
-  pollInterval = setInterval(() => fetchDeliveries(), 15000);
+  pollInterval = setInterval(() => fetchDeliveries({ silent: true }), 30000);
 });
 
 
-// Force redirect if active delivery detected
-watch(() => store.activeDeliveryId, (newId) => {
-  if (newId) {
-    router.replace(`/deliveries/${newId}`);
-  }
-}, { immediate: true });
+watch(mapDeliveries, () => {
+  scheduleListMapRender({ refit: !listMapViewLocked });
+}, { deep: true });
 
-watch([mapDeliveries, active, () => store.gpsCoords], () => renderMap(), { deep: true });
+watch(() => active.value?.id, () => {
+  scheduleListMapRender({ refit: true });
+});
+
+watch(() => store.gpsCoords, () => {
+  if (!listMapMounted || route.name !== 'Deliveries') return;
+  clearTimeout(listGpsRenderTimer);
+  listGpsRenderTimer = setTimeout(() => scheduleListMapRender({ refit: false }), 400);
+}, { deep: true });
+
+onBeforeRouteLeave(() => {
+  teardownListMap();
+});
 
 onBeforeUnmount(() => {
   if (pollInterval) clearInterval(pollInterval);
-  map?.remove(); map = null; layer = null; leaflet = null;
+  teardownListMap();
 });
 
-let storeMapIcon=null;
-let customerMapIcon=null;
-let courierMapIcon=null;
+let listMapViewLocked = false;
 
-function getStoreMapIcon(){
-  if(!leaflet) return null;
-  if(!storeMapIcon){
-    storeMapIcon=leaflet.icon({
-      iconUrl:'/media/map/continente-pin.png',
-      iconSize:[40,48],
-      iconAnchor:[20,48],
-      popupAnchor:[0,-40],
-      className:'ge-map-marker-icon',
-    });
-  }
-  return storeMapIcon;
-}
-function getCustomerMapIcon(){
-  if(!leaflet) return null;
-  if(!customerMapIcon){
-    customerMapIcon=leaflet.icon({
-      iconUrl:'/media/map/customer-house-pin.png',
-      iconSize:[40,48],
-      iconAnchor:[20,48],
-      popupAnchor:[0,-40],
-      className:'ge-map-marker-icon',
-    });
-  }
-  return customerMapIcon;
-}
-function getCourierMapIcon(){
-  if(!leaflet) return null;
-  if(!courierMapIcon){
-    courierMapIcon=leaflet.icon({
-      iconUrl:'/media/map/courier-pin.png',
-      iconSize:[40,48],
-      iconAnchor:[20,48],
-      popupAnchor:[0,-40],
-      className:'ge-map-marker-icon ge-map-marker-icon--courier',
-    });
-  }
-  return courierMapIcon;
+function scheduleListMapRender(opts = {}) {
+  if (!listMapMounted || !map) return;
+  void renderMap(opts);
 }
 
-// Replace circle markers with icons in renderMap
-function renderMap() {
-  if (!map || !layer || !leaflet) return;
-  layer.clearLayers();
-  const points = [];
-  for (const d of mapDeliveries.value) {
-    const p = d.pickup;
-    const dst = d.destination;
-    if (p?.lat == null || dst?.lat == null) continue;
-    const isActive = active.value?.id === d.id;
-    const line = leaflet.polyline([[p.lat, p.lng], [dst.lat, dst.lng]], {
-      color: isActive ? '#22c55e' : '#2563eb', weight: isActive ? 5 : 3.5,
-      opacity: 0.9, dashArray: isActive ? null : '8 7',
-    });
-    layer.addLayer(line);
-    // Pickup marker
-    layer.addLayer(leaflet.marker([p.lat, p.lng], { icon: getStoreMapIcon() }));
-    // Destination marker
-    layer.addLayer(leaflet.marker([dst.lat, dst.lng], { icon: getCustomerMapIcon() }));
-    points.push([p.lat, p.lng], [dst.lat, dst.lng]);
-    // No longer draw courier from server data
+async function renderMap({ refit = false } = {}) {
+  if (!listMapMounted || !map) return;
+  const mapRef = map;
+
+  if (!mapRef.isStyleLoaded()) {
+    if (!listMapStylePending) {
+      listMapStylePending = true;
+      mapRef.once('style.load', () => {
+        listMapStylePending = false;
+        if (listMapMounted && map === mapRef) scheduleListMapRender({ refit });
+      });
+    }
+    return;
   }
 
-  // Always draw the courier's real-time local GPS location
-  if (store.gpsCoords && store.gpsCoords.lat !== 0) {
-    layer.addLayer(leaflet.marker([store.gpsCoords.lat, store.gpsCoords.lng], { icon: getCourierMapIcon(), zIndexOffset: 1000 }));
-    points.push([store.gpsCoords.lat, store.gpsCoords.lng]);
+  const seq = ++listMapRenderSeq;
+
+  clearListRouteLayers();
+
+  const fitLngLat = [];
+  let courierPos = null;
+  const focus = active.value || mapDeliveries.value[0];
+  if (!focus?.pickup || !focus?.destination) return;
+
+  const p = focus.pickup;
+  const dst = focus.destination;
+  if (!isValidCoord(p) || !isValidCoord(dst)) return;
+
+  courierPos = active.value ? getMapCourierPosition(focus) : null;
+  if (courierPos) {
+    const legs = await fetchDeliveryRouteLegs(courierPos, p, dst);
+    if (!canUseListMap(seq, mapRef)) return;
+    setListRouteLayer('list-route-leg1', legs.leg1, '#38bdf8', [2, 1.5]);
+    setListRouteLayer('list-route-leg2', legs.leg2, '#22c55e');
+    fitLngLat.push([courierPos.lng, courierPos.lat]);
+  } else {
+    const routeLine = await fetchMapboxRoute([p, dst]);
+    if (!canUseListMap(seq, mapRef)) return;
+    setListRouteLayer('list-route-line', toRouteFeature(routeLine?.geometry), '#2563eb', [2, 1.5]);
   }
 
-  if (points.length > 1) map.fitBounds(leaflet.latLngBounds(points), { padding: [20, 20], maxZoom: 13 });
+  if (!canUseListMap(seq, mapRef)) return;
+
+  await setDeliveryMapPins(mapRef, { store: p, home: dst, courier: courierPos });
+  if (!canUseListMap(seq, mapRef)) return;
+
+  fitLngLat.push([p.lng, p.lat], [dst.lng, dst.lat]);
+
+  if (fitLngLat.length > 0 && refit && !listMapViewLocked) {
+    const lngs = fitLngLat.map((c) => c[0]);
+    const lats = fitLngLat.map((c) => c[1]);
+    safeFitBounds(
+      mapRef,
+      [[Math.min(...lngs), Math.min(...lats)], [Math.max(...lngs), Math.max(...lats)]],
+      { padding: 28, maxZoom: active.value ? 14 : 12, duration: refit ? 300 : 0 },
+    );
+  }
 }
 
 </script>
@@ -374,6 +459,11 @@ function renderMap() {
   height: 200px;
   background: var(--ge-page);
 }
+:deep(.mapboxgl-canvas) { outline: none; }
+:deep(.mapboxgl-marker) { pointer-events: none; }
+:deep(.ge-map-marker-icon) {
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.35));
+}
 .map-controls {
   position: absolute;
   bottom: 12px; right: 12px;
@@ -407,7 +497,8 @@ function renderMap() {
 }
 .ab-left { display: flex; flex-direction: column; gap: 2px; }
 .ab-state { font-size: 11px; font-weight: 700; text-transform: uppercase; opacity: 0.85; }
-.ab-order { font-size: 14px; font-weight: 600; }
+.ab-pause-hint { font-size: 11px; font-weight: 500; color: #b45309; }
+.ab-order { font-size: 13px; font-weight: 600; display: block; margin-top: 2px; }
 .ab-arrow { opacity: 0.7; }
 
 /* List header */
@@ -425,7 +516,34 @@ function renderMap() {
 
 /* Delivery list */
 .delivery-list {
+  position: relative;
   display: flex; flex-direction: column; gap: 12px;
+}
+.delivery-list.is-syncing {
+  min-height: 48px;
+}
+.list-sync-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: 24px;
+  background: rgba(255, 255, 255, 0.55);
+  border-radius: 12px;
+  pointer-events: none;
+}
+.list-sync-spinner {
+  width: 28px;
+  height: 28px;
+  border: 3px solid #e5e7eb;
+  border-top-color: var(--ge-brand, #1b8a4a);
+  border-radius: 50%;
+  animation: list-spin 0.7s linear infinite;
+}
+@keyframes list-spin {
+  to { transform: rotate(360deg); }
 }
 .empty-state {
   text-align: center;

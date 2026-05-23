@@ -21,3 +21,9 @@
 
 # PWA — protótipos gerados (só versionar estafeta-app)
 PWA/project-*/
+
+# Scripts / notas de desenvolvimento pontuais (não fazem parte das apps)
+/test.js
+/backend/test-*.js
+*.patch
+plan-*.md

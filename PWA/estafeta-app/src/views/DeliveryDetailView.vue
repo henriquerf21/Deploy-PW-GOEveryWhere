@@ -1,5 +1,5 @@
 <template>
-  <div class="page" v-if="delivery">
+  <div class="page" :class="{ 'page-navigating': isNavigating }" v-if="delivery && deliveryResolved">
     <!-- Header -->
     <div class="page-header">
       <img src="/media/brand/logo-goeverywhere.png" alt="" class="logo-mini" />
@@ -7,13 +7,10 @@
     </div>
 
     <!-- Order banner (Figma: < #ORD-2850 URGENTE €6.50 / state) -->
-    <div class="order-banner">
-      <button v-if="delivery.state === 'E-08'" class="ob-back" @click="$router.push('/deliveries')">
+    <div class="order-banner" v-if="!isNavigating">
+      <button class="ob-back" type="button" aria-label="Voltar à lista" @click="$router.push('/deliveries')">
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="#111827" stroke-width="2.5"><path d="M15 18l-6-6 6-6"/></svg>
       </button>
-      <div v-else style="width:36px; height:36px; display:flex; align-items:center; justify-content:center;">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0110 0v4"/></svg>
-      </div>
       <div class="ob-info">
         <div class="ob-top-row">
           <span class="ob-id">{{ delivery.orderId }}</span>
@@ -30,24 +27,119 @@
 
     <div class="page-body">
       <!-- Stepper (Figma: Aceite → Em recolha → Em trânsito → Chegou ao destino) -->
-      <div class="stepper-card">
+      <div class="stepper-card" v-if="!isNavigating">
         <StatusStepper :currentState="delivery.state" :timestamps="delivery.timestamps" />
       </div>
 
-      <!-- Map with state badge -->
-      <div class="map-card">
-        <div class="map-state-badge" :class="mapBadgeClass">
-          <span class="msb-icon" v-html="mapBadgeIcon"></span>
-          {{ mapBadgeLabel }}
+      <!-- Mapa: viewport limpo + legenda/acções por baixo -->
+      <div class="map-card" :class="{ 'fullscreen-map': isNavigating }">
+        <div v-if="!isNavigating" class="map-card-head">
+          <span class="map-state-badge" :class="mapBadgeClass">
+            <span class="msb-icon" v-html="mapBadgeIcon"></span>
+            {{ mapBadgeLabel }}
+          </span>
         </div>
-        <div ref="routeMapEl" class="route-map"></div>
-        <div class="map-controls">
-          <button v-if="['E-09', 'E-10', 'E-11', 'E-12'].includes(delivery.state)" class="map-zoom" style="width:auto; padding:0 8px; font-size:12px; margin-bottom:8px" @click="handleSimulate">Dev: Simular</button>
-          <button class="map-zoom" @click="zoomIn">+</button>
-          <button class="map-zoom" @click="zoomOut">−</button>
+
+        <div class="map-viewport">
+        <div class="painel-navegacao" v-if="isNavigating">
+          <button type="button" class="nav-fab-recenter" title="Centrar" @click="centerOnCourier">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M12 2v3M12 19v3M2 12h3M19 12h3"/></svg>
+          </button>
+
+          <div class="nav-hud-top" v-if="navInstruction">
+            <NavManeuverIcon :maneuver="navInstruction.maneuver" />
+            <div class="nav-turn-text">
+              <p class="nav-distance-primary">{{ navDistanceLabel }}</p>
+              <p class="nav-street-name">{{ navStreetName }}</p>
+            </div>
+          </div>
+          <div v-else class="nav-hud-top nav-hud-wait">
+            <p class="nav-phase">{{ navPhaseLabel }}</p>
+            <p class="nav-wait-gps">A obter GPS e percurso… Ativa a localização.</p>
+          </div>
+
+          <p v-if="navInstruction" class="nav-phase-badge">{{ navPhaseLabel }}</p>
+
+          <div v-if="navStreetName && navInstruction" class="nav-street-pill">{{ navStreetName }}</div>
+
+          <div class="nav-hud-bottom">
+            <div class="nav-trip-grid">
+              <div class="nav-trip-col">
+                <span class="nav-trip-label">Chegada</span>
+                <span class="nav-eta-time">{{ navEtaTime }}</span>
+              </div>
+              <div class="nav-trip-col">
+                <span class="nav-trip-label">Distância</span>
+                <span class="nav-trip-value">{{ navRemainingKm }} km</span>
+              </div>
+              <div class="nav-trip-col">
+                <span class="nav-trip-label">Tempo</span>
+                <span class="nav-trip-value">{{ navDurationLabel }}</span>
+              </div>
+            </div>
+            <button type="button" class="nav-btn-close-round" aria-label="Sair da navegação" @click="stopNavigation">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M18 6L6 18M6 6l12 12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <div ref="routeMapEl" class="route-map" :class="{ 'fullscreen-view': isNavigating }"></div>
+
+        <div v-if="!isNavigating" class="map-zoom-stack">
+          <button type="button" class="map-zoom" aria-label="Aumentar zoom" @click="zoomIn">+</button>
+          <button type="button" class="map-zoom" aria-label="Reduzir zoom" @click="zoomOut">−</button>
+        </div>
+
+        <div v-if="isNavigating" class="map-controls map-controls--nav">
+          <template v-if="enableCourierSim && ['E-09', 'E-10', 'E-11', 'E-12'].includes(delivery.state)">
+            <button
+              type="button"
+              class="map-zoom map-sim-btn"
+              :class="{ 'map-sim-btn--active': isSimulatingRoute }"
+              @click="handleQuickSim"
+            >
+              {{ isSimulatingRoute ? 'Parar sim' : 'Sim 2+2 min' }}
+            </button>
+            <p v-if="simContinueHint" class="map-sim-hint">{{ simContinueHint }}</p>
+          </template>
+        </div>
+        </div>
+
+        <div v-if="!isNavigating" class="map-card-foot">
+          <div v-if="showMapLegend" class="map-legend">
+            <span class="ml-item"><img :src="MAP_PINS.courier" alt="" class="ml-pin-img" /> Estafeta</span>
+            <span class="ml-item"><img :src="MAP_PINS.store" alt="" class="ml-pin-img" /> Loja</span>
+            <span class="ml-item"><img :src="MAP_PINS.home" alt="" class="ml-pin-img" /> Cliente</span>
+            <span class="ml-item"><i class="ml-line ml-line-a"></i> Até à loja</span>
+            <span class="ml-item"><i class="ml-line ml-line-b"></i> Loja → cliente</span>
+          </div>
+          <button
+            v-if="['E-09', 'E-10', 'E-11', 'E-12'].includes(delivery.state)"
+            type="button"
+            class="map-nav-cta"
+            @click="startNavigation"
+          >
+            Abrir navegação
+          </button>
+          <div
+            v-if="enableCourierSim && ['E-09', 'E-10', 'E-11', 'E-12'].includes(delivery.state)"
+            class="map-dev-row"
+          >
+            <span class="map-dev-label">Teste</span>
+            <button
+              type="button"
+              class="map-dev-btn"
+              :class="{ 'map-dev-btn--active': isSimulatingRoute }"
+              @click="handleQuickSim"
+            >
+              {{ isSimulatingRoute ? 'Parar sim' : 'Sim 2+2 min' }}
+            </button>
+            <p v-if="simContinueHint" class="map-sim-hint map-sim-hint--inline">{{ simContinueHint }}</p>
+          </div>
         </div>
       </div>
 
+      <template v-if="!isNavigating">
       <!-- REGISTO DE TEMPOS -->
       <div class="section-card">
         <span class="section-label">REGISTO DE TEMPOS</span>
@@ -145,33 +237,19 @@
         <button v-if="delivery.state === 'E-08'" class="cta-btn cta-green" @click="handleAccept">
           {{ ctaLabel }}
         </button>
-        <!-- E-09: Iniciar recolha (green) + Waze (amber) -->
-        <template v-else-if="delivery.state === 'E-09'">
-          <button class="cta-btn cta-green" @click="handleCTA">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-            {{ ctaLabel }}
-          </button>
-          <a :href="wazeRouteFull" target="_blank" rel="noopener" class="cta-btn cta-amber">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
-            Iniciar no Waze
-          </a>
-        </template>
+        <button v-else-if="delivery.state === 'E-09'" class="cta-btn cta-green" @click="handleCTA">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
+          {{ ctaLabel }}
+        </button>
         <!-- E-10: Recolha feita (amber) -->
         <button v-else-if="delivery.state === 'E-10'" class="cta-btn cta-amber" @click="handleCTA">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
           {{ ctaLabel }}
         </button>
-        <!-- E-11: Cheguei ao destino (amber) + Waze -->
-        <template v-else-if="delivery.state === 'E-11'">
-          <button class="cta-btn cta-green" @click="handleCTA">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>
-            {{ ctaLabel }}
-          </button>
-          <a :href="wazeRouteFull" target="_blank" rel="noopener" class="cta-btn cta-amber">
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M3 11l19-9-9 19-2-8-8-2z"/></svg>
-            Iniciar no Waze
-          </a>
-        </template>
+        <button v-else-if="delivery.state === 'E-11'" class="cta-btn cta-green" @click="handleCTA">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>
+          {{ ctaLabel }}
+        </button>
         <!-- E-12: Confirmar entrega (green) -->
         <button v-else class="cta-btn cta-green" @click="handleCTA">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
@@ -183,10 +261,11 @@
       <div v-if="canMarkImpossible" class="impossible-link" @click="showImpossible = true">
         Impossível Entregar
       </div>
+      </template>
     </div>
 
     <!-- Footer -->
-    <footer class="app-footer">
+    <footer v-if="!isNavigating" class="app-footer">
       <div class="footer-brand">
         <span class="footer-g">G</span>
         <span class="footer-name">GoEverywhere</span>
@@ -234,7 +313,8 @@
     <Teleport to="body">
       <div v-if="showImpossible" class="modal-overlay" @click.self="showImpossible = false">
         <div class="modal-card">
-          <h3>Entrega Impossível</h3>
+          <h3>Impossível antes da recolha</h3>
+          <p class="impossible-hint">A equipa de operações vai analisar e reatribuir outro estafeta ou cancelar o pedido. O cliente não é cancelado automaticamente.</p>
           <div class="field-group">
             <label>Motivo</label>
             <textarea v-model="impossibleReason" class="field-input" rows="3" placeholder="Descreve o motivo..."></textarea>
@@ -249,42 +329,61 @@
   </div>
 
   <div v-else class="page" style="text-align:center; padding-top:80px">
-    <p>Entrega não encontrada.</p>
-    <button class="cta-btn cta-green" style="margin:16px auto; max-width:200px" @click="$router.push('/deliveries')">Voltar</button>
+    <p v-if="resolvingDelivery">A carregar entrega…</p>
+    <template v-else>
+      <p>Entrega não encontrada.</p>
+      <button class="cta-btn cta-green" style="margin:16px auto; max-width:200px" @click="$router.push('/deliveries')">Voltar</button>
+    </template>
   </div>
 </template>
 
 <script setup>
 import { computed, ref, onMounted, onUnmounted, watch, nextTick } from 'vue';
 import { useRouter } from 'vue-router';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import 'mapbox-gl/dist/mapbox-gl.css';
+import { isValidCoord, MAP_PINS } from '../utils/mapbox.js';
+import { useMapboxDeliveryMap } from '../composables/useMapboxDeliveryMap.js';
 import {
-  getDeliveryById, acceptDelivery, advanceDeliveryState,
-  markDeliveryImpossible, wazeLink, fetchDeliveries, sendDeliveryChatMessage,
-  declineDeliveryTimeout, startGpsTracking, stopGpsTracking, getLastGpsCoords, 
-  getCurrentRouteGeoJSON, fetchRouteGeoJSON, store, startSimulatedRoute, socket
+  getDeliveryById, ensureDeliveryLoaded, acceptDelivery, advanceDeliveryState,
+  markDeliveryImpossible, sendDeliveryChatMessage, joinOrderRoom,
+  declineDeliveryTimeout, startGpsTracking, restartGpsTracking, getLastGpsCoords,
+  isPaused, store, startQuickDeliverySimulation, stopSimulatedRoute,
+  isSimulatingRoute, getMapCourierPosition, setActiveDeliveryForView, refreshDeviceGps,
 } from '../stores/courierStore.js';
-import { requestNotificationPermission, sendNotification } from '../utils/notifications.js';
+import { isValidGpsPoint } from '../utils/geo.js';
 import { DELIVERY_STATE, deliveryStateLabels, STATE_CTA } from '../constants.js';
 import StatusStepper from '../components/StatusStepper.vue';
+import NavManeuverIcon from '../components/NavManeuverIcon.vue';
+import { formatNavDistance, formatNavDuration, getNavStreetName } from '../utils/navManeuver.js';
+import { ENABLE_COURIER_SIM } from '../config/env.js';
 
 const props = defineProps({ id: String });
+const enableCourierSim = ENABLE_COURIER_SIM;
 const router = useRouter();
 const routeMapEl = ref(null);
 let timerInterval = null;
-let chatPollTimer = null;
-let routeMap = null;
-let routeLayer = null;
-let leaflet = L;
-let pickupMarkerIcon = null;
-let destinationMarkerIcon = null;
-let courierMarkerIcon = null;
+let joinedOrderRoom = null;
+const isNavigating = ref(false);
+const showMapLegend = computed(() => {
+  const s = delivery.value?.state;
+  return s && ['E-09', 'E-10', 'E-11', 'E-12'].includes(s);
+});
 
 const delivery = computed(() => getDeliveryById(props.id));
+
+const simContinueHint = computed(() => {
+  if (!isSimulatingRoute.value || !delivery.value) return '';
+  if (['E-09', 'E-10'].includes(delivery.value.state)) {
+    return 'Na loja: altera o estado para «Em trânsito para cliente» (E-11) para a simulação seguir até ao cliente.';
+  }
+  return '';
+});
+const deliveryResolved = ref(!!delivery.value);
+const resolvingDelivery = ref(false);
 const ctaLabel = computed(() => delivery.value ? STATE_CTA[delivery.value.state] : null);
+/** Só antes da recolha (E-08 recebido, E-09 a caminho da loja). */
 const canMarkImpossible = computed(() =>
-  delivery.value && ['E-09', 'E-10'].includes(delivery.value.state)
+  delivery.value && ['E-08', 'E-09'].includes(delivery.value.state)
 );
 
 const stateLabel = computed(() => {
@@ -315,14 +414,6 @@ const mapBadgeIcon = computed(() => {
   if (s === 'E-10') return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>';
   if (s === 'E-11') return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 3v5h-7V8z"/></svg>';
   return '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/></svg>';
-});
-
-const wazeRouteFull = computed(() => {
-  if (!delivery.value) return '#';
-  const toPickup = ['E-08', 'E-09', 'E-10'].includes(delivery.value.state);
-  return toPickup
-    ? wazeLink(delivery.value.pickup.lat, delivery.value.pickup.lng)
-    : wazeLink(delivery.value.destination.lat, delivery.value.destination.lng);
 });
 
 function formatTime(iso) {
@@ -413,56 +504,109 @@ function calculateRemainingSeconds() {
   return Math.max(0, 300 - diffSecs);
 }
 
-function zoomIn() { routeMap?.zoomIn(); }
-function zoomOut() { routeMap?.zoomOut(); }
-
-function getPickupIcon() {
-  if (!leaflet) return null;
-  if (!pickupMarkerIcon) {
-    pickupMarkerIcon = leaflet.icon({
-      iconUrl: '/media/map/continente-pin.png',
-      iconSize: [40, 48],
-      iconAnchor: [20, 48],
-      popupAnchor: [0, -40],
-      className: 'ge-map-marker-icon ge-store-marker-icon',
-    });
-  }
-  return pickupMarkerIcon;
+function getRawGps() {
+  if (isSimulatingRoute.value || store.gpsSimulated) return null;
+  if (!store.gpsFromDevice) return null;
+  const local = getLastGpsCoords();
+  if (isValidGpsPoint(local)) return { lat: local.lat, lng: local.lng };
+  return null;
 }
 
-function getDestinationIcon() {
-  if (!leaflet) return null;
-  if (!destinationMarkerIcon) {
-    destinationMarkerIcon = leaflet.icon({
-      iconUrl: '/media/map/customer-house-pin.png',
-      iconSize: [40, 48],
-      iconAnchor: [20, 48],
-      popupAnchor: [0, -40],
-      className: 'ge-map-marker-icon',
-    });
-  }
-  return destinationMarkerIcon;
+function courierGpsForMap() {
+  if (isNavigating.value && navDisplayGps.value) return navDisplayGps.value;
+  const d = delivery.value;
+  if (!d) return null;
+  return getMapCourierPosition(d);
 }
 
-function getCourierIcon() {
-  if (!leaflet) return null;
-  if (!courierMarkerIcon) {
-    courierMarkerIcon = leaflet.icon({
-      iconUrl: '/media/map/courier-pin.png',
-      iconSize: [40, 48],
-      iconAnchor: [20, 48],
-      popupAnchor: [0, -40],
-      className: 'ge-map-marker-icon ge-map-marker-icon--courier',
-    });
-  }
-  return courierMarkerIcon;
+const {
+  initMap,
+  destroyMap,
+  renderMap,
+  zoomIn,
+  zoomOut,
+  resize: resizeMap,
+  startNavigation: startMapNavigation,
+  stopNavigation: stopMapNavigation,
+  scheduleRender,
+  onGpsTick,
+  centerOnCourier,
+  navInstruction,
+  navDistanceM,
+  navEtaTime,
+  navRemainingMin,
+  navRemainingKm,
+  navDisplayGps,
+  navPhaseLabel,
+} = useMapboxDeliveryMap({
+  getDelivery: () => delivery.value,
+  getCourierGps: courierGpsForMap,
+  getRawGps,
+  isNavigating,
+});
+
+const navDistanceLabel = computed(() => formatNavDistance(navDistanceM.value));
+const navDurationLabel = computed(() => formatNavDuration(navRemainingMin.value));
+const navStreetName = computed(() => getNavStreetName(navInstruction.value));
+
+async function startNavigation() {
+  requestMapGps();
+  restartGpsTracking();
+  isNavigating.value = true;
+  await startMapNavigation();
 }
 
-onMounted(() => {
-  if (delivery.value?.state === DELIVERY_STATE.E08) {
+async function stopNavigation() {
+  isNavigating.value = false;
+  await stopMapNavigation();
+}
+
+function requestMapGps() {
+  refreshDeviceGps();
+}
+
+async function resolveDeliveryRoute() {
+  resolvingDelivery.value = true;
+  const resolved = await ensureDeliveryLoaded(props.id);
+  resolvingDelivery.value = false;
+  if (!resolved) {
+    router.replace('/deliveries');
+    return null;
+  }
+  if (String(resolved.id) !== String(props.id)) {
+    router.replace(`/deliveries/${resolved.id}`);
+    return null;
+  }
+  deliveryResolved.value = true;
+  return resolved;
+}
+
+watch(() => props.id, (id) => {
+  deliveryResolved.value = !!getDeliveryById(id);
+  if (id) setActiveDeliveryForView(id);
+  void resolveDeliveryRoute();
+});
+
+async function handleQuickSim() {
+  if (!delivery.value) return;
+  if (isSimulatingRoute.value) {
+    stopSimulatedRoute();
+    scheduleRender();
+    return;
+  }
+  await startQuickDeliverySimulation(delivery.value);
+  scheduleRender();
+  if (isNavigating.value) await renderMap();
+}
+
+onMounted(async () => {
+  const resolved = await resolveDeliveryRoute();
+  if (!resolved) return;
+  setActiveDeliveryForView(resolved.id);
+
+  if (resolved.state === DELIVERY_STATE.E08) {
     timerSeconds.value = calculateRemainingSeconds();
     if (timerSeconds.value <= 0) {
-      // Timer already expired — notify backend and go back
       declineDeliveryTimeout(props.id);
       router.push('/deliveries');
       return;
@@ -471,78 +615,71 @@ onMounted(() => {
       timerSeconds.value = calculateRemainingSeconds();
       if (timerSeconds.value <= 0) {
         clearInterval(timerInterval);
-        // Notify Strapi so admin can reassign to another courier
         declineDeliveryTimeout(props.id);
         router.push('/deliveries');
       }
     }, 1000);
-  } else if (delivery.value && !['E-08', 'E-13', 'E-14'].includes(delivery.value.state)) {
-    // Active delivery in progress — start GPS tracking
+  } else if (!['E-08', 'E-13', 'E-14'].includes(resolved.state)) {
     startGpsTracking();
   }
-});
 
-let mapInitTimeout = null;
-
-function handleSimulate() {
-  if (delivery.value) {
-    startSimulatedRoute(delivery.value.pickup, delivery.value.destination);
-  }
-}
-
-onMounted(async () => {
   await nextTick();
-  
-  requestNotificationPermission();
-
   if (!routeMapEl.value || !delivery.value) return;
-  
-  // Set up polling for chat while viewing the delivery
-  chatPollTimer = setInterval(() => {
-    fetchDeliveries();
-  }, 5000);
 
-  // Real-time chat via WebSockets
-  socket.emit('join_room', delivery.value.orderDocumentId);
-  socket.on('chat_message', (data) => {
-    if (delivery.value && String(data.room) === String(delivery.value.orderDocumentId)) {
-      if (data.message?.sender === 'client') {
-        fetchDeliveries(); // update local history to get the new message
-        sendNotification('GoEverywhere — Nova Mensagem do Cliente', {
-          body: data.message.text,
-          onClick: () => { openChat.value = true; }
-        });
-      }
-    }
-  });
+  requestMapGps();
+  if (!['E-13', 'E-14'].includes(delivery.value.state) && !isPaused()) {
+    restartGpsTracking();
+  }
+
+  if (delivery.value?.orderDocumentId) {
+    joinedOrderRoom = delivery.value.orderDocumentId;
+    joinOrderRoom(joinedOrderRoom);
+  }
 
   const p = delivery.value.pickup;
-  const d = delivery.value.destination;
-
-  // Pre-fetch the GeoJSON route if we don't have it yet, so we can draw the road line immediately!
-  if (p?.lat && d?.lat && !getCurrentRouteGeoJSON()) {
-    await fetchRouteGeoJSON(p, d);
-  }
-
-  const center = [p.lat, p.lng];
-  routeMap = L.map(routeMapEl.value, { zoomControl: false, attributionControl: false }).setView(center, 12);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { maxZoom: 19 }).addTo(routeMap);
-  routeLayer = L.layerGroup().addTo(routeMap);
-  renderRouteMap();
-  setTimeout(() => routeMap?.invalidateSize(), 160);
+  const gps = courierGpsForMap();
+  const center = gps ? [gps.lng, gps.lat] : [p.lng, p.lat];
+  initMap(routeMapEl.value, center);
 });
 
-watch([delivery, () => store.gpsCoords, () => store.currentRouteGeoJSON], () => renderRouteMap(), { deep: true });
+watch(() => delivery.value?.orderDocumentId, (room) => {
+  if (room && room !== joinedOrderRoom) {
+    joinedOrderRoom = room;
+    joinOrderRoom(room);
+  }
+});
+
+watch(
+  () => [delivery.value?.state, delivery.value?.pickup?.lat, delivery.value?.destination?.lat],
+  (cur, prev) => {
+    const stateChanged = cur?.[0] !== prev?.[0];
+    if (isNavigating.value && stateChanged) {
+      void renderMap();
+      return;
+    }
+    if (!isNavigating.value) scheduleRender();
+  },
+);
+
+watch(() => store.gpsCoords, () => {
+  const raw = getRawGps();
+  if (raw) onGpsTick(raw);
+  else if (!isNavigating.value) scheduleRender();
+}, { deep: true });
+
+watch(isSimulatingRoute, (sim) => {
+  nextTick(() => resizeMap());
+  if (!sim) refreshDeviceGps();
+});
+
+watch(isNavigating, () => {
+  nextTick(() => resizeMap());
+});
 
 onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval);
-  if (chatPollTimer) clearInterval(chatPollTimer);
-  socket.off('chat_message');
-  if (delivery.value?.orderDocumentId) {
-    socket.emit('leave_room', delivery.value.orderDocumentId);
-  }
-  routeMap?.remove(); routeMap = null; routeLayer = null; leaflet = null;
-  // GPS tracking is managed at app level, don't stop here
+  stopSimulatedRoute();
+  destroyMap();
 });
 
 function handleAccept() {
@@ -570,73 +707,6 @@ async function handleImpossible() {
   router.push('/deliveries');
 }
 
-let lastRenderedState = null;
-let lastRenderedGps = null;
-let lastRenderedRoute = null;
-
-function renderRouteMap() {
-  if (!delivery.value || !routeMap || !routeLayer || !leaflet) return;
-  
-  const p = delivery.value.pickup;
-  const d = delivery.value.destination;
-  if (p?.lat == null || d?.lat == null) return;
-  
-  const s = delivery.value.state;
-  const gps = getLastGpsCoords();
-  const gpsKey = gps ? `${gps.lat},${gps.lng}` : null;
-  const routeGeoJSON = getCurrentRouteGeoJSON();
-  const routeKey = routeGeoJSON ? 'has-route' : 'no-route';
-  
-  // Only redraw if state, GPS, or Route actually changed
-  if (lastRenderedState === s && lastRenderedGps === gpsKey && lastRenderedRoute === routeKey) return;
-  
-  routeLayer.clearLayers();
-  
-  const routeColor = s === 'E-09' ? '#22c55e' : s === 'E-10' ? '#f59e0b' : s === 'E-11' ? '#3b82f6' : '#22c55e';
-  const isDashed = !['E-13'].includes(s);
-
-  if (routeGeoJSON) {
-    routeLayer.addLayer(leaflet.geoJSON(routeGeoJSON, {
-      style: {
-        color: routeColor,
-        weight: 5,
-        opacity: 0.92,
-        dashArray: isDashed ? '10 8' : null
-      }
-    }));
-  } else {
-    routeLayer.addLayer(leaflet.polyline([[p.lat, p.lng], [d.lat, d.lng]], {
-      color: routeColor, weight: 5, opacity: 0.92,
-      dashArray: isDashed ? '10 8' : null,
-    }));
-  }
-
-  routeLayer.addLayer(leaflet.marker([p.lat, p.lng], { icon: getPickupIcon() }));
-  routeLayer.addLayer(leaflet.marker([d.lat, d.lng], { icon: getDestinationIcon() }));
-
-  const points = [[p.lat, p.lng], [d.lat, d.lng]];
-  if (['E-07', 'E-08', 'E-09', 'E-10', 'E-11', 'E-12'].includes(s)) {
-    if (gps && gps.lat !== 0 && gps.lng !== 0) {
-      routeLayer.addLayer(leaflet.marker([gps.lat, gps.lng], { icon: getCourierIcon() }));
-      points.push([gps.lat, gps.lng]);
-    }
-  }
-  
-  // Only fitBounds on the very first render or state change
-  if (lastRenderedState !== s) {
-    if (routeGeoJSON) {
-        // If we have a GeoJSON route, fit to the GeoJSON bounds
-        const geoJsonLayer = leaflet.geoJSON(routeGeoJSON);
-        routeMap.fitBounds(geoJsonLayer.getBounds(), { padding: [24, 24], maxZoom: 14 });
-    } else {
-        routeMap.fitBounds(leaflet.latLngBounds(points), { padding: [24, 24], maxZoom: 14 });
-    }
-  }
-  
-  lastRenderedState = s;
-  lastRenderedGps = gpsKey;
-  lastRenderedRoute = routeKey;
-}
 </script>
 
 <style scoped>
@@ -678,20 +748,337 @@ function renderRouteMap() {
 
 /* Map */
 .map-card {
-  position: relative;
   margin: 12px 16px;
   border-radius: 16px;
   overflow: hidden;
   border: 0.72px solid #e5e7eb;
+  background: #fff;
+  display: flex;
+  flex-direction: column;
 }
-.route-map { height: 200px; background: var(--ge-page); }
-.route-map :deep(.leaflet-container) { height: 100%; width: 100%; }
-.route-map :deep(.ge-map-marker-icon) {
+.map-card-head {
+  padding: 10px 12px 0;
+}
+.map-card-head .map-state-badge {
+  position: static;
+  box-shadow: none;
+}
+.map-viewport {
+  position: relative;
+  margin: 8px 12px 0;
+  border-radius: 12px;
+  overflow: hidden;
+  border: 0.72px solid #e5e7eb;
+}
+.map-card-foot {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 10px 12px 12px;
+}
+.route-map {
+  height: 220px;
+  background: var(--ge-page);
+  overflow: hidden;
+}
+.map-zoom-stack {
+  position: absolute;
+  bottom: 10px;
+  right: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 10;
+}
+.page-navigating .page-header { display: none; }
+.page-navigating .page-body { padding: 0; }
+.map-card.fullscreen-map .map-viewport {
+  margin: 0;
+  flex: 1;
+  border: none;
+  border-radius: 0;
+}
+.map-card.fullscreen-map .route-map.fullscreen-view {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 0;
+}
+:deep(.mapboxgl-canvas) { outline: none; }
+:deep(.mapboxgl-ctrl-top-left),
+:deep(.mapboxgl-ctrl-top-right),
+:deep(.mapboxgl-ctrl-bottom-left) {
+  display: none !important;
+}
+:deep(.mapboxgl-marker) { z-index: 20; pointer-events: none; }
+:deep(.ge-map-marker-icon--store),
+:deep(.ge-map-marker-icon--home) { z-index: 25; }
+:deep(.ge-map-marker-icon--courier) { z-index: 30; }
+:deep(.ge-nav-arrow-marker) { z-index: 50; }
+:deep(.mapboxgl-marker svg) { display: none; }
+:deep(.ge-nav-arrow-marker svg) { display: block !important; }
+:deep(.ge-map-marker-icon) {
   filter: drop-shadow(0 2px 6px rgba(0,0,0,0.35));
+  pointer-events: none;
+  background: none !important;
+}
+:deep(.ge-map-marker-img) {
+  display: block !important;
+  width: 100%;
+  height: 100%;
+}
+
+/* Fullscreen mode map card */
+.map-card.fullscreen-map {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+  margin: 0; border: none; border-radius: 0; z-index: 9999;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+}
+
+/* Painel Navegação — estilo turn-by-turn (escuro) */
+.painel-navegacao {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  padding: 12px 14px 20px;
+  z-index: 100;
+}
+.nav-fab-recenter {
+  pointer-events: auto;
+  position: absolute;
+  top: 12px;
+  right: 14px;
+  width: 44px;
+  height: 44px;
+  border: none;
+  border-radius: 50%;
+  background: rgba(15, 23, 42, 0.82);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.35);
+  cursor: pointer;
+  z-index: 2;
+}
+.nav-hud-top {
+  pointer-events: auto;
+  margin-top: 48px;
+  max-width: 100%;
+  background: rgba(15, 23, 42, 0.88);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  border-radius: 14px;
+  padding: 14px 16px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.35);
+}
+.nav-hud-wait { flex-direction: column; align-items: flex-start; gap: 6px; }
+.nav-turn-text { flex: 1; min-width: 0; }
+.nav-turn-text p { margin: 0; }
+.nav-distance-primary {
+  font-size: 28px;
+  font-weight: 800;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+.nav-street-name {
+  font-size: 15px;
+  font-weight: 500;
+  color: #cbd5e1;
+  margin-top: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-phase-badge {
+  pointer-events: none;
+  margin: 8px 0 0;
+  align-self: flex-start;
+  padding: 4px 10px;
+  border-radius: 999px;
+  background: rgba(37, 99, 235, 0.85);
+  color: #eff6ff;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.nav-street-pill {
+  pointer-events: none;
+  align-self: flex-end;
+  margin-bottom: auto;
+  margin-top: 8px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: rgba(0, 0, 0, 0.75);
+  color: #fff;
+  font-size: 13px;
+  font-weight: 600;
+  max-width: 70%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.nav-hud-bottom {
+  pointer-events: auto;
+  background: rgba(15, 23, 42, 0.9);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  border-radius: 14px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 -4px 24px rgba(0, 0, 0, 0.4);
+}
+.nav-trip-grid {
+  flex: 1;
+  display: grid;
+  grid-template-columns: 1.1fr 1fr 1fr;
+  gap: 8px;
+  min-width: 0;
+}
+.nav-trip-col {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.nav-trip-label {
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #94a3b8;
+}
+.nav-eta-time {
+  font-size: 22px;
+  font-weight: 800;
+  line-height: 1.1;
+}
+.nav-trip-value {
+  font-size: 16px;
+  font-weight: 700;
+  line-height: 1.2;
+}
+.nav-phase {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: #93c5fd;
+}
+.nav-wait-gps {
+  margin: 0;
+  font-size: 13px;
+  color: #cbd5e1;
+}
+.nav-btn-close-round {
+  flex-shrink: 0;
+  width: 48px;
+  height: 48px;
+  border: none;
+  border-radius: 50%;
+  background: #dc2626;
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(220, 38, 38, 0.45);
+}
+.map-nav-cta {
+  width: 100%;
+  padding: 12px 14px;
+  border: none;
+  border-radius: 10px;
+  background: #1b8a4a;
+  color: #fff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 2px 8px rgba(27, 138, 74, 0.35);
+}
+.map-dev-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.map-dev-label {
+  font-size: 10px;
+  font-weight: 600;
+  color: #9ca3af;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+.map-dev-btn {
+  padding: 6px 10px;
+  border-radius: 8px;
+  border: 0.72px solid #e5e7eb;
+  background: #f9fafb;
+  font-size: 11px;
+  font-weight: 600;
+  color: #374151;
+  cursor: pointer;
+}
+.map-dev-btn--active {
+  background: #2563eb;
+  border-color: #1d4ed8;
+  color: #fff;
+}
+.map-dev-btn--muted {
+  opacity: 0.9;
+}
+.map-sim-hint {
+  margin: 6px 0 0;
+  font-size: 11px;
+  line-height: 1.35;
+  color: #6b7280;
+  max-width: 220px;
+}
+.map-sim-hint--inline {
+  margin: 0;
+  flex: 1 1 100%;
 }
 .map-controls {
-  position: absolute; bottom: 12px; right: 12px;
-  display: flex; flex-direction: column; gap: 4px; z-index: 10;
+  position: absolute;
+  bottom: 12px;
+  right: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  z-index: 1200;
+}
+.map-controls--nav {
+  bottom: 100px;
+}
+.map-sim-btn {
+  width: auto;
+  min-width: 32px;
+  padding: 0 10px;
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.map-sim-btn--active {
+  background: #2563eb;
+  color: #fff;
+  border-color: #1d4ed8;
+}
+.map-sim-btn--muted {
+  font-size: 10px;
+  opacity: 0.85;
 }
 .map-zoom {
   width: 32px; height: 32px;
@@ -702,19 +1089,43 @@ function renderRouteMap() {
   box-shadow: 0 1px 4px rgba(0,0,0,0.1);
 }
 
-/* Map state badge (Figma: colored pill on top-left of map) */
 .map-state-badge {
-  position: absolute; top: 12px; left: 12px;
-  display: inline-flex; align-items: center; gap: 4px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   padding: 5px 12px;
   border-radius: var(--ge-radius-full);
-  font-size: 11px; font-weight: 600; color: #fff;
-  z-index: 10;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+  font-size: 11px;
+  font-weight: 600;
+  color: #fff;
 }
 .msb-icon { display: inline-flex; }
 .msb-green { background: #22c55e; }
 .msb-orange { background: #f59e0b; }
+
+.map-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 14px;
+  padding: 8px 10px;
+  background: #f9fafb;
+  border-radius: 10px;
+  border: 0.72px solid #e5e7eb;
+  font-size: 10px;
+  color: #374151;
+}
+.ml-item { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
+.ml-pin-img {
+  width: 18px;
+  height: 22px;
+  object-fit: contain;
+  display: block;
+}
+.ml-line {
+  width: 14px; height: 3px; border-radius: 2px; display: inline-block;
+}
+.ml-line-a { background: #38bdf8; }
+.ml-line-b { background: #22c55e; }
 .msb-blue { background: #3b82f6; }
 
 /* Section cards */
@@ -870,6 +1281,13 @@ function renderRouteMap() {
   color: #ef4444;
   padding: 8px 16px 16px;
   cursor: pointer;
+}
+
+.impossible-hint {
+  font-size: 12px;
+  color: #6b7280;
+  line-height: 1.45;
+  margin: 0 0 12px;
 }
 
 /* Timer */
