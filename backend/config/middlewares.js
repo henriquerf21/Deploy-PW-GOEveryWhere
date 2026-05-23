@@ -9,6 +9,7 @@ module.exports = [
         'http://localhost:5173',
         'http://localhost:5174',
         'http://localhost:5175',
+        'http://192.168.1.94:5175',
       ],
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'OPTIONS'],
       headers: ['Content-Type', 'Authorization'],
