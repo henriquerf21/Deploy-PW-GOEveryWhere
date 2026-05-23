@@ -15,6 +15,8 @@
       </div>
     </div>
 
+    <LocationPermissionBanner v-if="!courierPaused" />
+
     <!-- Filter chips & map -->
     <div class="page-body">
       <!-- Filter chips -->
@@ -91,7 +93,7 @@ import {
   fetchDeliveries,
   togglePause,
   isPaused,
-  startGpsTracking,
+  requestDeviceLocation,
   stopGpsTracking,
   getMapCourierPosition,
   deliveriesSyncing,
@@ -111,6 +113,7 @@ import { setDeliveryMapPins, clearDeliveryMapPins } from '../utils/mapPinLayers.
 import { deliveryStateLabels } from '../constants.js';
 import DeliveryCard from '../components/DeliveryCard.vue';
 import FilterPanel from '../components/FilterPanel.vue';
+import LocationPermissionBanner from '../components/LocationPermissionBanner.vue';
 
 const router = useRouter();
 const route = useRoute();
@@ -169,7 +172,7 @@ function toggleDistance() {
 async function handleAccept(id) {
   const ok = await acceptDelivery(id);
   if (!ok) return;
-  startGpsTracking();
+  await requestDeviceLocation({ force: true });
 }
 function goToDetail(id) {
   teardownListMap();
@@ -224,6 +227,9 @@ let pollInterval = null;
 onMounted(async () => {
   listMapMounted = true;
   await fetchDeliveries();
+  if (!courierPaused.value) {
+    void requestDeviceLocation();
+  }
 
   await nextTick();
   if (!listMapMounted || !mapEl.value) return;
