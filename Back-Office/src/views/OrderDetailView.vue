@@ -157,7 +157,7 @@
                 <MessageSquare :size="18" />
                 <span>Aguarda resposta do cliente ao pedido de informação.</span>
               </div>
-              <div v-if="operationsThread.length" class="comm-thread">
+              <div v-if="operationsThread.length" class="comm-thread" ref="opsThreadRef">
                 <article
                   v-for="msg in operationsThread"
                   :key="msg.id"
@@ -202,7 +202,7 @@
                 <span v-if="courierThread.length" class="comm-hub__count comm-hub__count--green">{{ courierThread.length }}</span>
               </header>
               <p v-if="!order.courierName" class="comm-hub__empty">Ainda sem estafeta atribuído.</p>
-              <div v-else-if="courierThread.length" class="comm-thread">
+              <div v-else-if="courierThread.length" class="comm-thread" ref="courierThreadRef">
                 <article
                   v-for="msg in courierThread"
                   :key="msg.id"
@@ -818,7 +818,24 @@ async function sendBoChat() {
   }
 }
 
+const opsThreadRef = ref(null);
+const courierThreadRef = ref(null);
 
+watch(operationsThread, () => {
+  setTimeout(() => {
+    if (opsThreadRef.value) {
+      opsThreadRef.value.scrollTop = opsThreadRef.value.scrollHeight;
+    }
+  }, 50);
+}, { deep: true });
+
+watch(courierThread, () => {
+  setTimeout(() => {
+    if (courierThreadRef.value) {
+      courierThreadRef.value.scrollTop = courierThreadRef.value.scrollHeight;
+    }
+  }, 50);
+}, { deep: true });
 
 function statusBadgeClass(status) {
   switch (status) {
