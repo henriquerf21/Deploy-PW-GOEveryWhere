@@ -217,6 +217,38 @@ img {
     border-bottom: 0.72px solid var(--ge-border);
 }
 
+.header-lock {
+    display: flex;
+    align-items: center;
+    gap: 5px;
+    padding: 4px 10px 4px 8px;
+    background: #fef2f2;
+    border: 1px solid #fca5a5;
+    border-radius: 20px;
+    margin-right: auto;
+    order: -1;
+    flex-shrink: 0;
+    animation: lock-pulse 2.5s ease-in-out infinite;
+}
+
+.header-lock-label {
+    font-size: 11px;
+    font-weight: 700;
+    color: #ef4444;
+    letter-spacing: 0.02em;
+    text-transform: uppercase;
+}
+
+@keyframes lock-pulse {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(239,68,68,0.25); }
+    50% { box-shadow: 0 0 0 4px rgba(239,68,68,0); }
+}
+
+/* Page without bottom nav (e.g. DeliveryDetail, ConfirmDelivery) */
+.page--no-nav {
+    padding-bottom: 24px;
+}
+
 .page-header h1 {
     font-family: var(--ge-font-display);
     font-size: 18px;

@@ -13,8 +13,19 @@ import BottomNav from './components/BottomNav.vue';
 import { requestNotificationPermission } from './utils/notifications.js';
 
 const route = useRoute();
+const LOCKED_ROUTES = ['DeliveryDetail', 'ConfirmDelivery'];
 const showNav = computed(() => {
-  return store.auth.loggedIn && !['Login', 'Register'].includes(route.name);
+  if (!store.auth.loggedIn) return false;
+  
+  // Hide nav for specific pages
+  if (['Login', 'Register', 'DeliveryDetail', 'ConfirmDelivery'].includes(route.name)) return false;
+  
+  // Hide nav if there's an active delivery in progress
+  if (store.activeDeliveryId && route.path && !route.path.startsWith('/completed/')) {
+    return false;
+  }
+  
+  return true;
 });
 
 watch(() => store.auth.loggedIn, (loggedIn) => {

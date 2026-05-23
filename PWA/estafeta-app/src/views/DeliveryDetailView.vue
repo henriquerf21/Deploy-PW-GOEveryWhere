@@ -1,7 +1,14 @@
 <template>
-  <div class="page" :class="{ 'page-navigating': isNavigating }" v-if="delivery && deliveryResolved">
+  <div class="page page--no-nav" :class="{ 'page-navigating': isNavigating }" v-if="delivery && deliveryResolved">
     <!-- Header -->
     <div class="page-header">
+      <div class="header-lock" title="Entrega em curso — página bloqueada">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0110 0v4"/>
+        </svg>
+        <span class="header-lock-label"> Bloqueado</span>
+      </div>
       <img src="/media/brand/logo-goeverywhere.png" alt="" class="logo-mini" />
       <span class="header-title">GoEverywhere</span>
     </div>
@@ -236,32 +243,43 @@
       <!-- CTA Buttons (Figma: per-state styling) -->
       <div class="cta-section" v-if="ctaLabel">
         <!-- E-08: Aceitar Entrega (green) -->
-        <button v-if="delivery.state === 'E-08'" class="cta-btn cta-green" @click="handleAccept">
-          {{ ctaLabel }}
+        <button v-if="delivery.state === 'E-08'" class="cta-btn cta-green" @click="handleAccept" :disabled="loadingCTA">
+          {{ loadingCTA ? 'A aguardar...' : ctaLabel }}
         </button>
-        <button v-else-if="delivery.state === 'E-09'" class="cta-btn cta-green" @click="handleCTA">
+        <button v-else-if="delivery.state === 'E-09'" class="cta-btn cta-green" @click="handleCTA" :disabled="loadingCTA">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><rect x="1" y="3" width="15" height="13" rx="2"/><path d="M16 8h4l3 3v5h-7V8z"/><circle cx="5.5" cy="18.5" r="2.5"/><circle cx="18.5" cy="18.5" r="2.5"/></svg>
-          {{ ctaLabel }}
+          {{ loadingCTA ? 'A processar...' : ctaLabel }}
         </button>
         <!-- E-10: Recolha feita (amber) -->
-        <button v-else-if="delivery.state === 'E-10'" class="cta-btn cta-amber" @click="handleCTA">
+        <button v-else-if="delivery.state === 'E-10'" class="cta-btn cta-amber" @click="handleCTA" :disabled="loadingCTA">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M21 10c0 7-9 13-9 13s-9-6-9-13a9 9 0 0118 0z"/><circle cx="12" cy="10" r="3"/></svg>
-          {{ ctaLabel }}
+          {{ loadingCTA ? 'A processar...' : ctaLabel }}
         </button>
-        <button v-else-if="delivery.state === 'E-11'" class="cta-btn cta-green" @click="handleCTA">
+        <button v-else-if="delivery.state === 'E-11'" class="cta-btn cta-green" @click="handleCTA" :disabled="loadingCTA">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 01-2 2H5a2 2 0 01-2-2z"/><path d="M9 22V12h6v10"/></svg>
-          {{ ctaLabel }}
+          {{ loadingCTA ? 'A processar...' : ctaLabel }}
         </button>
         <!-- E-12: Confirmar entrega (green) -->
-        <button v-else class="cta-btn cta-green" @click="handleCTA">
+        <button v-else class="cta-btn cta-green" @click="handleCTA" :disabled="loadingCTA">
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>
-          {{ ctaLabel }}
+          {{ loadingCTA ? 'A processar...' : ctaLabel }}
         </button>
       </div>
 
-      <!-- Impossible delivery (link below CTA) -->
-      <div v-if="canMarkImpossible" class="impossible-link" @click="showImpossible = true">
-        Impossível Entregar
+      <!-- Impossible delivery (card below CTA) -->
+      <div v-if="canMarkImpossible" class="impossible-card" @click="showImpossible = true">
+        <div class="impossible-card-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="12" y1="8" x2="12" y2="12"/>
+            <line x1="12" y1="16" x2="12.01" y2="16"/>
+          </svg>
+        </div>
+        <div class="impossible-card-text">
+          <span class="impossible-card-title">Problema com a encomenda?</span>
+          <span class="impossible-card-desc">Se não conseguires entregar antes da recolha, reporta aqui para a equipa reatribuir estafeta.</span>
+        </div>
+        <svg class="impossible-card-arrow" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5"><path d="M9 18l6-6-6-6"/></svg>
       </div>
       </template>
     </div>
@@ -295,9 +313,9 @@
               <span class="msg-sender" v-if="msg.sender === 'client'">{{ delivery.destination.name }}</span>
               <span class="msg-sender" v-else>Tu</span>
               <p>{{ msg.text }}</p>
-              <span class="msg-time">{{ new Date(msg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }}</span>
+              <span class="msg-time">{{ formatTime(msg.time) }}</span>
             </div>
-            <div v-if="!(delivery.chatHistory?.length)" class="no-messages">
+            <div v-if="!deliveryChatMessages.length" class="no-messages">
               <p>Nenhuma mensagem ainda.</p>
             </div>
           </div>
@@ -315,10 +333,8 @@
     <Teleport to="body">
       <div v-if="showImpossible" class="modal-overlay" @click.self="showImpossible = false">
         <div class="modal-card">
-          <h3>Impossível antes da recolha</h3>
-          <p class="impossible-hint">A equipa de operações vai analisar e reatribuir outro estafeta ou cancelar o pedido. O cliente não é cancelado automaticamente.</p>
+          <h3>Qual é o motivo de cancelamento?</h3>
           <div class="field-group">
-            <label>Motivo</label>
             <textarea v-model="impossibleReason" class="field-input" rows="3" placeholder="Descreve o motivo..."></textarea>
           </div>
           <div class="modal-actions">
@@ -379,7 +395,17 @@ const delivery = computed(() => {
   if (live) return live;
   return deliverySnapshot.value;
 });
-const sortedChatMessages = computed(() => sortChatHistory(delivery.value?.chatHistory || []));
+const deliveryChatMessages = computed(() =>
+  (delivery.value?.chatHistory || []).filter(m => {
+    const ch = String(m?.channel || '').toLowerCase();
+    const sender = String(m?.sender || '').toLowerCase();
+    if (ch === 'delivery') return true;
+    if (ch === 'info_adicional' || ch === 'ops') return false;
+    if (sender === 'admin' || sender === 'bo') return false;
+    return sender === 'courier' || sender === 'client';
+  })
+);
+const sortedChatMessages = computed(() => sortChatHistory(deliveryChatMessages.value));
 watch(
   () => getDeliveryById(props.id),
   (d) => { if (d) deliverySnapshot.value = d; },
@@ -434,7 +460,9 @@ const mapBadgeIcon = computed(() => {
 
 function formatTime(iso) {
   if (!iso) return '—';
-  return new Date(iso).toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return '—';
+  return d.toLocaleTimeString('pt-PT', { hour: '2-digit', minute: '2-digit' });
 }
 
 // --- Chat logic ---
@@ -702,19 +730,32 @@ onUnmounted(() => {
   destroyMap();
 });
 
-function handleAccept() {
+const loadingCTA = ref(false);
+
+async function handleAccept() {
   if (timerInterval) clearInterval(timerInterval);
-  acceptDelivery(props.id);
-  void requestDeviceLocation({ force: true });
+  if (loadingCTA.value) return;
+  loadingCTA.value = true;
+  try {
+    await acceptDelivery(props.id);
+    void requestDeviceLocation({ force: true });
+  } finally {
+    loadingCTA.value = false;
+  }
 }
 
 async function handleCTA() {
-  if (!delivery.value) return;
-  if (delivery.value.state === DELIVERY_STATE.E12) {
-    router.push(`/confirm/${props.id}`);
-    return;
+  if (!delivery.value || loadingCTA.value) return;
+  loadingCTA.value = true;
+  try {
+    if (delivery.value.state === DELIVERY_STATE.E12) {
+      router.push(`/confirm/${props.id}`);
+      return;
+    }
+    await advanceDeliveryState(props.id);
+  } finally {
+    loadingCTA.value = false;
   }
-  await advanceDeliveryState(props.id);
 }
 
 const showImpossible = ref(false);
@@ -732,6 +773,26 @@ async function handleImpossible() {
 <style scoped>
 .logo-mini { width: 36px; height: 34px; border-radius: 14px; object-fit: cover; }
 .header-title { font-family: var(--ge-font-display); font-size: 14px; font-weight: 700; color: #111827; }
+
+/* Header Lock */
+.header-lock {
+  position: absolute;
+  left: 16px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  background: #fef2f2;
+  padding: 4px 8px;
+  border-radius: var(--ge-radius-full);
+  border: 0.72px solid #fee2e2;
+}
+.header-lock-label {
+  font-size: 10px;
+  font-weight: 700;
+  color: #ef4444;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
 
 /* Order banner */
 .order-banner {
@@ -1285,13 +1346,47 @@ async function handleImpossible() {
   box-shadow: 0 8px 24px rgba(245,158,11,0.3);
 }
 
-/* Impossible link */
-.impossible-link {
-  text-align: center;
-  font-size: 13px; font-weight: 500;
-  color: #ef4444;
-  padding: 8px 16px 16px;
+
+/* Impossible card */
+.impossible-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 4px 16px 12px;
+  padding: 14px 14px 14px 14px;
+  background: #fff5f5;
+  border: 1px solid #fca5a5;
+  border-radius: 14px;
   cursor: pointer;
+  transition: background 0.15s, transform 0.1s;
+}
+.impossible-card:active {
+  background: #fee2e2;
+  transform: scale(0.98);
+}
+.impossible-card-icon {
+  flex-shrink: 0;
+  width: 36px; height: 36px;
+  display: flex; align-items: center; justify-content: center;
+  background: #fee2e2;
+  border-radius: 10px;
+}
+.impossible-card-text {
+  flex: 1;
+  display: flex; flex-direction: column; gap: 2px;
+}
+.impossible-card-title {
+  font-size: 13px; font-weight: 700;
+  color: #b91c1c;
+}
+.impossible-card-desc {
+  font-size: 11px; font-weight: 400;
+  color: #7f1d1d;
+  line-height: 1.4;
+}
+.impossible-card-arrow {
+  flex-shrink: 0;
+  opacity: 0.7;
 }
 
 .impossible-hint {

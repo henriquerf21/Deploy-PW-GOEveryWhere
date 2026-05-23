@@ -13,7 +13,7 @@ exports.default = {
         const { delivery_status } = result;
         const delivery = await strapi.documents('api::delivery.delivery').findOne({
             documentId: result.documentId,
-            populate: ['order']
+            populate: ['order', 'courier']
         });
         const order = delivery?.order;
         if (!order)
@@ -29,25 +29,43 @@ exports.default = {
                 const orderDocId = order.documentId || String(order.id);
                 const orderPatch = { order_status: newOrderStatus };
 
+                const rawItems = order.items && typeof order.items === 'object' && !Array.isArray(order.items)
+                    ? order.items
+                    : {};
+                const boMeta = { ...(rawItems.boMeta || {}) };
+                const events = Array.isArray(boMeta.events) ? [...boMeta.events] : [];
+                
+                const courierName = delivery?.courier?.fullName || delivery?.courier?.firstName || 'Estafeta';
+                const courierId = delivery?.courier?.id || null;
+                const notes = String(delivery?.notes || result?.notes || '').trim();
+                
+                events.push({
+                    at: new Date().toISOString(),
+                    action: delivery_status,
+                    actor: { id: courierId, name: courierName, role: 'courier' },
+                    meta: { 
+                        source: 'pwa', 
+                        message: String(delivery_status).startsWith('E-14') ? notes : '' 
+                    }
+                });
+                
+                boMeta.events = events;
+
                 if (String(delivery_status || '').startsWith('E-14')) {
-                    const rawItems = order.items && typeof order.items === 'object' && !Array.isArray(order.items)
-                        ? order.items
-                        : {};
-                    const boMeta = {
-                        ...(rawItems.boMeta || {}),
-                        impossibleReport: {
-                            reason: String(delivery?.notes || result?.notes || '').trim(),
-                            at: new Date().toISOString(),
-                            courierDocumentId: delivery?.courier?.documentId || null,
-                        },
+                    boMeta.impossibleReport = {
+                        reason: notes,
+                        at: new Date().toISOString(),
+                        courierDocumentId: delivery?.courier?.documentId || null,
                     };
                     orderPatch.courier = null;
-                    orderPatch.items = { ...rawItems, boMeta };
                 }
+
+                orderPatch.items = { ...rawItems, boMeta };
 
                 await strapi.documents('api::order.order').update({
                     documentId: orderDocId,
                     data: orderPatch,
+                    status: 'published',
                 });
 
                 if (String(delivery_status || '').startsWith('E-14')) {

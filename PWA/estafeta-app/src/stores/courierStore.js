@@ -364,7 +364,16 @@ function mapDelivery(d) {
         photos: [],
         timerStart: attrs.createdAt || null,
         endTime: attrs.endTime || null,
-        chatHistory: sortChatHistory(order.chatHistory || []),
+        // Só o canal 'delivery' é visível no chat estafeta↔cliente
+        chatHistory: sortChatHistory((order.chatHistory || []).filter(m => {
+            const ch = String(m?.channel || '').toLowerCase();
+            const sender = String(m?.sender || '').toLowerCase();
+            // Incluir mensagens explicitamente do canal delivery, ou do estafeta/cliente sem canal de ops
+            if (ch === 'delivery') return true;
+            if (ch === 'info_adicional' || ch === 'ops') return false;
+            if (sender === 'admin' || sender === 'bo') return false;
+            return sender === 'courier' || sender === 'client';
+        })),
         rating: order.rating ?? review.rating ?? null,
         ratingComment: review.comment || null,
         routeDistanceKm: null,
@@ -455,7 +464,7 @@ export const filteredDeliveries = computed(() => {
 
 export const activeDelivery = computed(() => {
     if (!store.activeDeliveryId) return null;
-    return store.deliveries.find(d => d.id === store.activeDeliveryId) || null;
+    return store.deliveries.find(d => String(d.id) === String(store.activeDeliveryId)) || null;
 });
 
 export const shiftCompletionRate = computed(() => {
@@ -669,10 +678,10 @@ export async function fetchDeliveries(options = {}) {
             const inProgress = apiDeliveries.find(d => ['E-09', 'E-10', 'E-11', 'E-12'].includes(d.state));
             if (inProgress) {
                 const keepCurrent = store.activeDeliveryId
-                    && apiDeliveries.some((d) => d.id === store.activeDeliveryId);
+                    && apiDeliveries.some((d) => String(d.id) === String(store.activeDeliveryId));
                 if (!keepCurrent) store.activeDeliveryId = inProgress.id;
             } else if (!['E-09', 'E-10', 'E-11', 'E-12'].includes(
-                apiDeliveries.find((d) => d.id === store.activeDeliveryId)?.state,
+                apiDeliveries.find((d) => String(d.id) === String(store.activeDeliveryId))?.state,
             )) {
                 store.activeDeliveryId = null;
             }
@@ -737,7 +746,7 @@ async function updateDeliveryOnStrapi(delivery, newState, extraData = {}) {
 }
 
 export async function acceptDelivery(deliveryId) {
-    const d = store.deliveries.find(x => x.id === deliveryId);
+    const d = store.deliveries.find(x => String(x.id) === String(deliveryId));
     if (!d || d.state !== DELIVERY_STATE.E08) return false;
 
     const now = new Date().toISOString();
@@ -768,7 +777,7 @@ export async function acceptDelivery(deliveryId) {
 }
 
 export async function advanceDeliveryState(deliveryId) {
-    const d = store.deliveries.find(x => x.id === deliveryId);
+    const d = store.deliveries.find(x => String(x.id) === String(deliveryId));
     if (!d) return false;
     const next = NEXT_STATE[d.state];
     if (!next || next === 'E-13') return false;
@@ -789,7 +798,7 @@ export async function advanceDeliveryState(deliveryId) {
 }
 
 export async function confirmDelivery(deliveryId, confirmation) {
-    const d = store.deliveries.find(x => x.id === deliveryId);
+    const d = store.deliveries.find(x => String(x.id) === String(deliveryId));
     if (!d || d.state !== DELIVERY_STATE.E12 || !d.documentId) return false;
 
     const now = new Date().toISOString();
@@ -872,7 +881,7 @@ export async function confirmDelivery(deliveryId, confirmation) {
 }
 
 export async function markDeliveryImpossible(deliveryId, reason, photo) {
-    const d = store.deliveries.find(x => x.id === deliveryId);
+    const d = store.deliveries.find(x => String(x.id) === String(deliveryId));
     if (!d || !d.documentId) return false;
     if (!['E-08', 'E-09'].includes(d.state)) {
         store.error = 'Só podes marcar impossível antes da recolha na loja.';
@@ -914,7 +923,7 @@ export async function markDeliveryImpossible(deliveryId, reason, photo) {
 // ── Actions: Notes & Photos ──────────────────────────────────────
 
 export function addDeliveryNotes(deliveryId, notes, photos) {
-    const d = store.deliveries.find(x => x.id === deliveryId);
+    const d = store.deliveries.find(x => String(x.id) === String(deliveryId));
     if (!d) return false;
     d.notes = notes;
     if (photos && photos.length) d.photos = [...d.photos, ...photos];
@@ -1343,12 +1352,12 @@ export function stopGpsTracking() {
 // ── Actions: Timer expiry (E-08 → decline) ──────────────────────
 
 export async function declineDeliveryTimeout(deliveryId) {
-    const d = store.deliveries.find(x => x.id === deliveryId);
+    const d = store.deliveries.find(x => String(x.id) === String(deliveryId));
     if (!d || d.state !== DELIVERY_STATE.E08) return false;
 
     // Remove from local list
-    store.deliveries = store.deliveries.filter(x => x.id !== deliveryId);
-    if (store.activeDeliveryId === deliveryId) store.activeDeliveryId = null;
+    store.deliveries = store.deliveries.filter(x => String(x.id) !== String(deliveryId));
+    if (String(store.activeDeliveryId) === String(deliveryId)) store.activeDeliveryId = null;
     saveState();
 
     // Notify Strapi so admin can reassign

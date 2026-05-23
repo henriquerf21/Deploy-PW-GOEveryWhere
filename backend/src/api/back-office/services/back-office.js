@@ -321,6 +321,21 @@ function buildOrderTimeline(attrs, boMeta) {
             meta: { source: 'front-office' },
         });
     }
+    const del = attrs?.delivery;
+    if (del?.timestamps) {
+        const cName = del.courier?.fullName || del.courier?.firstName || 'Estafeta';
+        const cId = del.courier?.id || null;
+        Object.entries(del.timestamps).forEach(([code, ts]) => {
+            if (ts && !stored.some(e => e.action === code)) {
+                synthesized.push({
+                    at: ts,
+                    action: code,
+                    actor: { id: cId, name: cName, role: 'courier' },
+                    meta: { source: 'pwa' },
+                });
+            }
+        });
+    }
     const all = [...synthesized, ...stored];
     return all.sort((a, b) => {
         const ta = a?.at ? new Date(a.at).getTime() : 0;

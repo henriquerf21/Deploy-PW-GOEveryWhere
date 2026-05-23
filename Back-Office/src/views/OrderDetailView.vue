@@ -56,7 +56,7 @@
       <p class="impossible-review-banner__hint">Reatribui outro estafeta ou cancela o pedido.</p>
     </div>
 
-    <div class="layout">
+    <div class="layout" :class="{ 'layout--centered': isOrderTerminal }">
       <div class="layout__main bo-stack--lg">
         <section class="bo-card bo-card--summary">
           <header class="bo-card__head">
@@ -242,14 +242,13 @@
                 :class="[`tl-item--${ev.kind}`, { 'tl-item--latest': idx === 0 }]"
               >
                 <div class="tl-item__rail" aria-hidden="true">
-                  <span class="tl-item__node" :class="`tl-item__node--${ev.kind}`">
+                  <span class="tl-item__node" :class="`tl-item__node--${ev.nodeKind}`">
                     <component :is="ev.icon" :size="15" stroke-width="2.25" />
                   </span>
                 </div>
                 <article class="tl-item__card">
                   <div class="tl-item__top">
                     <div class="tl-item__labels">
-                      <span v-if="idx === 0" class="tl-chip tl-chip--latest">Mais recente</span>
                       <span class="tl-chip" :class="`tl-chip--${ev.kind}`">{{ ev.title }}</span>
                     </div>
                     <time class="tl-item__time">{{ formatTimelineDate(ev.at) }}</time>
@@ -279,7 +278,7 @@
 
       </div>
 
-      <aside class="layout__side bo-stack">
+      <aside v-if="!isOrderTerminal" class="layout__side bo-stack">
         <section v-if="canApprove" class="bo-card">
           <header class="bo-card__head">
             <div>
@@ -361,18 +360,6 @@
           </div>
         </section>
 
-        <section v-if="order.status === ORDER_STATUS.IN_TRANSIT" class="bo-card">
-          <header class="bo-card__head">
-            <div>
-              <h3 class="bo-card__title">Concluir entrega</h3>
-              <p class="bo-card__sub">Marca como entregue após a confirmação do estafeta.</p>
-            </div>
-          </header>
-          <div class="bo-card__body">
-            <button type="button" class="bo-btn bo-btn--success" @click="doComplete">Marcar como entregue</button>
-          </div>
-        </section>
-
 
         <section v-if="canAdminCorrect" class="bo-card">
           <header class="bo-card__head">
@@ -444,6 +431,13 @@ import {
   Ban,
   Settings2,
   ClipboardList,
+  Navigation,
+  Store,
+  MapPin,
+  AlertTriangle,
+  Bike,
+  User,
+  ShieldCheck,
 } from 'lucide-vue-next';
 import DeliveryRouteMap from '@/components/DeliveryRouteMap.vue';
 import { isGpsPlausibleForRoute } from '@/utils/geo.js';
@@ -547,14 +541,21 @@ watch(orderId, () => { void syncOrderDetail(); });
 const TIMELINE_CONFIG = {
   created: { title: 'Pedido criado', kind: 'created', icon: Package },
   approve: { title: 'Pedido aprovado', kind: 'approved', icon: CheckCircle2 },
-  reject: { title: 'Pedido rejeitado', kind: 'rejected', icon: XCircle },
+  reject: { title: 'Pedido rejeitado', kind: 'rejected', nodeKind: 'assigned', icon: XCircle },
   request_info: { title: 'Info solicitada ao cliente', kind: 'info', icon: MessageSquare },
   assign_courier: { title: 'Estafeta atribuído', kind: 'assigned', icon: UserPlus },
   start_transit: { title: 'Em trânsito', kind: 'transit', icon: Truck },
   complete: { title: 'Entrega concluída', kind: 'delivered', icon: CheckCircle2 },
   set_priority: { title: 'Prioridade alterada', kind: 'priority', icon: Star },
-  cancel_admin: { title: 'Cancelado pela operação', kind: 'rejected', icon: Ban },
-  admin_patch: { title: 'Correção administrativa', kind: 'info', icon: Settings2 },
+  cancel_admin: { title: 'Cancelado pela operação', kind: 'rejected', nodeKind: 'assigned', icon: Ban },
+  cancel_client: { title: 'Cancelado pelo cliente', kind: 'rejected', nodeKind: 'created', icon: Ban },
+  admin_patch: { title: 'Correção administrativa', kind: 'assigned', nodeKind: 'assigned', icon: Settings2 },
+  'E-09': { title: 'Aceite — A caminho da loja', kind: 'courier', icon: Navigation },
+  'E-10': { title: 'Chegou à loja — Em recolha', kind: 'courier', icon: Store },
+  'E-11': { title: 'Recolha feita — Em trânsito', kind: 'courier', icon: Truck },
+  'E-12': { title: 'Chegou ao destino', kind: 'courier', icon: MapPin },
+  'E-13': { title: 'Entrega confirmada', kind: 'courier', icon: CheckCircle2 },
+  'E-14': { title: 'Entrega impossível / Problema', kind: 'rejected', nodeKind: 'courier', icon: AlertTriangle },
 };
 
 function statusHumanLabel(code) {
@@ -563,7 +564,8 @@ function statusHumanLabel(code) {
 }
 
 function resolveTimelineActorRole(ev) {
-  if (ev.action === 'created') return 'Cliente';
+  if (ev.action === 'created' || ev.action === 'cancel_client' || ev.actor?.role === 'client') return 'Cliente';
+  if (ev.actor?.role === 'courier') return 'Estafeta';
   const name = ev.actor?.name || '';
   if (!name || name === 'Sistema') return 'Sistema';
   if (ev.action === 'assign_courier') return 'AdminGoEveryWhere';
@@ -590,10 +592,24 @@ function buildTimelineFacts(action, meta) {
       return (m.from != null && m.to != null)
         ? [{ label: 'Prioridade', value: `P${m.from} → P${m.to}` }]
         : [];
-    case 'admin_patch':
-      return Array.isArray(m.fields) && m.fields.length
-        ? [{ label: 'Campos alterados', value: m.fields.join(', ') }]
-        : [];
+    case 'admin_patch': {
+      if (!Array.isArray(m.fields) || !m.fields.length) return [];
+      const FIELD_LABELS = {
+        deliveryAddress: 'Morada de Entrega',
+        deliveryCity: 'Cidade',
+        store_name: 'Loja',
+        clientName: 'Nome do Cliente',
+        clientPhone: 'Contacto',
+        total_price: 'Preço Total',
+        storeLatitude: 'Coord. Loja',
+        storeLongitude: 'Coord. Loja',
+        deliveryLatitude: 'Coord. Entrega',
+        deliveryLongitude: 'Coord. Entrega'
+      };
+      // Usar um Set para remover duplicados como Coord. Loja se latitude e longitude mudarem juntas
+      const ptFields = [...new Set(m.fields.map(f => FIELD_LABELS[f] || f))];
+      return [{ label: 'Campos alterados', value: ptFields.join(', ') }];
+    }
     default:
       return [];
   }
@@ -602,24 +618,55 @@ function buildTimelineFacts(action, meta) {
 const timelineEntries = computed(() => {
   const list = order.value?.timeline;
   if (!Array.isArray(list)) return [];
-  const mapped = list.map((ev) => {
+  const mapped = list.reduce((acc, ev) => {
+    if (ev.action === 'E-08' || ev.action === 'request_info') return acc; // Filter out redundant events
+
     const cfg = TIMELINE_CONFIG[ev.action] || { title: ev.action || 'Evento', kind: 'generic', icon: ClipboardList };
     const facts = buildTimelineFacts(ev.action, ev.meta);
     const message = !facts.length && ev.meta?.message ? String(ev.meta.message) : '';
-    return {
+
+    let actorName = ev.actor?.name || 'Sistema';
+    if (actorName === 'Estafeta' && order.value?.courier?.name) {
+      actorName = order.value.courier.name;
+    } else if (actorName === 'Estafeta' && order.value?.courierName) {
+      actorName = order.value.courierName;
+    }
+
+    const role = resolveTimelineActorRole(ev);
+    let entityIcon = cfg.icon;
+    let computedKind = cfg.kind;
+    let computedNodeKind = cfg.nodeKind || cfg.kind;
+
+    if (role === 'Cliente') {
+      entityIcon = User;
+      if (computedKind !== 'rejected') computedKind = 'created';
+      computedNodeKind = 'created';
+    } else if (role === 'Estafeta') {
+      entityIcon = Bike;
+      if (computedKind !== 'rejected') computedKind = 'courier';
+      computedNodeKind = 'courier';
+    } else {
+      entityIcon = ShieldCheck;
+      if (computedKind !== 'rejected') computedKind = 'assigned';
+      computedNodeKind = 'assigned';
+    }
+
+    acc.push({
       action: ev.action,
       title: cfg.title,
-      kind: cfg.kind,
-      icon: cfg.icon,
+      kind: computedKind,
+      nodeKind: computedNodeKind,
+      icon: entityIcon,
       at: ev.at,
-      actorName: ev.actor?.name || 'Sistema',
-      actorRole: resolveTimelineActorRole(ev),
+      actorName,
+      actorRole: role,
       fromLabel: statusHumanLabel(ev.from),
       toLabel: statusHumanLabel(ev.to),
       facts,
       message,
-    };
-  });
+    });
+    return acc;
+  }, []);
   return mapped.slice().reverse();
 });
 
@@ -646,6 +693,7 @@ function formatTimelineDate(iso) {
 
 const terminalStatuses = ['REJECTED', 'DELIVERED', 'CANCELLED_ADMIN', 'CANCELLED_CLIENT'];
 
+const isOrderTerminal = computed(() => order.value && terminalStatuses.includes(order.value.status));
 const canApprove = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].includes(order.value.status));
 const canEditPriority = computed(() => order.value && !terminalStatuses.includes(order.value.status));
 const canReject = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].includes(order.value.status));
@@ -1389,6 +1437,11 @@ async function doCancelAdmin() {
   align-items: flex-start;
 }
 
+.layout--centered {
+  grid-template-columns: 1fr;
+  justify-content: center;
+}
+
 @media (max-width: 1100px) {
   .layout { grid-template-columns: 1fr; }
   .layout__side { position: static; }
@@ -1631,8 +1684,8 @@ async function doCancelAdmin() {
   flex-shrink: 0;
 }
 
-.tl-item__node--created { background: linear-gradient(145deg, #6366f1, #4f46e5); }
-.tl-item__node--approved { background: linear-gradient(145deg, #10b981, #059669); }
+.tl-item__node--created { background: linear-gradient(145deg, #f59e0b, #ea580c); }
+.tl-item__node--approved { background: linear-gradient(145deg, #0ea5e9, #0284c7); }
 .tl-item__node--rejected { background: linear-gradient(145deg, #ef4444, #dc2626); }
 .tl-item__node--info { background: linear-gradient(145deg, #a855f7, #9333ea); }
 .tl-item__node--assigned { background: linear-gradient(145deg, #0ea5e9, #0284c7); }
@@ -1640,6 +1693,7 @@ async function doCancelAdmin() {
 .tl-item__node--delivered { background: linear-gradient(145deg, #22c55e, #16a34a); }
 .tl-item__node--priority { background: linear-gradient(145deg, #ec4899, #db2777); }
 .tl-item__node--generic { background: linear-gradient(145deg, #64748b, #475569); }
+.tl-item__node--courier { background: linear-gradient(145deg, #0d9488, #0f766e); }
 
 .tl-item__card {
   background: var(--bo-page);
@@ -1689,8 +1743,8 @@ async function doCancelAdmin() {
   color: #fff;
 }
 
-.tl-chip--created { background: #eef2ff; color: #4338ca; }
-.tl-chip--approved { background: #ecfdf5; color: #047857; }
+.tl-chip--created { background: #fffbeb; color: #d97706; }
+.tl-chip--approved { background: #eff6ff; color: #1d4ed8; }
 .tl-chip--rejected { background: #fef2f2; color: #b91c1c; }
 .tl-chip--info { background: #faf5ff; color: #7e22ce; }
 .tl-chip--assigned { background: #eff6ff; color: #1d4ed8; }
@@ -1698,6 +1752,7 @@ async function doCancelAdmin() {
 .tl-chip--delivered { background: #f0fdf4; color: #15803d; }
 .tl-chip--priority { background: #fdf2f8; color: #be185d; }
 .tl-chip--generic { background: #f1f5f9; color: #475569; }
+.tl-chip--courier { background: #f0fdfa; color: #0f766e; }
 
 .tl-item__time {
   font-size: 12px;

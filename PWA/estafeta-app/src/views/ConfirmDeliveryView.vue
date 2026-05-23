@@ -1,7 +1,14 @@
 <template>
-  <div class="page" v-if="delivery">
+  <div class="page page--no-nav" v-if="delivery">
     <!-- Header -->
     <div class="page-header">
+      <div class="header-lock" title="Entrega em curso — página bloqueada">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#ef4444" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+          <rect x="3" y="11" width="18" height="11" rx="2" ry="2"/>
+          <path d="M7 11V7a5 5 0 0110 0v4"/>
+        </svg>
+        <span class="header-lock-label">Bloqueado</span>
+      </div>
       <img src="/media/brand/logo-goeverywhere.png" alt="" class="logo-mini" />
       <span class="header-title">GoEverywhere</span>
     </div>
@@ -22,7 +29,7 @@
         </div>
         <div class="db-text">
           <span class="db-title">Estás no destino!</span>
-          <span class="db-desc">Confirma a entrega com fotografia e assinatura do cliente</span>
+          <span class="db-desc">Confirma a entrega com assinatura do cliente</span>
         </div>
       </div>
 

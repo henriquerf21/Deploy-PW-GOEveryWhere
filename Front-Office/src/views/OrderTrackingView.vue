@@ -245,7 +245,7 @@
             <p>{{ msg.text }}</p>
             <span class="msg-time">{{ new Date(msg.time).toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'}) }}</span>
           </div>
-          <div v-if="!(order.chatHistory?.length)" class="no-messages">
+          <div v-if="!clientChatMessages.length" class="no-messages">
             <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#e5e7eb" stroke-width="1"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2v10z"></path></svg>
             <p>Ainda não existem mensagens.</p>
           </div>
@@ -327,7 +327,17 @@ const router = useRouter();
 const store = useOrderStore();
 
 const order = computed(() => store.activeOrder);
-const sortedChatMessages = computed(() => sortChatHistory(order.value?.chatHistory || []));
+const clientChatMessages = computed(() =>
+  (order.value?.chatHistory || []).filter(m => {
+    const ch = String(m?.channel || '').toLowerCase();
+    const sender = String(m?.sender || '').toLowerCase();
+    if (ch === 'delivery') return true;
+    if (ch === 'info_adicional' || ch === 'ops') return false;
+    if (sender === 'admin' || sender === 'bo') return false;
+    return sender === 'courier' || sender === 'client';
+  })
+);
+const sortedChatMessages = computed(() => sortChatHistory(clientChatMessages.value));
 const toastMessage = ref('');
 let pollingTimer = null;
 let gpsPollTimer = null;
