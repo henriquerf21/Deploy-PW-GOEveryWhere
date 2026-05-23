@@ -2,6 +2,7 @@ import { reactive, computed } from 'vue';
 import authState, { fetchMe } from './authStore';
 import { io } from 'socket.io-client';
 import { API_URL, BACKEND_URL } from '../config/env.js';
+import { mergeChatHistory, sortChatHistory } from '../utils/chatHistory.js';
 
 // Initialize socket connection
 export const socket = io(BACKEND_URL, {
@@ -31,6 +32,29 @@ export const ORDER_STATES = {
 };
 
 export const DELIVERY_ACCEPTED_STATUSES = ['E-09', 'E-10', 'E-11', 'E-12', 'E-13'];
+/** E-08 = atribuído pelo BO; E-09+ = aceite na PWA */
+export const DELIVERY_COURIER_VISIBLE_STATUSES = ['E-08', ...DELIVERY_ACCEPTED_STATUSES];
+
+export function getCourierDisplayName(raw) {
+  if (!raw) return '';
+  const full = String(raw.fullName || '').trim();
+  if (full) return full;
+  const fn = String(raw.firstName || '').trim();
+  const ln = String(raw.lastName || '').trim();
+  return [fn, ln].filter(Boolean).join(' ');
+}
+
+/** Estafeta na encomenda ou na entrega (BO pode ligar só na delivery). */
+export function resolveCourierFromOrder(orderLike) {
+  if (!orderLike) return null;
+  const fromOrder = normalizeStrapiEntity(orderLike.courier);
+  if (fromOrder && (getCourierDisplayName(fromOrder) || fromOrder.phone || fromOrder.documentId || fromOrder.id)) {
+    return fromOrder;
+  }
+  const delivery = normalizeStrapiEntity(orderLike.delivery);
+  const fromDelivery = normalizeStrapiEntity(delivery?.courier);
+  return fromDelivery || fromOrder || null;
+}
 
 export const PRODUCTS = reactive([
   { id: 'frasco-1', name: '1 Frasco', desc: '30 gomas proteicas', price: 14.99, gomas: 30 },
@@ -295,7 +319,8 @@ export async function fetchUserOrders({ silent = false } = {}) {
   try {
     const populate = [
       'populate[courier][populate][0]=docSelfie',
-      'populate[delivery]=*',
+      'populate[delivery][populate][0]=courier',
+      'populate[delivery][populate][1]=courier.docSelfie',
     ].join('&');
     const response = await fetch(`${API_URL}/orders?${populate}`, {
       headers: { 'Authorization': `Bearer ${authState.token}` }
@@ -354,8 +379,8 @@ export async function fetchUserOrders({ silent = false } = {}) {
         storeLongitude: attr.storeLongitude != null ? Number(attr.storeLongitude) : null,
         deliveryLatitude: attr.deliveryLatitude != null ? Number(attr.deliveryLatitude) : null,
         deliveryLongitude: attr.deliveryLongitude != null ? Number(attr.deliveryLongitude) : null,
-        chatHistory: attr.chatHistory || [],
-        courier: normalizeStrapiEntity(attr.courier),
+        chatHistory: sortChatHistory(attr.chatHistory || []),
+        courier: resolveCourierFromOrder({ courier: attr.courier, delivery: attr.delivery }),
         delivery: normalizeStrapiEntity(attr.delivery),
         courierGpsLat: (() => {
           const del = normalizeStrapiEntity(attr.delivery);
@@ -548,23 +573,47 @@ export function acknowledgeActiveOrder() {
 
 export async function replyToInfoRequest(documentId, reply) {
   if (!authState.user || !authState.token) return { success: false, error: 'Não autenticado' };
+  const text = String(reply || '').trim();
+  if (!text) return { success: false, error: 'Resposta vazia.' };
   try {
+    const chatRes = await fetch(`${API_URL}/orders/${documentId}/chat-messages`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'Authorization': `Bearer ${authState.token}`,
+      },
+      body: JSON.stringify({ text }),
+    });
+    if (!chatRes.ok) {
+      const err = await chatRes.json();
+      return { success: false, error: err?.error?.message || 'Erro ao guardar mensagem' };
+    }
+    const chatJson = await chatRes.json();
+    const chatHistory = sortChatHistory(chatJson?.data?.chatHistory || []);
+    const targetOrder = (store.activeOrder?.documentId === documentId)
+      ? store.activeOrder
+      : store.orderHistory.find((o) => o.documentId === documentId);
+    if (targetOrder) {
+      targetOrder.chatHistory = chatHistory;
+      targetOrder.clientReply = text;
+    }
+
     const response = await fetch(`${API_URL}/orders/${documentId}`, {
       method: 'PUT',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authState.token}`
+        'Authorization': `Bearer ${authState.token}`,
       },
       body: JSON.stringify({
         data: {
-          clientReply: reply,
-          order_status: 'S-02 Em Análise'
-        }
-      })
+          clientReply: text,
+          order_status: 'S-02 Em Análise',
+        },
+      }),
     });
 
     if (response.ok) {
-      await fetchUserOrders();
+      await fetchUserOrders({ silent: true });
       socket.emit('order_status_update', { room: documentId, status: 'S-02' });
       socket.emit('global_order_status_update', { status: 'S-02' });
       return { success: true };
@@ -580,56 +629,51 @@ export async function replyToInfoRequest(documentId, reply) {
 
 export async function sendChatMessage(documentId, text, sender = 'client') {
   if (!authState.user || !authState.token) return { success: false, error: 'Não autenticado' };
-  
-  // 1. Obter o histórico atual (prioridade à activeOrder que está em memória)
-  let currentHistory = [];
-  const targetOrder = (store.activeOrder?.documentId === documentId) 
-    ? store.activeOrder 
-    : store.orderHistory.find(o => o.documentId === documentId);
+  const bodyText = String(text || '').trim();
+  if (!bodyText) return { success: false, error: 'Mensagem vazia.' };
 
-  if (targetOrder && Array.isArray(targetOrder.chatHistory)) {
-    currentHistory = [...targetOrder.chatHistory];
-  }
-  
-  // 2. Adicionar a nova mensagem
-  const newMessage = {
-    sender,
-    text,
-    time: new Date().toISOString()
-  };
-  currentHistory.push(newMessage);
-  
+  const targetOrder = (store.activeOrder?.documentId === documentId)
+    ? store.activeOrder
+    : store.orderHistory.find((o) => o.documentId === documentId);
+
   try {
-    const response = await fetch(`${API_URL}/orders/${documentId}`, {
-      method: 'PUT',
+    const response = await fetch(`${API_URL}/orders/${documentId}/chat-messages`, {
+      method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'Authorization': `Bearer ${authState.token}`
+        'Authorization': `Bearer ${authState.token}`,
       },
-      body: JSON.stringify({
-        data: { chatHistory: currentHistory }
-      })
+      body: JSON.stringify({ text: bodyText }),
     });
 
-    if (response.ok) {
-      // Atualização local imediata para feedback instantâneo
-      if (targetOrder) {
-        targetOrder.chatHistory = currentHistory;
-      }
-      socket.emit('chat_message', {
-        room: documentId,
-        message: newMessage,
-        chatHistory: currentHistory,
-      });
-      return { success: true };
+    const json = await response.json().catch(() => ({}));
+    if (!response.ok) {
+      return { success: false, error: json?.error?.message || 'Erro ao guardar mensagem' };
     }
-    
-    const errData = await response.json();
-    return { success: false, error: errData?.error?.message || 'Erro ao atualizar chat' };
+
+    const chatHistory = sortChatHistory(json?.data?.chatHistory || []);
+    const newMessage = json?.data?.message || {
+      sender,
+      text: bodyText,
+      time: new Date().toISOString(),
+    };
+    if (targetOrder) {
+      targetOrder.chatHistory = chatHistory.length ? chatHistory : mergeChatHistory(targetOrder.chatHistory, [], newMessage);
+    }
+    return { success: true, message: newMessage, chatHistory: targetOrder?.chatHistory || chatHistory };
   } catch (err) {
     console.error('Chat Error:', err);
     return { success: false, error: err.message };
   }
+}
+
+export function applyOrderChatMessage(orderLike, data) {
+  if (!orderLike || !data) return;
+  orderLike.chatHistory = mergeChatHistory(
+    orderLike.chatHistory,
+    data.chatHistory,
+    data.message,
+  );
 }
 
 export function useOrderStore() { return store; }

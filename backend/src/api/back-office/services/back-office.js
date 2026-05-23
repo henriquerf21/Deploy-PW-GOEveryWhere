@@ -4,6 +4,7 @@ const back_office_validation_js_1 = require("../utils/back-office-validation.js"
 const continent_stores_seed_js_1 = require("../data/continent-stores-seed.js");
 const bo_event_bus_js_1 = require("../utils/bo-event-bus.js");
 const order_state_machine_js_1 = require("../utils/order-state-machine.js");
+const order_chat_js_1 = require("../../../utils/order-chat.js");
 const STORE_CATALOG = continent_stores_seed_js_1.CONTINENTE_STORES_SEED.slice(0, 3).map((s) => ({
     id: s.code,
     name: s.name,
@@ -284,6 +285,7 @@ function buildPublicOrder(entry) {
         adminInternalNote: bo.adminInternalNote || null,
         infoRequestMessage: bo.infoRequestMessage || null,
         clientReply: attrs.clientReply || null,
+        chatHistory: (0, order_chat_js_1.sortChatHistory)((0, order_chat_js_1.normalizeChatHistory)(attrs.chatHistory)),
         deliveryAddress: deliveryCoords.address || attrs.deliveryAddress || '',
         deliveryCity: deliveryCoords.city || '',
         deliveryNotes: attrs.deliveryNotes || null,
@@ -1465,9 +1467,36 @@ exports.default = ({ strapi }) => ({
         });
         if (!updated)
             return { ok: false, error: 'Falha ao atualizar pedido.' };
+        const actorName = ctx?.state?.user?.email || ctx?.state?.user?.username || 'Operação';
+        await (0, order_chat_js_1.appendOrderChatMessage)(strapi, order._documentId || updated.documentId, {
+            sender: 'admin',
+            text: message,
+            actorName,
+            channel: 'info_adicional',
+        });
         await this.notify('order_info_requested', `Pedido ${order.id}: informação adicional solicitada.`, parsePublicId(order.clientId, 'CU'));
-        const after = buildPublicOrder(updated);
+        const after = await this.getOrder(ctx, publicId);
         return { ok: true, data: after };
+    },
+    async appendOrderChat(ctx, publicId, payload) {
+        const text = String(payload.text || '').trim();
+        if (!text)
+            return { ok: false, error: 'Mensagem obrigatória.' };
+        const order = await this.getOrder(ctx, publicId);
+        if (!order)
+            return { ok: false, error: 'Pedido não encontrado.' };
+        const actorName = ctx?.state?.user?.email || ctx?.state?.user?.username || 'Operação';
+        const channel = String(payload.channel || 'chat');
+        const result = await (0, order_chat_js_1.appendOrderChatMessage)(strapi, order._documentId, {
+            sender: 'admin',
+            text,
+            actorName,
+            channel,
+        });
+        if (!result.ok)
+            return result;
+        const after = await this.getOrder(ctx, publicId);
+        return { ok: true, data: after, chatHistory: result.chatHistory };
     },
     async assignCourier(ctx, publicId, payload) {
         const courierToken = parsePublicToken(payload.courierId, 'ST');
@@ -1505,7 +1534,7 @@ exports.default = ({ strapi }) => ({
         const updated = await this.patchOrder(publicId, {
             data: {
                 order_status: ORDER_STATE.ASSIGNED,
-                courier: courierEntity.id,
+                courier: courierEntity.documentId,
             },
         }, {
             action: 'assign_courier',

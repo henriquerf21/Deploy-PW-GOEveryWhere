@@ -173,6 +173,25 @@
             <p v-else-if="!hasClientReply && order.status !== ORDER_STATUS.INFO_REQUESTED" class="comm-hub__empty">
               Ainda não há mensagens registadas para este pedido.
             </p>
+            <div class="comm-compose">
+              <label class="comm-compose__label" for="bo-chat-input">Nova mensagem (cliente / estafeta)</label>
+              <textarea
+                id="bo-chat-input"
+                v-model="boChatText"
+                class="bo-textarea comm-compose__input"
+                rows="2"
+                placeholder="Escreve uma mensagem…"
+                @keydown.ctrl.enter.prevent="sendBoChat"
+              />
+              <button
+                type="button"
+                class="bo-btn bo-btn--primary comm-compose__btn"
+                :disabled="!boChatText.trim() || boChatSending"
+                @click="sendBoChat"
+              >
+                {{ boChatSending ? 'A enviar…' : 'Enviar mensagem' }}
+              </button>
+            </div>
           </div>
         </section>
 
@@ -423,6 +442,7 @@ import {
 } from '../stores/logisticsStore.js';
 import { orderTypeLabels, priorityLabels } from '../constants/logistics.js';
 import { toast } from '../utils/notify.js';
+import { boPostOrderChatMessage } from '../api/backofficeApi.js';
 
 const route = useRoute();
 const orderId = computed(() => route.params.id);
@@ -435,6 +455,8 @@ const infoText = ref('');
 const pickCourier = ref('');
 const adminPatch = reactive({ deliveryAddress: '', deliveryCity: '', internalNote: '' });
 const cancelReasonText = ref('');
+const boChatText = ref('');
+const boChatSending = ref(false);
 
 const mapStore = computed(() => logistics.continentStores.find(s => s.id === ap.storeId) || null);
 const mapStoreLat = computed(() => mapStore.value?.lat != null ? Number(mapStore.value.lat) : Number(order.value?.pickupLat));
@@ -650,20 +672,61 @@ function findTimelineAt(action) {
 
 const hasClientReply = computed(() => !!String(order.value?.clientReply || '').trim());
 
+function chatSenderLabel(sender, o) {
+  const s = String(sender || '').toLowerCase();
+  if (s === 'client') return o.clientName || 'Cliente';
+  if (s === 'courier') return o.courierName || 'Estafeta';
+  if (s === 'admin' || s === 'bo') return 'Operação (Back-Office)';
+  return 'Sistema';
+}
+
+function chatDirection(sender) {
+  const s = String(sender || '').toLowerCase();
+  if (s === 'client') return 'in';
+  if (s === 'courier') return 'in';
+  return 'out';
+}
+
+function chatLabel(sender, channel) {
+  const s = String(sender || '').toLowerCase();
+  if (s === 'courier') return 'Chat — estafeta';
+  if (s === 'client') return 'Chat — cliente';
+  if (channel) return commKindLabel(channel);
+  return 'Mensagem';
+}
+
 const clientThread = computed(() => {
   const o = order.value;
   if (!o) return [];
   const items = [];
-  const seenBodies = new Set();
+  const seenIds = new Set();
+  const chatBodyKeys = new Set(
+    (o.chatHistory || []).map((m) => `${String(m.sender || '').toLowerCase()}|${normalizeBody(m.text)}`),
+  );
 
   const pushMsg = (msg) => {
-    const key = normalizeBody(msg.body);
-    if (!key || seenBodies.has(key)) return;
-    seenBodies.add(key);
-    items.push(msg);
+    if (!msg?.body || !String(msg.body).trim()) return;
+    const id = msg.id || `msg-${msg.at}-${msg.direction}-${normalizeBody(msg.body).slice(0, 24)}`;
+    if (seenIds.has(id)) return;
+    seenIds.add(id);
+    items.push({ ...msg, id });
   };
 
+  for (const m of o.chatHistory || []) {
+    const sender = String(m.sender || '').toLowerCase();
+    pushMsg({
+      id: m.id || `chat-${m.time}-${sender}`,
+      at: m.time || o.createdAt,
+      direction: chatDirection(sender),
+      who: m.actorName || chatSenderLabel(sender, o),
+      label: chatLabel(sender, m.channel),
+      body: m.text,
+    });
+  }
+
   for (const m of orderMails.value) {
+    const key = `admin|${normalizeBody(m.body)}`;
+    if (chatBodyKeys.has(key)) continue;
     pushMsg({
       id: m.id,
       at: m.at || o.createdAt,
@@ -677,7 +740,7 @@ const clientThread = computed(() => {
     });
   }
 
-  if (o.infoRequestMessage) {
+  if (o.infoRequestMessage && !chatBodyKeys.has(`admin|${normalizeBody(o.infoRequestMessage)}`)) {
     pushMsg({
       id: 'info-request',
       at: findTimelineAt('request_info') || o.createdAt,
@@ -689,13 +752,13 @@ const clientThread = computed(() => {
     });
   }
 
-  if (o.clientReply) {
+  if (o.clientReply && !chatBodyKeys.has(`client|${normalizeBody(o.clientReply)}`)) {
     pushMsg({
-      id: 'client-reply',
+      id: 'client-reply-legacy',
       at: findTimelineAt('approve') || o.createdAt,
       direction: 'in',
       who: o.clientName || 'Cliente',
-      label: 'Resposta do cliente',
+      label: 'Resposta do cliente (legado)',
       body: o.clientReply,
     });
   }
@@ -703,18 +766,37 @@ const clientThread = computed(() => {
   return items.sort((a, b) => {
     const ta = a.at ? new Date(a.at).getTime() : 0;
     const tb = b.at ? new Date(b.at).getTime() : 0;
-    return ta - tb;
+    if (ta !== tb) return ta - tb;
+    return String(a.id).localeCompare(String(b.id));
   });
 });
 
+async function sendBoChat() {
+  const id = orderId.value;
+  const text = boChatText.value.trim();
+  if (!id || !text) return;
+  boChatSending.value = true;
+  try {
+    await boPostOrderChatMessage(id, text);
+    boChatText.value = '';
+    await refreshOrderFromServer(id, { silent: true });
+    toast.success('Mensagem guardada.');
+  } catch (e) {
+    toast.error(e?.message || 'Não foi possível enviar a mensagem.');
+  } finally {
+    boChatSending.value = false;
+  }
+}
+
 const showClientComms = computed(() => {
   const o = order.value;
-  if (!o) return false;
+  if (!o) return true;
   return (
     clientThread.value.length > 0
     || o.status === ORDER_STATUS.INFO_REQUESTED
     || !!o.infoRequestMessage
     || hasClientReply.value
+    || (o.chatHistory?.length > 0)
   );
 });
 
@@ -1033,6 +1115,29 @@ async function doCancelAdmin() {
   margin: 0;
   font-size: 13px;
   color: var(--bo-text-secondary);
+}
+
+.comm-compose {
+  margin-top: 16px;
+  padding-top: 14px;
+  border-top: 1px solid var(--bo-border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.comm-compose__label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--bo-text-secondary);
+}
+
+.comm-compose__input {
+  min-height: 72px;
+}
+
+.comm-compose__btn {
+  align-self: flex-end;
 }
 
 .comm-thread {

@@ -16,6 +16,7 @@ import 'leaflet/dist/leaflet.css';
 import {
   fetchDeliveryLegs,
   fetchStoreToDestLeg,
+  fetchRouteThroughPoints,
   deliveryLegsStraightLine,
   straightLinePoints,
 } from '@/utils/osrmRouting.js';
@@ -62,6 +63,11 @@ let boundsKey = '';
 /** @type {number[][] | null} Leaflet [lat, lng][] */
 let routeLatLngs = null;
 let routeAbort = null;
+/** Última posição usada para pedir OSRM estafeta→loja (evita refetch a cada GPS) */
+let lastCourierLegAnchor = null;
+let lastCourierLegFetchAt = 0;
+const COURIER_LEG_MIN_INTERVAL_MS = 35_000;
+const COURIER_LEG_MIN_MOVE_M = 280;
 let storeIcon = null;
 let customerIcon = null;
 let courierIcon = null;
@@ -205,6 +211,42 @@ function hasCourierGps() {
     && !(props.courierLat === 0 && props.courierLng === 0);
 }
 
+function legLooksLikeStraightSegment(leg) {
+  return !leg || leg.length <= 2;
+}
+
+function hasCachedRoadLeg2() {
+  return routeLeg2?.length > 2;
+}
+
+function shouldRefreshCourierLeg() {
+  if (!hasCourierGps()) return false;
+  const pos = [props.courierLat, props.courierLng];
+  if (legLooksLikeStraightSegment(routeLeg1)) return true;
+  if (!lastCourierLegAnchor) return true;
+  const elapsed = Date.now() - lastCourierLegFetchAt;
+  if (elapsed < COURIER_LEG_MIN_INTERVAL_MS) return false;
+  return haversineMeters(lastCourierLegAnchor, pos) >= COURIER_LEG_MIN_MOVE_M;
+}
+
+async function refreshCourierLegOnly(signal, keySnapshot) {
+  if (!hasCourierGps() || !validCoords()) return;
+  const store = [props.storeLat, props.storeLng];
+  const courier = [props.courierLat, props.courierLng];
+  try {
+    const r1 = await fetchRouteThroughPoints([courier, store], signal);
+    if (coordsKey() !== keySnapshot || signal?.aborted) return;
+    routeLeg1 = r1?.coordinates?.length ? r1.coordinates : straightLinePoints(courier, store);
+    lastCourierLegAnchor = courier;
+    lastCourierLegFetchAt = Date.now();
+    drawLayers({ refitBounds: false });
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    routeLeg1 = straightLinePoints(courier, store);
+    drawLayers({ refitBounds: false });
+  }
+}
+
 function allPointsForBounds() {
   const pts = [[props.storeLat, props.storeLng], [props.destLat, props.destLng]];
   if (hasCourierGps()) {
@@ -216,44 +258,69 @@ function allPointsForBounds() {
   return pts;
 }
 
-async function scheduleRouteFetch() {
+async function scheduleRouteFetch({ full = true } = {}) {
   if (!map || !layerGroup || !validCoords()) return;
+
+  const store = [props.storeLat, props.storeLng];
+  const dest = [props.destLat, props.destLng];
+  const courier = hasCourierGps() ? [props.courierLat, props.courierLng] : null;
+
+  // Só atualizar perna estafeta→loja; não repor loja→destino em reta a cada GPS
+  if (!full && courier && shouldRefreshCourierLeg()) {
+    routeAbort?.abort();
+    routeAbort = new AbortController();
+    const keySnapshot = coordsKey();
+    await refreshCourierLegOnly(routeAbort.signal, keySnapshot);
+    return;
+  }
+
+  if (!full) return;
 
   routeAbort?.abort();
   routeAbort = new AbortController();
   const keySnapshot = coordsKey();
   const signal = routeAbort.signal;
 
-  const store = [props.storeLat, props.storeLng];
-  const dest = [props.destLat, props.destLng];
-  const courier = hasCourierGps() ? [props.courierLat, props.courierLng] : null;
-
-  routeLeg2 = straightLinePoints(store, dest);
-  routeLeg1 = courier ? straightLinePoints(courier, store) : null;
-  routeLatLngs = null;
-  boundsKey = '';
-  drawLayers({ refitBounds: !didInitialBoundsFit });
+  const keepLeg2 = hasCachedRoadLeg2();
+  if (!keepLeg2) {
+    routeLeg2 = straightLinePoints(store, dest);
+    routeLeg1 = courier ? straightLinePoints(courier, store) : null;
+    routeLatLngs = null;
+    boundsKey = '';
+    drawLayers({ refitBounds: !didInitialBoundsFit });
+  } else if (courier && legLooksLikeStraightSegment(routeLeg1)) {
+    routeLeg1 = straightLinePoints(courier, store);
+    drawLayers({ refitBounds: false });
+  }
 
   if (!props.roadRoute) return;
 
   try {
-    routeLeg2 = await fetchStoreToDestLeg(store, dest, signal);
-    if (courier) {
+    if (!keepLeg2) {
+      routeLeg2 = await fetchStoreToDestLeg(store, dest, signal);
+    }
+    if (courier && shouldRefreshCourierLeg()) {
       const legs = await fetchDeliveryLegs(courier, store, dest, signal);
       if (coordsKey() !== keySnapshot || signal.aborted) return;
       routeLeg1 = legs.leg1;
-      routeLeg2 = legs.leg2;
+      if (!keepLeg2) routeLeg2 = legs.leg2;
+      lastCourierLegAnchor = courier;
+      lastCourierLegFetchAt = Date.now();
+    } else if (!courier) {
+      routeLeg1 = null;
     }
     if (coordsKey() !== keySnapshot || signal.aborted) return;
-    drawLayers({ refitBounds: !mapViewLocked });
+    drawLayers({ refitBounds: !mapViewLocked && !keepLeg2 });
   } catch (e) {
     if (e.name === 'AbortError') return;
     if (courier) {
       const fallback = deliveryLegsStraightLine(courier, store, dest);
       routeLeg1 = fallback.leg1;
-      routeLeg2 = fallback.leg2;
+      if (!keepLeg2) routeLeg2 = fallback.leg2;
+      lastCourierLegAnchor = courier;
+      lastCourierLegFetchAt = Date.now();
     }
-    drawLayers({ refitBounds: !mapViewLocked });
+    drawLayers({ refitBounds: !mapViewLocked && !keepLeg2 });
   }
 }
 
@@ -278,12 +345,18 @@ function maybeFitBounds(linePoints, force = false) {
 
 function updateCourierMarker() {
   if (!map || !layerGroup || !validCoords()) return;
-  if (courierMarker) {
-    layerGroup.removeLayer(courierMarker);
-    courierMarker = null;
-  }
   const pos = courierLatLng();
-  if (!pos) return;
+  if (!pos) {
+    if (courierMarker) {
+      layerGroup.removeLayer(courierMarker);
+      courierMarker = null;
+    }
+    return;
+  }
+  if (courierMarker) {
+    courierMarker.setLatLng(pos);
+    return;
+  }
   courierMarker = L.marker(pos, { icon: getCourierIcon() })
     .addTo(layerGroup)
     .bindTooltip('Estafeta (GPS)', { permanent: false, direction: 'right' });
@@ -376,7 +449,7 @@ function initMap() {
   map.on('zoomstart', (ev) => {
     if (ev?.originalEvent) mapViewLocked = true;
   });
-  scheduleRouteFetch();
+  scheduleRouteFetch({ full: true });
 
   setTimeout(() => map?.invalidateSize(), 100);
 }
@@ -384,6 +457,8 @@ function initMap() {
 function destroyMap() {
   routeAbort?.abort();
   routeAbort = null;
+  lastCourierLegAnchor = null;
+  lastCourierLegFetchAt = 0;
   routeLatLngs = null;
   storeMarker = null;
   destMarker = null;
@@ -407,18 +482,20 @@ watch(
     props.destLng,
     props.roadRoute,
     props.routeProfile,
-    hasCourierGps() ? Math.round(props.courierLat * 500) / 500 : null,
-    hasCourierGps() ? Math.round(props.courierLng * 500) / 500 : null,
   ],
   () => {
-    if (map && layerGroup) scheduleRouteFetch();
+    if (map && layerGroup) scheduleRouteFetch({ full: true });
   },
 );
 
 watch(
   () => [props.courierProgress, props.courierLat, props.courierLng],
   () => {
-    if (map && layerGroup) updateCourierMarker();
+    if (!map || !layerGroup) return;
+    updateCourierMarker();
+    if (hasCourierGps() && shouldRefreshCourierLeg()) {
+      scheduleRouteFetch({ full: false });
+    }
   },
 );
 

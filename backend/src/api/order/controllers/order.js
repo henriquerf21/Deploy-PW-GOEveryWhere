@@ -1,6 +1,7 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 const strapi_1 = require("@strapi/strapi");
+const order_chat_js_1 = require("../../../utils/order-chat.js");
 function toNum(v, fallback = NaN) {
     const n = Number(v);
     return Number.isFinite(n) ? n : fallback;
@@ -126,7 +127,7 @@ exports.default = strapi_1.factories.createCoreController('api::order.order', ({
         const userFilter = user.documentId ? { documentId: user.documentId } : { id: user.id };
         const entries = await strapi.documents('api::order.order').findMany({
             filters: { user: userFilter },
-            populate: ['user', 'courier.docSelfie', 'delivery', 'review'],
+            populate: ['user', 'courier.docSelfie', 'delivery.courier.docSelfie', 'review'],
             sort: 'createdAt:desc'
         });
         return ctx.send({ data: entries });
@@ -167,5 +168,36 @@ exports.default = strapi_1.factories.createCoreController('api::order.order', ({
         catch (error) {
             return ctx.badRequest('Erro ao criar encomenda', { details: error.message });
         }
+    },
+    async appendChatMessage(ctx) {
+        const user = ctx.state.user;
+        if (!user)
+            return ctx.unauthorized();
+        const documentId = String(ctx.params.documentId || '').trim();
+        const text = String(ctx.request.body?.text || ctx.request.body?.data?.text || '').trim();
+        if (!text)
+            return ctx.badRequest('Mensagem obrigatória.');
+        const order = await (0, order_chat_js_1.findPublishedOrderByToken)(strapi, documentId);
+        if (!order)
+            return ctx.notFound('Pedido não encontrado.');
+        const userFilter = user.documentId ? { documentId: user.documentId } : { id: user.id };
+        const ownerDocId = order.user?.documentId || order.user?.id;
+        const ownerOk = ownerDocId != null
+            && (String(ownerDocId) === String(userFilter.documentId || userFilter.id));
+        if (!ownerOk)
+            return ctx.forbidden('Sem permissão para este pedido.');
+        const result = await (0, order_chat_js_1.appendOrderChatMessage)(strapi, order.documentId, {
+            sender: 'client',
+            text,
+            actorName: user.username || user.email || 'Cliente',
+        });
+        if (!result.ok)
+            return ctx.badRequest(result.error);
+        return ctx.send({
+            data: {
+                message: result.message,
+                chatHistory: result.chatHistory,
+            },
+        });
     },
 }));

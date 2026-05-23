@@ -16,6 +16,7 @@ import {
   fetchMapboxRoute, coordsFromGeometry, isValidCoord, calculateBearing, geocodeAddress,
 } from '../utils/mapbox.js';
 import { sendNotification } from '../utils/notifications.js';
+import { mergeChatHistory, sortChatHistory } from '../utils/chatHistory.js';
 
 // ── Config ───────────────────────────────────────────────────────
 const STORAGE_KEY = 'ge-estafeta';
@@ -41,17 +42,7 @@ function findDeliveryByOrderRoom(room) {
 export function applyIncomingChatMessage(room, message, chatHistory) {
     const d = findDeliveryByOrderRoom(room);
     if (!d) return;
-    if (Array.isArray(chatHistory)) {
-        d.chatHistory = chatHistory;
-    } else if (message) {
-        const history = d.chatHistory || [];
-        const last = history[history.length - 1];
-        const dup = last
-            && last.text === message.text
-            && last.sender === message.sender
-            && last.time === message.time;
-        if (!dup) d.chatHistory = [...history, message];
-    }
+    d.chatHistory = mergeChatHistory(d.chatHistory, chatHistory, message);
 }
 
 export function joinOrderRoom(orderDocumentId) {
@@ -59,10 +50,13 @@ export function joinOrderRoom(orderDocumentId) {
     socket.emit('join_room', String(orderDocumentId));
 }
 
-function scheduleDeliveriesRefresh(delayMs = 3000) {
+function scheduleDeliveriesRefresh(delayMs = 6000) {
+    if (isSimulatingRoute.value || hasActiveDeliveryInProgress()) {
+        delayMs = Math.max(delayMs, 10000);
+    }
     clearTimeout(deliveriesRefreshTimer);
     deliveriesRefreshTimer = setTimeout(() => {
-        fetchDeliveries({ silent: true });
+        fetchDeliveries({ silent: true, syncUi: false });
     }, delayMs);
 }
 
@@ -87,7 +81,10 @@ export function initCourierSocket() {
         const d = findDeliveryByOrderRoom(data?.room);
         if (!d || !data?.status) return;
         const code = strapiStatusToCode(data.status);
-        if (code && code !== d.state) d.state = code;
+        if (code && code !== d.state) {
+            d.state = code;
+            saveState();
+        }
     });
 
     socket.on('global_order_status_update', (data) => {
@@ -95,7 +92,10 @@ export function initCourierSocket() {
         const d = findDeliveryByOrderRoom(room);
         if (d && data?.status) {
             const code = strapiStatusToCode(data.status);
-            if (code && code !== d.state) d.state = code;
+            if (code && code !== d.state) {
+                d.state = code;
+                saveState();
+            }
             return;
         }
         scheduleDeliveriesRefresh();
@@ -364,7 +364,7 @@ function mapDelivery(d) {
         photos: [],
         timerStart: attrs.createdAt || null,
         endTime: attrs.endTime || null,
-        chatHistory: Array.isArray(order.chatHistory) ? order.chatHistory : [],
+        chatHistory: sortChatHistory(order.chatHistory || []),
         rating: order.rating ?? review.rating ?? null,
         ratingComment: review.comment || null,
         routeDistanceKm: null,
@@ -631,7 +631,6 @@ export async function logout() {
 
 function mergeDeliveriesList(incoming) {
     if (!incoming.length) {
-        store.deliveries = [];
         return;
     }
     const prevById = new Map(store.deliveries.map((d) => [d.id, d]));
@@ -639,24 +638,21 @@ function mergeDeliveriesList(incoming) {
         const prev = prevById.get(item.id);
         if (!prev) return item;
         const merged = Object.assign(prev, item);
-        if ((item.chatHistory?.length || 0) >= (prev.chatHistory?.length || 0)) {
-            merged.chatHistory = item.chatHistory;
-        } else {
-            merged.chatHistory = prev.chatHistory;
-        }
+        merged.chatHistory = mergeChatHistory(prev.chatHistory, item.chatHistory);
         return merged;
     });
 }
 
 export async function fetchDeliveries(options = {}) {
     const silent = !!options.silent;
+    const syncUi = !!options.syncUi;
     if (!store.courierId) {
         store.deliveries = [];
         return;
     }
 
-    if (silent) deliveriesSyncing.value = true;
-    else store.loading = true;
+    if (syncUi) deliveriesSyncing.value = true;
+    else if (!silent) store.loading = true;
     try {
         // Use the dedicated courier endpoint that validates the courier JWT directly.
         // The generic /deliveries endpoint silently returns empty because the courier
@@ -680,20 +676,21 @@ export async function fetchDeliveries(options = {}) {
             )) {
                 store.activeDeliveryId = null;
             }
-        } else {
+        } else if (!silent) {
             store.deliveries = [];
             store.activeDeliveryId = null;
         }
 
         if (hasActiveDeliveryInProgress() && !isPaused()) {
-            startGpsTracking();
+            if (!isSimulatingRoute.value) startGpsTracking();
+            else ensureGpsEmitInterval();
         }
     } catch (err) {
         console.warn('fetchDeliveries error:', err.message);
-        if (store.deliveries.length === 0) store.deliveries = [];
+        if (store.deliveries.length === 0 && !silent) store.deliveries = [];
     } finally {
-        if (silent) deliveriesSyncing.value = false;
-        else store.loading = false;
+        if (syncUi) deliveriesSyncing.value = false;
+        else if (!silent) store.loading = false;
     }
 }
 
@@ -787,7 +784,7 @@ export async function advanceDeliveryState(deliveryId) {
         store.activeDeliveryId = null;
     }
     
-    await fetchDeliveries();
+    await fetchDeliveries({ silent: true, syncUi: false });
     return true;
 }
 
@@ -1429,34 +1426,27 @@ export async function updateProfile(updates) {
 
 export async function sendDeliveryChatMessage(orderDocumentId, text) {
     if (!orderDocumentId) return false;
+    const bodyText = String(text || '').trim();
+    if (!bodyText) return false;
     try {
-        // Read current chat history from local delivery state (already fetched via my-deliveries)
-        const active = store.deliveries.find(d => d.orderDocumentId === orderDocumentId);
-        const currentHistory = [...(active?.chatHistory || [])];
-        
-        const newMessage = {
-            sender: 'courier',
-            text,
-            time: new Date().toISOString()
-        };
-        currentHistory.push(newMessage);
-
-        // Use the authenticated courier endpoint to update the order's chatHistory
-        await apiCourierPut(`/courier-estafetas/orders/${orderDocumentId}`, {
-            data: { chatHistory: currentHistory }
+        const active = store.deliveries.find((d) => d.orderDocumentId === orderDocumentId);
+        const res = await fetch(`${API_URL}/courier-estafetas/orders/${orderDocumentId}/chat-messages`, {
+            method: 'POST',
+            headers: authHeaders(),
+            body: JSON.stringify({ text: bodyText }),
         });
-        
-        // Update local state
-        if (active) active.chatHistory = currentHistory;
-
-        // Emit via WebSocket for real-time delivery to Front-Office
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) {
+            console.error('Chat error:', json?.error?.message || res.status);
+            return false;
+        }
+        const chatHistory = sortChatHistory(json?.data?.chatHistory || []);
+        if (active) {
+            active.chatHistory = chatHistory.length
+                ? chatHistory
+                : mergeChatHistory(active.chatHistory, [], json?.data?.message);
+        }
         joinOrderRoom(orderDocumentId);
-        socket.emit('chat_message', {
-            room: orderDocumentId,
-            message: newMessage,
-            chatHistory: currentHistory,
-        });
-
         return true;
     } catch (err) {
         console.error('Chat error:', err);
@@ -1516,12 +1506,6 @@ export async function ensureDeliveryLoaded(routeId) {
         await ensureDeliveryCoords(found);
         store.activeDeliveryId = found.id;
         return found;
-    }
-
-    const inProgress = store.deliveries.find((d) => ['E-09', 'E-10', 'E-11', 'E-12'].includes(d.state));
-    if (inProgress) {
-        store.activeDeliveryId = inProgress.id;
-        return inProgress;
     }
 
     return null;
@@ -1634,7 +1618,8 @@ export function refreshDeviceGps() {
     void requestDeviceLocation({ force: true });
 }
 
-export function stopSimulatedRoute() {
+/** Parar simulação só quando o utilizador pede ou a entrega termina — não ao mudar de ecrã */
+export function stopSimulatedRoute({ keepGps = false } = {}) {
     if (simulationIntervalId) {
         clearInterval(simulationIntervalId);
         simulationIntervalId = null;
@@ -1651,10 +1636,16 @@ export function stopSimulatedRoute() {
     if (isValidGpsPoint(store.gpsCoords)) {
         void persistGpsToServer();
     }
-    if (hasActiveDeliveryInProgress() && !isPaused()) {
+    if (!keepGps && hasActiveDeliveryInProgress() && !isPaused()) {
         restartGpsTracking();
         refreshDeviceGps();
     }
+}
+
+/** Simulação activa para esta entrega (persiste ao ir ao perfil / lista) */
+export function isSimulatingDelivery(deliveryId) {
+    if (!isSimulatingRoute.value || simDeliveryId == null) return false;
+    return String(simDeliveryId) === String(deliveryId);
 }
 
 function ensureGpsEmitInterval() {

@@ -170,6 +170,30 @@ function applyCourierGpsToOrders(lat, lng, { room, courierId }) {
   }
 }
 
+socket.on('chat_message', (data) => {
+  const room = data?.room != null ? String(data.room) : '';
+  if (!room) return;
+  const o = logistics.orders.find(
+    (x) => String(x._documentId) === room
+      || String(x.id).includes(room)
+      || String(x._documentId || '').endsWith(room),
+  );
+  if (!o) return;
+  if (Array.isArray(data.chatHistory) && data.chatHistory.length) {
+    o.chatHistory = data.chatHistory;
+    return;
+  }
+  if (data?.message?.text) {
+    const history = Array.isArray(o.chatHistory) ? o.chatHistory : [];
+    const key = data.message.id || `${data.message.sender}|${data.message.time}|${data.message.text}`;
+    if (!history.some((m) => (m.id || `${m.sender}|${m.time}|${m.text}`) === key)) {
+      o.chatHistory = [...history, data.message].sort(
+        (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime(),
+      );
+    }
+  }
+});
+
 socket.on('gps_update', (data) => {
   if (data?.lat == null || data?.lng == null) return;
   applyCourierGpsToOrders(Number(data.lat), Number(data.lng), {

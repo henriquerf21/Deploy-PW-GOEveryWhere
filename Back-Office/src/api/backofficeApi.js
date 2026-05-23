@@ -66,6 +66,13 @@ export async function boOrderAction(id, action, payload = {}) {
   });
 }
 
+export async function boPostOrderChatMessage(id, text, channel = 'chat') {
+  return request(`/bo/orders/${encodeURIComponent(id)}/chat-messages`, {
+    method: 'POST',
+    body: JSON.stringify({ text, channel }),
+  });
+}
+
 export async function boPatchOrder(id, payload = {}) {
   return request(`/bo/orders/${encodeURIComponent(id)}`, {
     method: 'PATCH',

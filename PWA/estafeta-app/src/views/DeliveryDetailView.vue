@@ -290,7 +290,7 @@
             <button @click="openChat = false" class="close-btn">&times;</button>
           </div>
           <div class="chat-messages" ref="chatContainer">
-            <div v-for="(msg, idx) in delivery.chatHistory || []" :key="idx" 
+            <div v-for="msg in sortedChatMessages" :key="msg.id || `${msg.time}-${msg.sender}`" 
                  class="chat-bubble" :class="{ 'mine': msg.sender === 'courier', 'theirs': msg.sender === 'client' }">
               <span class="msg-sender" v-if="msg.sender === 'client'">{{ delivery.destination.name }}</span>
               <span class="msg-sender" v-else>Tu</span>
@@ -350,7 +350,7 @@ import {
   markDeliveryImpossible, sendDeliveryChatMessage, joinOrderRoom,
   declineDeliveryTimeout, requestDeviceLocation, restartGpsTracking, getLastGpsCoords,
   isPaused, store, startQuickDeliverySimulation, stopSimulatedRoute,
-  isSimulatingRoute, getMapCourierPosition, setActiveDeliveryForView, refreshDeviceGps,
+  isSimulatingRoute, isSimulatingDelivery, getMapCourierPosition, setActiveDeliveryForView, refreshDeviceGps,
 } from '../stores/courierStore.js';
 import { isValidGpsPoint } from '../utils/geo.js';
 import { DELIVERY_STATE, deliveryStateLabels, STATE_CTA } from '../constants.js';
@@ -359,6 +359,7 @@ import LocationPermissionBanner from '../components/LocationPermissionBanner.vue
 import NavManeuverIcon from '../components/NavManeuverIcon.vue';
 import { formatNavDistance, formatNavDuration, getNavStreetName } from '../utils/navManeuver.js';
 import { ENABLE_COURIER_SIM } from '../config/env.js';
+import { sortChatHistory } from '../utils/chatHistory.js';
 
 const props = defineProps({ id: String });
 const enableCourierSim = ENABLE_COURIER_SIM;
@@ -372,7 +373,19 @@ const showMapLegend = computed(() => {
   return s && ['E-09', 'E-10', 'E-11', 'E-12'].includes(s);
 });
 
-const delivery = computed(() => getDeliveryById(props.id));
+const deliverySnapshot = ref(null);
+const delivery = computed(() => {
+  const live = getDeliveryById(props.id);
+  if (live) return live;
+  return deliverySnapshot.value;
+});
+const sortedChatMessages = computed(() => sortChatHistory(delivery.value?.chatHistory || []));
+watch(
+  () => getDeliveryById(props.id),
+  (d) => { if (d) deliverySnapshot.value = d; },
+  { immediate: true },
+);
+watch(() => props.id, () => { deliverySnapshot.value = null; });
 
 const simContinueHint = computed(() => {
   if (!isSimulatingRoute.value || !delivery.value) return '';
@@ -585,7 +598,7 @@ async function resolveDeliveryRoute() {
 }
 
 watch(() => props.id, (id) => {
-  deliveryResolved.value = !!getDeliveryById(id);
+  if (getDeliveryById(id)) deliveryResolved.value = true;
   if (id) setActiveDeliveryForView(id);
   void resolveDeliveryRoute();
 });
@@ -605,6 +618,7 @@ async function handleQuickSim() {
 onMounted(async () => {
   const resolved = await resolveDeliveryRoute();
   if (!resolved) return;
+  deliverySnapshot.value = resolved;
   setActiveDeliveryForView(resolved.id);
 
   if (resolved.state === DELIVERY_STATE.E08) {
@@ -643,6 +657,10 @@ onMounted(async () => {
   const gps = courierGpsForMap();
   const center = gps ? [gps.lng, gps.lat] : [p.lng, p.lat];
   initMap(routeMapEl.value, center);
+
+  if (isSimulatingDelivery(props.id)) {
+    nextTick(() => scheduleRender());
+  }
 });
 
 watch(() => delivery.value?.orderDocumentId, (room) => {
@@ -681,7 +699,6 @@ watch(isNavigating, () => {
 
 onUnmounted(() => {
   if (timerInterval) clearInterval(timerInterval);
-  stopSimulatedRoute();
   destroyMap();
 });
 

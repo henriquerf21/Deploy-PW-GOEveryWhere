@@ -33,6 +33,12 @@ exports.default = {
             config: { auth: false },
         },
         {
+            method: 'POST',
+            path: '/courier-estafetas/orders/:id/chat-messages',
+            handler: 'courier-estafeta.appendOrderChatMessage',
+            config: { auth: false },
+        },
+        {
             method: 'PUT',
             path: '/courier-estafetas/me',
             handler: 'courier-estafeta.courierUpdateSelf',

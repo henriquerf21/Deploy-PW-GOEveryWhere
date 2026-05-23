@@ -1,6 +1,20 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
+const order_chat_js_1 = require("../../../../utils/order-chat.js");
 exports.default = {
+    async beforeUpdate(event) {
+        const data = event?.params?.data;
+        if (!data || data.chatHistory === undefined)
+            return;
+        const documentId = event?.params?.documentId;
+        if (!documentId)
+            return;
+        const existing = await strapi.documents('api::order.order').findOne({
+            documentId: String(documentId),
+            status: 'published',
+        });
+        data.chatHistory = (0, order_chat_js_1.mergeChatHistory)(existing?.chatHistory, data.chatHistory);
+    },
     async beforeCreate(event) {
         const { data } = event.params;
         if (!data.orderId) {

@@ -250,7 +250,7 @@ onMounted(async () => {
   }, 120);
 
   // Poll for new deliveries every 15s
-  pollInterval = setInterval(() => fetchDeliveries({ silent: true }), 30000);
+  pollInterval = setInterval(() => fetchDeliveries({ silent: true, syncUi: true }), 30000);
 });
 
 

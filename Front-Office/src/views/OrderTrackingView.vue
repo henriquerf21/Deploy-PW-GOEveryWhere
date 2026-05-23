@@ -238,7 +238,7 @@
           <button @click="openChat = false" class="close-btn">&times;</button>
         </div>
         <div class="chat-messages" ref="chatContainer">
-          <div v-for="(msg, idx) in order.chatHistory || []" :key="idx" 
+          <div v-for="msg in sortedChatMessages" :key="msg.id || `${msg.time}-${msg.sender}`" 
                class="chat-bubble" :class="{ 'mine': msg.sender === 'client', 'theirs': msg.sender === 'courier' }">
             <span class="msg-sender" v-if="msg.sender === 'courier'">{{ courierInfo?.name || 'Estafeta' }}</span>
             <span class="msg-sender" v-else>Tu</span>
@@ -315,9 +315,10 @@ import { CONTINENTE_STORES, fetchStores } from '../stores/orderStore.js';
 import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
 import {
-  useOrderStore, ORDER_STATES, DELIVERY_ACCEPTED_STATUSES, fetchUserOrders,
-  cancelActiveOrder, replyToInfoRequest, sendChatMessage, socket, acknowledgeActiveOrder,
+  useOrderStore, ORDER_STATES, getCourierDisplayName, resolveCourierFromOrder, fetchUserOrders,
+  cancelActiveOrder, replyToInfoRequest, sendChatMessage, applyOrderChatMessage, socket, acknowledgeActiveOrder,
 } from '../stores/orderStore.js';
+import { sortChatHistory } from '../utils/chatHistory.js';
 import { requestNotificationPermission, notifyOrderStateChange, sendNotification } from '../utils/notifications.js';
 import { API_URL, BACKEND_URL } from '../config/env.js';
 import authState from '../stores/authStore.js';
@@ -326,6 +327,7 @@ const router = useRouter();
 const store = useOrderStore();
 
 const order = computed(() => store.activeOrder);
+const sortedChatMessages = computed(() => sortChatHistory(order.value?.chatHistory || []));
 const toastMessage = ref('');
 let pollingTimer = null;
 let gpsPollTimer = null;
@@ -485,44 +487,48 @@ function toStatusCode(status) {
   return String(status || '').substring(0, 4).toUpperCase();
 }
 
-function isCourierAcceptedStatus(statusCode) {
-  return DELIVERY_ACCEPTED_STATUSES.includes(statusCode);
+const COURIER_CARD_ORDER_STATUSES = ['S-06', 'S-07', 'S-08', 'S-09', 'S-10', 'S-11', 'S-15', 'S-16'];
+
+function hasAssignedCourier(orderLike) {
+  const courier = resolveCourierFromOrder(orderLike);
+  if (!courier) return false;
+  return !!(getCourierDisplayName(courier) || courier.phone || courier.documentId || courier.id);
 }
 
 const showCourierCard = computed(() => {
   if (!order.value) return false;
-  // Só mostramos estafeta após aceitação na PWA (Delivery em E-09+).
-  if (!isCourierAcceptedStatus(deliveryStatusCode.value)) return false;
-  const statusFlow = ['S-07','S-08','S-09','S-10','S-11','S-15','S-16'];
-  return statusFlow.includes(order.value.status);
+  if (!COURIER_CARD_ORDER_STATUSES.includes(order.value.status)) return false;
+  return hasAssignedCourier(order.value) || !!courierInfo.value;
 });
 
 function fetchCourierInfo() {
   if (!order.value) return;
-  
+
   const deliveryData = order.value.delivery || null;
-  const courierData = order.value.courier || null;
+  const courierData = resolveCourierFromOrder(order.value);
 
   const rawDeliveryStatus = deliveryData?.delivery_status || null;
   deliveryStatusCode.value = toStatusCode(rawDeliveryStatus);
 
-  if (courierData && courierData.fullName && isCourierAcceptedStatus(deliveryStatusCode.value)) {
-    setCourierInfo(courierData);
+  const displayName = getCourierDisplayName(courierData);
+  if (courierData && (displayName || courierData.phone || courierData.documentId || courierData.id)) {
+    setCourierInfo(courierData, displayName || 'Estafeta');
   } else {
     courierInfo.value = null;
   }
 }
 
-function setCourierInfo(raw) {
+function setCourierInfo(raw, displayName) {
   const selfie = raw.docSelfie?.data?.attributes || raw.docSelfie || null;
   let photoUrl = null;
   if (selfie?.url) {
     photoUrl = selfie.url.startsWith('http') ? selfie.url : `${BACKEND_URL}${selfie.url}`;
   }
-  const nameParts = (raw.fullName || '').split(' ');
+  const name = displayName || getCourierDisplayName(raw) || 'Estafeta';
+  const nameParts = name.split(/\s+/).filter(Boolean);
   const initials = nameParts.length >= 2 ? nameParts[0][0] + nameParts[nameParts.length - 1][0] : (nameParts[0]?.[0] || '?');
   courierInfo.value = {
-    name: raw.fullName || 'Estafeta',
+    name,
     phone: raw.phone || '',
     vehicleType: raw.vehicleType || '',
     vehicleBrand: raw.vehicleBrand || '',
@@ -649,8 +655,8 @@ onMounted(async () => {
 
   socket.on('chat_message', (data) => {
     if (order.value && String(data.room) === String(order.value.documentId)) {
-      order.value.chatHistory = data.chatHistory || [...(order.value.chatHistory || []), data.message];
-      
+      applyOrderChatMessage(order.value, data);
+
       if (data.message?.sender === 'courier') {
         if (!openChat.value) {
           showStateToast('Nova mensagem do estafeta!');

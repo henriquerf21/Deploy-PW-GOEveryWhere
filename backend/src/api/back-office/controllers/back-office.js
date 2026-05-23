@@ -98,6 +98,15 @@ exports.default = {
             return ctx.badRequest(result.error);
         return ctx.send({ data: result.data });
     },
+    async appendOrderChat(ctx) {
+        if (!(await ensureAdminSession(ctx, strapi)))
+            return ctx.unauthorized();
+        const service = getService(strapi);
+        const result = await service.appendOrderChat(ctx, ctx.params.id, ctx.request.body ?? {});
+        if (!result.ok)
+            return ctx.badRequest(result.error);
+        return ctx.send({ data: result.data, chatHistory: result.chatHistory });
+    },
     async assignCourier(ctx) {
         if (!(await ensureAdminSession(ctx, strapi)))
             return ctx.unauthorized();

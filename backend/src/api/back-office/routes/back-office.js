@@ -12,6 +12,7 @@ exports.default = {
         { method: 'POST', path: '/bo/orders/:id/approve', handler: 'back-office.approveOrder', config: { auth: false } },
         { method: 'POST', path: '/bo/orders/:id/reject', handler: 'back-office.rejectOrder', config: { auth: false } },
         { method: 'POST', path: '/bo/orders/:id/request-info', handler: 'back-office.requestOrderInfo', config: { auth: false } },
+        { method: 'POST', path: '/bo/orders/:id/chat-messages', handler: 'back-office.appendOrderChat', config: { auth: false } },
         { method: 'POST', path: '/bo/orders/:id/assign-courier', handler: 'back-office.assignCourier', config: { auth: false } },
         { method: 'POST', path: '/bo/orders/:id/priority', handler: 'back-office.setPriority', config: { auth: false } },
         { method: 'POST', path: '/bo/orders/:id/start-transit', handler: 'back-office.startTransit', config: { auth: false } },

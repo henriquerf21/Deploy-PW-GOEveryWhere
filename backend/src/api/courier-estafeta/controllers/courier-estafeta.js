@@ -6,6 +6,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 const strapi_1 = require("@strapi/strapi");
 const password_js_1 = require("../utils/password.js");
 const order_state_machine_js_1 = require("../../back-office/utils/order-state-machine.js");
+const order_chat_js_1 = require("../../../utils/order-chat.js");
 async function getCourierAuth(strapi, ctx) {
     const authHeader = String(ctx.request.headers.authorization || '');
     const token = authHeader.startsWith('Bearer ') ? authHeader.slice(7) : '';
@@ -256,7 +257,10 @@ exports.default = strapi_1.factories.createCoreController('api::courier-estafeta
                 return ctx.forbidden('Pedido não pertence ao estafeta autenticado.');
             }
             const payload = (ctx.request.body || {});
-            const data = payload?.data || {};
+            const data = { ...(payload?.data || {}) };
+            if (data.chatHistory !== undefined) {
+                delete data.chatHistory;
+            }
             const updated = await strapi.documents('api::order.order').update({
                 documentId: order.documentId,
                 data,
@@ -266,6 +270,40 @@ exports.default = strapi_1.factories.createCoreController('api::courier-estafeta
         }
         catch (err) {
             return handleCourierError(ctx, strapi, err, 'courierUpdateOrder');
+        }
+    },
+    async appendOrderChatMessage(ctx) {
+        try {
+            const auth = await getCourierAuth(strapi, ctx);
+            if (!auth)
+                return ctx.unauthorized('Token de estafeta inválido.');
+            const order = await findPublishedOrder(strapi, ctx.params.id);
+            if (!order)
+                return ctx.notFound('Pedido não encontrado.');
+            const orderCourierDocId = order?.courier?.documentId || order?.delivery?.courier?.documentId;
+            if (String(orderCourierDocId || '') !== auth.courierDocumentId) {
+                return ctx.forbidden('Pedido não pertence ao estafeta autenticado.');
+            }
+            const text = String(ctx.request.body?.text || ctx.request.body?.data?.text || '').trim();
+            if (!text)
+                return ctx.badRequest('Mensagem obrigatória.');
+            const courier = await findPublishedCourier(strapi, auth.courierDocumentId);
+            const result = await (0, order_chat_js_1.appendOrderChatMessage)(strapi, order.documentId, {
+                sender: 'courier',
+                text,
+                actorName: courier?.fullName || 'Estafeta',
+            });
+            if (!result.ok)
+                return ctx.badRequest(result.error);
+            ctx.body = {
+                data: {
+                    message: result.message,
+                    chatHistory: result.chatHistory,
+                },
+            };
+        }
+        catch (err) {
+            return handleCourierError(ctx, strapi, err, 'appendOrderChatMessage');
         }
     },
     async courierUpdateSelf(ctx) {
