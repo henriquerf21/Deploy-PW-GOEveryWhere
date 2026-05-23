@@ -335,7 +335,7 @@
           <header class="bo-card__head">
             <div>
               <h3 class="bo-card__title">Atribuir estafeta</h3>
-              <p class="bo-card__sub">Estafetas disponíveis:</p>
+              <p v-if="canReassignCourier" class="bo-card__sub">Estafetas disponíveis:</p>
             </div>
           </header>
           <div class="bo-card__body bo-stack">
@@ -344,8 +344,8 @@
                 <span class="bo-badge bo-badge--success">Ativo</span>
                 <span>Estafeta atribuído: <strong>{{ order.courierName }}</strong></span>
               </div>
-              <p v-if="!available.length && !order.courierName" class="bo-muted" style="font-size: 13px;">Sem estafetas elegíveis para esta zona.</p>
-              <div v-else class="assign-list">
+              <p v-if="!available.length && !order.courierName && canReassignCourier" class="bo-muted" style="font-size: 13px;">Sem estafetas elegíveis para esta zona.</p>
+              <div v-else-if="canReassignCourier" class="assign-list">
                 <label v-for="c in available" :key="c.id" class="assign-row" :class="{ 'is-selected': pickCourier === c.id }">
                   <input v-model="pickCourier" type="radio" :value="c.id" />
                   <span>
@@ -355,7 +355,7 @@
                 </label>
               </div>
               <div class="bo-row">
-                <button type="button" class="bo-btn bo-btn--primary" :disabled="!pickCourier" @click="doAssign">{{ order.courierName ? 'Re-atribuir' : 'Atribuir' }}</button>
+                <button v-if="canReassignCourier" type="button" class="bo-btn bo-btn--primary" :disabled="!pickCourier" @click="doAssign">{{ order.courierName ? 'Re-atribuir' : 'Atribuir' }}</button>
                 <button v-if="order.status === ORDER_STATUS.ASSIGNED" type="button" class="bo-btn bo-btn--outline" @click="doStartTransit">Marcar em trânsito</button>
               </div>
             </fieldset>
@@ -653,6 +653,14 @@ const canReject = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].in
 const canRequestInfo = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].includes(order.value.status));
 const impossibleReview = computed(() => order.value && String(order.value.deliveryStatus || '').startsWith('E-14'));
 const canAssignSection = computed(() => order.value && ['APPROVED', 'ASSIGNED'].includes(order.value.status));
+const canReassignCourier = computed(() => {
+  if (!order.value) return false;
+  if (order.value.status === 'APPROVED') return true;
+  if (order.value.status === 'ASSIGNED') {
+    return String(order.value.deliveryStatus || '').startsWith('E-14');
+  }
+  return false;
+});
 const canAdminCorrect = computed(() => order.value && !terminalStatuses.includes(order.value.status));
 const canCancelAdmin = computed(() => order.value && ['APPROVED', 'ASSIGNED', 'IN_TRANSIT'].includes(order.value.status));
 const available = computed(() => (order.value ? availableCouriersForOrder(order.value.id) : []));
