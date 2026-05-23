@@ -53,7 +53,7 @@
     <div v-if="impossibleReview" class="impossible-review-banner" role="alert">
       <strong>Entrega impossível (antes da recolha)</strong>
       <p>{{ order.deliveryNotes || order.impossibleReport?.reason || 'Sem motivo registado.' }}</p>
-      <p class="impossible-review-banner__hint">Reatribui outro estafeta ou cancela o pedido. O cliente não é cancelado automaticamente.</p>
+      <p class="impossible-review-banner__hint">Reatribui outro estafeta ou cancela o pedido.</p>
     </div>
 
     <div class="layout">
