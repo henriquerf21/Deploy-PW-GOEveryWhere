@@ -186,10 +186,12 @@ exports.default = strapi_1.factories.createCoreController('api::order.order', ({
             && (String(ownerDocId) === String(userFilter.documentId || userFilter.id));
         if (!ownerOk)
             return ctx.forbidden('Sem permissão para este pedido.');
+        const channel = ctx.request.body?.channel || ctx.request.body?.data?.channel || null;
         const result = await (0, order_chat_js_1.appendOrderChatMessage)(strapi, order.documentId, {
             sender: 'client',
             text,
             actorName: user.username || user.email || 'Cliente',
+            channel,
         });
         if (!result.ok)
             return ctx.badRequest(result.error);

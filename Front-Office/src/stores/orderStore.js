@@ -582,7 +582,7 @@ export async function replyToInfoRequest(documentId, reply) {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${authState.token}`,
       },
-      body: JSON.stringify({ text }),
+      body: JSON.stringify({ text, channel: 'info_adicional' }),
     });
     if (!chatRes.ok) {
       const err = await chatRes.json();
@@ -643,7 +643,7 @@ export async function sendChatMessage(documentId, text, sender = 'client') {
         'Content-Type': 'application/json',
         'Authorization': `Bearer ${authState.token}`,
       },
-      body: JSON.stringify({ text: bodyText }),
+      body: JSON.stringify({ text: bodyText, channel: 'delivery' }),
     });
 
     const json = await response.json().catch(() => ({}));

@@ -292,6 +292,7 @@ exports.default = strapi_1.factories.createCoreController('api::courier-estafeta
                 sender: 'courier',
                 text,
                 actorName: courier?.fullName || 'Estafeta',
+                channel: 'delivery',
             });
             if (!result.ok)
                 return ctx.badRequest(result.error);
