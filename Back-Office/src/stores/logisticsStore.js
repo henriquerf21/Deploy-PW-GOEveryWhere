@@ -749,7 +749,7 @@ export function availableCouriersForOrder(orderId) {
     if (!courierZones.includes(orderZone)) return false;
     
     const active = logistics.orders.filter(
-      (x) => x.courierId === c.id && [ORDER_STATUS.ASSIGNED, ORDER_STATUS.IN_TRANSIT].includes(x.status)
+      (x) => x.courierId === c.id && x.id !== orderId && [ORDER_STATUS.ASSIGNED, ORDER_STATUS.IN_TRANSIT].includes(x.status)
     ).length;
     
     return active < c.maxConcurrent;
