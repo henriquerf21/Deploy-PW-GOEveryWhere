@@ -82,7 +82,7 @@ export function notifyOrderStateChange(orderId, stateCode, stateData) {
     'S-03': 'Precisamos de informação adicional sobre o teu pedido.',
     'S-04': 'O teu pedido foi rejeitado. Consulta os detalhes.',
     'S-05': 'O teu pedido foi aprovado! A atribuir estafeta...',
-    'S-06': 'A aguardar que um estafeta aceite o teu pedido.',
+    'S-06': 'A nossa equipa está a analisar o pedido. Serás avisado em breve.',
     'S-07': 'Um estafeta aceitou o teu pedido! Acompanha no mapa.',
     'S-08': 'O estafeta está no Continente a recolher os teus produtos.',
     'S-09': 'A tua encomenda está a caminho! 🚀',

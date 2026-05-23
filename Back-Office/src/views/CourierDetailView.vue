@@ -35,7 +35,7 @@
       <div class="bo-row" style="gap: 24px;">
         <label class="bo-checkbox">
           <input type="checkbox" :checked="c.online" :disabled="!canGoOnline" @change="onToggleOnline" />
-          Modo online (recebe atribuições)
+          Modo online (recebe atribuições; desligar = em pausa E-07, não termina sessão)
         </label>
         <div class="bo-row" style="gap: 8px;">
           <label class="bo-field__label" style="margin: 0;">Máx. simultâneo</label>
@@ -122,7 +122,18 @@
             <div class="bo-field"><label class="bo-field__label">Marca</label><input v-model="edit.vehicle.brand" class="bo-input" /></div>
             <div class="bo-field"><label class="bo-field__label">Modelo</label><input v-model="edit.vehicle.model" class="bo-input" /></div>
             <div class="bo-field"><label class="bo-field__label">Cor</label><input v-model="edit.vehicle.color" class="bo-input" /></div>
-            <div class="bo-field"><label class="bo-field__label">Matrícula</label><input v-model="edit.vehicle.plate" class="bo-input" /></div>
+            <div class="bo-field">
+              <label class="bo-field__label">Matrícula</label>
+              <input
+                :value="edit.vehicle.plate"
+                class="bo-input bo-input--mono"
+                placeholder="AA-00-AA"
+                maxlength="8"
+                autocomplete="off"
+                :disabled="isBikeVehicle"
+                @input="onPlateInput"
+              />
+            </div>
           </div>
           <dl v-else class="bo-dl">
             <dt>Tipo</dt><dd>{{ c.vehicle?.type || '—' }}</dd>
@@ -368,11 +379,17 @@ import {
 import { courierStateLabels, COURIER_STATE, ZONES } from '../constants/logistics.js';
 import { toast } from '../utils/notify.js';
 import { boUpload } from '../api/backofficeApi.js';
+import { validatePtPlate, onPlateInput as onPlateInputUtil } from '../utils/boPtValidation.js';
 
 const route = useRoute();
 const c = computed(() => getCourierById(route.params.id));
 const canEdit = computed(() => c.value && canEditCourierData(c.value));
 const canGoOnline = computed(() => c.value && ['E-02', 'E-05', 'E-06', 'E-07'].includes(c.value.state));
+const isBikeVehicle = computed(() => String(edit.vehicle?.type || '').toLowerCase() === 'bicicleta');
+
+function onPlateInput(e) {
+  onPlateInputUtil(e, (v) => { edit.vehicle.plate = v; });
+}
 
 const initials = computed(() => {
   const n = c.value?.name || '';
@@ -443,11 +460,15 @@ watch(c, (x) => {
   
   const rawType = x.vehicle?.type || '';
   const normalizedType = rawType ? rawType.charAt(0).toUpperCase() + rawType.slice(1).toLowerCase() : '';
-  edit.vehicle = { 
-    ...(x.vehicle || {}), 
+  edit.vehicle = {
+    ...(x.vehicle || {}),
     type: normalizedType,
-    color: x.vehicle?.color || '' 
+    color: x.vehicle?.color || '',
   };
+  if (edit.vehicle.plate) {
+    const p = validatePtPlate(edit.vehicle.plate);
+    if (p.ok && p.value) edit.vehicle.plate = p.value;
+  }
   adminNotesDraft.value = x.adminNotes || '';
 }, { immediate: true });
 
@@ -458,7 +479,18 @@ function toggleZ(z) {
 }
 
 async function saveEdit() {
-  const r = await updateCourierVerified(c.value.id, { ...edit, vehicle: { ...edit.vehicle }, zones: [...edit.zones] });
+  const vehicle = { ...edit.vehicle };
+  if (isBikeVehicle.value) {
+    vehicle.plate = '';
+  } else if (vehicle.plate) {
+    const plate = validatePtPlate(vehicle.plate, { required: true });
+    if (!plate.ok) {
+      toast(plate.error, 'error');
+      return;
+    }
+    vehicle.plate = plate.value;
+  }
+  const r = await updateCourierVerified(c.value.id, { ...edit, vehicle, zones: [...edit.zones] });
   toast(r.ok ? 'Dados guardados.' : r.error, r.ok ? 'success' : 'error');
 }
 

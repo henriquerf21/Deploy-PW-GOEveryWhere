@@ -7,40 +7,64 @@
     </div>
   </div>
 
-  <div v-else class="bo-page">
+  <div v-else class="bo-page order-detail-page">
     <RouterLink to="/orders" class="back-link"><ArrowLeft :size="14" /> Voltar à lista de pedidos</RouterLink>
 
-    <header class="bo-page-head">
-      <div class="bo-page-head__main">
-        <p class="bo-page-head__eyebrow">Pedido · {{ orderTypeLabels[order.type] }}</p>
-        <h1 class="bo-page-head__title">{{ order.orderId || order.id }}</h1>
-        <p class="bo-page-head__sub">
-          Cliente <strong>{{ order.clientName }}</strong> · {{ order.clientEmail }} · zona {{ order.zone }}
+    <header class="order-hero" :class="`order-hero--${order.status}`">
+      <div class="order-hero__main">
+        <p class="order-hero__eyebrow">Pedido · {{ orderTypeLabels[order.type] }} · {{ order.zone }}</p>
+        <h1 class="order-hero__title">{{ order.orderId || order.id }}</h1>
+        <p class="order-hero__sub">
+          <span class="order-hero__client">{{ order.clientName }}</span>
+          <span class="order-hero__sep">·</span>
+          <span>{{ order.clientEmail }}</span>
         </p>
       </div>
-      <div class="bo-page-head__actions">
-        <span class="bo-badge" :class="statusBadgeClass(order.status)">{{ orderStatusLabels[order.status] }}</span>
-        <span class="bo-badge bo-badge--neutral">P{{ order.priority }} · {{ priorityLabels[order.priority] }}</span>
-        <span v-if="order.is_urgent" class="bo-badge bo-badge--danger">Urgente</span>
+      <div class="order-hero__badges">
+        <span class="order-hero__status">{{ orderStatusLabels[order.status] }}</span>
+        <span class="order-hero__pill">Prioridade {{ order.priority }} — {{ priorityLabels[order.priority] }}</span>
+        <span v-if="order.is_urgent" class="order-hero__pill order-hero__pill--urgent">Urgente</span>
       </div>
     </header>
 
-    <div v-if="order.priority === 5" class="urgent-banner" role="alert" style="margin-bottom: 16px;">
+    <div class="order-kpis">
+      <div class="order-kpi">
+        <span class="order-kpi__label">Custo</span>
+        <span class="order-kpi__value">{{ order.costEuro != null ? order.costEuro.toFixed(2) + ' €' : '—' }}</span>
+      </div>
+      <div class="order-kpi">
+        <span class="order-kpi__label">ETA</span>
+        <span class="order-kpi__value">{{ order.etaMinutes ? order.etaMinutes + ' min' : '—' }}</span>
+      </div>
+      <div class="order-kpi">
+        <span class="order-kpi__label">Loja</span>
+        <span class="order-kpi__value order-kpi__value--sm">{{ order.storeName || '—' }}</span>
+      </div>
+      <div class="order-kpi">
+        <span class="order-kpi__label">Estafeta</span>
+        <span class="order-kpi__value order-kpi__value--sm">{{ order.courierName || 'Por atribuir' }}</span>
+      </div>
+    </div>
+
+    <div v-if="order.priority === 5" class="urgent-banner" role="alert">
       <strong>Prioridade máxima 5 — Urgente.</strong> Tratamento imediato obrigatório.
     </div>
 
-    <div v-if="order.deliveryImpossibleReason && order.status === 'UNDELIVERABLE'" class="urgent-banner" role="alert" style="margin-bottom: 16px;">
-      <strong>Aviso do Estafeta (Entrega Impossível):</strong> {{ order.deliveryImpossibleReason }}
+    <div v-if="impossibleReview" class="impossible-review-banner" role="alert">
+      <strong>Entrega impossível (antes da recolha)</strong>
+      <p>{{ order.deliveryNotes || order.impossibleReport?.reason || 'Sem motivo registado.' }}</p>
+      <p class="impossible-review-banner__hint">Reatribui outro estafeta ou cancela o pedido. O cliente não é cancelado automaticamente.</p>
     </div>
 
     <div class="layout">
       <div class="layout__main bo-stack--lg">
-        <section class="bo-card">
+        <section class="bo-card bo-card--summary">
           <header class="bo-card__head">
             <div>
               <h3 class="bo-card__title">Resumo do pedido</h3>
-              <p class="bo-card__sub">Dados de cliente, encomenda e morada de entrega.</p>
+              <p class="bo-card__sub">Cliente, linhas da encomenda e morada de entrega.</p>
             </div>
+            <time class="bo-card__meta-time">{{ formatTimelineDate(order.createdAt) }}</time>
           </header>
           <div class="bo-card__body">
             <div class="info-grid">
@@ -115,62 +139,92 @@
           </div>
         </section>
 
-        <section v-if="order.clientReply || order.infoRequestMessage" class="bo-card s03-card">
+        <section v-if="showClientComms" class="bo-card comm-hub">
           <header class="bo-card__head">
             <div>
-              <h3 class="bo-card__title">Histórico do pedido de informação extra solicitada</h3>
-              <p class="bo-card__sub">Diálogo com o cliente sobre informação adicional solicitada.</p>
+              <h3 class="bo-card__title">Comunicação com o cliente</h3>
+              <p class="bo-card__sub">Pedidos de esclarecimento (S-03), emails e respostas — num único diálogo cronológico.</p>
             </div>
+            <span v-if="clientThread.length" class="comm-hub__count">{{ clientThread.length }} mensagens</span>
           </header>
-          <div class="bo-card__body bo-stack">
-            <div v-if="order.infoRequestMessage" class="s03-block">
-              <span class="bo-eyebrow">Mensagem enviada ao cliente</span>
-              <p class="s03-block__text">{{ order.infoRequestMessage }}</p>
+          <div class="bo-card__body">
+            <div v-if="order.status === ORDER_STATUS.INFO_REQUESTED && !hasClientReply" class="comm-hub__await">
+              <MessageSquare :size="18" />
+              <span>Aguarda resposta do cliente ao pedido de informação.</span>
             </div>
-            <div v-if="order.clientReply" class="s03-block s03-block--reply">
-              <span class="bo-eyebrow">Resposta do cliente</span>
-              <p class="s03-block__text">{{ order.clientReply }}</p>
+            <div v-if="clientThread.length" class="comm-thread">
+              <article
+                v-for="msg in clientThread"
+                :key="msg.id"
+                class="comm-bubble"
+                :class="`comm-bubble--${msg.direction}`"
+              >
+                <div class="comm-bubble__meta">
+                  <span class="comm-bubble__who">{{ msg.who }}</span>
+                  <span class="comm-bubble__tag">{{ msg.label }}</span>
+                  <time class="comm-bubble__time">{{ formatTimelineDate(msg.at) }}</time>
+                </div>
+                <p class="comm-bubble__text">{{ msg.body }}</p>
+                <p v-if="msg.to" class="comm-bubble__to">Para {{ msg.to }}</p>
+                <p v-if="msg.emailError" class="comm-bubble__err">{{ msg.emailError }}</p>
+                <span v-else-if="msg.emailSent === false" class="comm-bubble__warn">Envio por email não confirmado</span>
+              </article>
             </div>
-            <p v-else-if="order.status === ORDER_STATUS.INFO_REQUESTED" class="bo-muted" style="font-weight: 600; color: #92400e;">
-              Aguarda resposta do cliente.
+            <p v-else-if="!hasClientReply && order.status !== ORDER_STATUS.INFO_REQUESTED" class="comm-hub__empty">
+              Ainda não há mensagens registadas para este pedido.
             </p>
           </div>
         </section>
 
-        <section class="bo-card">
+        <section class="bo-card bo-card--timeline">
           <header class="bo-card__head">
             <div>
               <h3 class="bo-card__title">Histórico do pedido</h3>
-              <p class="bo-card__sub">Sequência de transições, com quem fez cada ação e quando.</p>
+              <p class="bo-card__sub">Do mais recente ao mais antigo — quem fez o quê e como mudou o estado.</p>
             </div>
+            <span v-if="timelineEntries.length" class="tl-count">{{ timelineEntries.length }} eventos</span>
           </header>
           <div class="bo-card__body">
-            <div v-if="timelineEntries.length" class="timeline-legend">
-              <span class="legend-item" title="Ações feitas pelo Cliente"><span class="legend-dot" style="background: #6366f1;"></span> Cliente</span>
-              <span class="legend-item" title="Ações feitas pelo Estafeta"><span class="legend-dot" style="background: #0ea5e9;"></span> Estafeta</span>
-              <span class="legend-item" title="Ações e atualizações feitas pelo Operador/Sistema"><span class="legend-dot" style="background: #8b5cf6;"></span> Admin</span>
-              <span class="legend-item" title="Avisos e Trânsito"><span class="legend-dot" style="background: #f97316;"></span> Em Trânsito / Avisos</span>
-              <span class="legend-item" title="Entrega concluída ou Sucesso"><span class="legend-dot" style="background: #10b981;"></span> Concluído</span>
-              <span class="legend-item" title="Rejeições ou Cancelamentos"><span class="legend-dot" style="background: #ef4444;"></span> Cancelado</span>
-            </div>
-            
-            <ol v-if="timelineEntries.length" class="timeline">
-              <li v-for="(ev, idx) in timelineEntries" :key="idx" class="timeline__row" :class="`timeline__row--${ev.kind}`">
-                <span class="timeline__dot" aria-hidden="true" />
-                <div class="timeline__content">
-                  <div class="timeline__head">
-                    <span class="timeline__title">{{ ev.title }}</span>
-                    <span class="timeline__when bo-mono">{{ formatTimelineDate(ev.at) }}</span>
-                  </div>
-                  <p class="timeline__sub">
-                    <span class="timeline__actor">{{ ev.actorName }}</span>
-                    <template v-if="ev.transition"> · <span class="bo-mono">{{ ev.transition }}</span></template>
-                  </p>
-                  <p v-if="ev.detail" class="timeline__detail">{{ ev.detail }}</p>
+            <ol v-if="timelineEntries.length" class="tl">
+              <li
+                v-for="(ev, idx) in timelineEntries"
+                :key="`${ev.at}-${ev.action}-${idx}`"
+                class="tl-item"
+                :class="[`tl-item--${ev.kind}`, { 'tl-item--latest': idx === 0 }]"
+              >
+                <div class="tl-item__rail" aria-hidden="true">
+                  <span class="tl-item__node" :class="`tl-item__node--${ev.kind}`">
+                    <component :is="ev.icon" :size="15" stroke-width="2.25" />
+                  </span>
                 </div>
+                <article class="tl-item__card">
+                  <div class="tl-item__top">
+                    <div class="tl-item__labels">
+                      <span v-if="idx === 0" class="tl-chip tl-chip--latest">Mais recente</span>
+                      <span class="tl-chip" :class="`tl-chip--${ev.kind}`">{{ ev.title }}</span>
+                    </div>
+                    <time class="tl-item__time">{{ formatTimelineDate(ev.at) }}</time>
+                  </div>
+                  <div class="tl-item__who">
+                    <span class="tl-item__actor">{{ ev.actorName }}</span>
+                    <span class="tl-item__role">{{ ev.actorRole }}</span>
+                  </div>
+                  <div v-if="ev.fromLabel || ev.toLabel" class="tl-transition">
+                    <span v-if="ev.fromLabel" class="tl-state tl-state--from">{{ ev.fromLabel }}</span>
+                    <span v-if="ev.fromLabel && ev.toLabel" class="tl-transition__arrow" aria-hidden="true">→</span>
+                    <span v-if="ev.toLabel" class="tl-state tl-state--to">{{ ev.toLabel }}</span>
+                  </div>
+                  <ul v-if="ev.facts.length" class="tl-facts">
+                    <li v-for="fact in ev.facts" :key="fact.label" class="tl-facts__row">
+                      <span class="tl-facts__label">{{ fact.label }}</span>
+                      <span class="tl-facts__value">{{ fact.value }}</span>
+                    </li>
+                  </ul>
+                  <p v-else-if="ev.message" class="tl-item__message">{{ ev.message }}</p>
+                </article>
               </li>
             </ol>
-            <p v-else class="bo-muted" style="font-size: 13px;">Sem registos de transição.</p>
+            <p v-else class="bo-muted tl-empty">Sem registos de transição.</p>
           </div>
         </section>
 
@@ -345,8 +399,21 @@
 <script setup>
 import { computed, onMounted, reactive, ref, watch } from 'vue';
 import { useRoute } from 'vue-router';
-import { ArrowLeft } from 'lucide-vue-next';
+import {
+  ArrowLeft,
+  Package,
+  CheckCircle2,
+  XCircle,
+  MessageSquare,
+  UserPlus,
+  Truck,
+  Star,
+  Ban,
+  Settings2,
+  ClipboardList,
+} from 'lucide-vue-next';
 import DeliveryRouteMap from '@/components/DeliveryRouteMap.vue';
+import { isGpsPlausibleForRoute } from '@/utils/geo.js';
 import {
   logistics, getOrderById, getCourierById, approveOrder, rejectOrder, requestOrderInfo,
   assignCourierToOrder, setOrderPriority, availableCouriersForOrder,
@@ -374,8 +441,39 @@ const mapStoreLat = computed(() => mapStore.value?.lat != null ? Number(mapStore
 const mapStoreLng = computed(() => mapStore.value?.lng != null ? Number(mapStore.value.lng) : Number(order.value?.pickupLng));
 
 const mapCourier = computed(() => order.value?.courierId ? getCourierById(order.value.courierId) : null);
-const mapCourierLat = computed(() => mapCourier.value?.lat != null ? Number(mapCourier.value.lat) : null);
-const mapCourierLng = computed(() => mapCourier.value?.lng != null ? Number(mapCourier.value.lng) : null);
+function plausibleCourierLatLng(lat, lng) {
+  const o = order.value;
+  if (lat == null || lng == null || !o) return null;
+  const storeLat = mapStoreLat.value;
+  const storeLng = mapStoreLng.value;
+  const destLat = Number(o.destLat);
+  const destLng = Number(o.destLng);
+  if (!isGpsPlausibleForRoute(lat, lng, storeLat, storeLng, destLat, destLng)) return null;
+  return { lat, lng };
+}
+
+const mapCourierLat = computed(() => {
+  const o = order.value;
+  if (o?.courierLiveLat != null && Number.isFinite(Number(o.courierLiveLat))) {
+    return Number(o.courierLiveLat);
+  }
+  if (mapCourier.value?.lat != null && Number.isFinite(Number(mapCourier.value.lat))) {
+    const p = plausibleCourierLatLng(Number(mapCourier.value.lat), Number(mapCourier.value.lng));
+    if (p) return p.lat;
+  }
+  return null;
+});
+const mapCourierLng = computed(() => {
+  const o = order.value;
+  if (o?.courierLiveLat != null && Number.isFinite(Number(o.courierLiveLng))) {
+    return Number(o.courierLiveLng);
+  }
+  if (mapCourier.value?.lat != null && Number.isFinite(Number(mapCourier.value.lat))) {
+    const p = plausibleCourierLatLng(Number(mapCourier.value.lat), Number(mapCourier.value.lng));
+    if (p) return p.lng;
+  }
+  return null;
+});
 
 const suggested = computed(() => {
   const list = order.value?.suggestedCouriers;
@@ -406,84 +504,100 @@ watch(order, (o) => {
 async function syncOrderDetail() {
   const id = orderId.value;
   if (!id) return;
-  try { await refreshOrderFromServer(id); } catch { /* silently fail */ }
+  try { await refreshOrderFromServer(id, { silent: true }); } catch { /* silently fail */ }
 }
 onMounted(() => { void syncOrderDetail(); });
 watch(orderId, () => { void syncOrderDetail(); });
 
-const TIMELINE_LABELS = {
-  created: { title: 'Pedido criado', kind: 'client' },
-  approve: { title: 'Pedido aprovado', kind: 'admin' },
-  reject: { title: 'Pedido rejeitado', kind: 'admin_danger' },
-  request_info: { title: 'Informação solicitada ao cliente', kind: 'admin_warn' },
-  assign_courier: { title: 'Estafeta atribuído', kind: 'admin' },
-  start_transit: { title: 'Em trânsito', kind: 'admin_transit' },
-  complete: { title: 'Entrega concluída', kind: 'admin_success' },
-  set_priority: { title: 'Prioridade alterada', kind: 'admin_warn' },
-  cancel_admin: { title: 'Cancelado pela operação', kind: 'admin_danger' },
-  admin_patch: { title: 'Correção administrativa', kind: 'admin' },
-  
-  courier_status: { title: 'Atualização', kind: 'courier' },
-  client_status: { title: 'Atualização', kind: 'client' },
-  admin_status: { title: 'Atualização', kind: 'admin' },
-  status_update: { title: 'Atualização de Estado', kind: 'generic' }
+const TIMELINE_CONFIG = {
+  created: { title: 'Pedido criado', kind: 'created', icon: Package },
+  approve: { title: 'Pedido aprovado', kind: 'approved', icon: CheckCircle2 },
+  reject: { title: 'Pedido rejeitado', kind: 'rejected', icon: XCircle },
+  request_info: { title: 'Info solicitada ao cliente', kind: 'info', icon: MessageSquare },
+  assign_courier: { title: 'Estafeta atribuído', kind: 'assigned', icon: UserPlus },
+  start_transit: { title: 'Em trânsito', kind: 'transit', icon: Truck },
+  complete: { title: 'Entrega concluída', kind: 'delivered', icon: CheckCircle2 },
+  set_priority: { title: 'Prioridade alterada', kind: 'priority', icon: Star },
+  cancel_admin: { title: 'Cancelado pela operação', kind: 'rejected', icon: Ban },
+  admin_patch: { title: 'Correção administrativa', kind: 'info', icon: Settings2 },
 };
+
+function statusHumanLabel(code) {
+  if (!code) return null;
+  return orderStatusLabels[code] || String(code).replace(/_/g, ' ').toLowerCase();
+}
+
+function resolveTimelineActorRole(ev) {
+  if (ev.action === 'created') return 'Cliente';
+  const name = ev.actor?.name || '';
+  if (!name || name === 'Sistema') return 'Sistema';
+  if (ev.action === 'assign_courier') return 'Operação';
+  return 'Operação';
+}
+
+function buildTimelineFacts(action, meta) {
+  const m = meta || {};
+  switch (action) {
+    case 'approve':
+      return [
+        m.storeName ? { label: 'Loja', value: m.storeName } : null,
+        m.costEuro != null ? { label: 'Custo', value: `${Number(m.costEuro).toFixed(2)} €` } : null,
+        m.etaMinutes != null ? { label: 'ETA', value: `${m.etaMinutes} min` } : null,
+      ].filter(Boolean);
+    case 'reject':
+    case 'cancel_admin':
+      return m.reason ? [{ label: 'Motivo', value: m.reason }] : [];
+    case 'request_info':
+      return [{ label: 'Diálogo', value: 'Ver secção «Comunicação com o cliente»' }];
+    case 'assign_courier':
+      return m.courierName ? [{ label: 'Estafeta', value: m.courierName }] : [];
+    case 'set_priority':
+      return (m.from != null && m.to != null)
+        ? [{ label: 'Prioridade', value: `P${m.from} → P${m.to}` }]
+        : [];
+    case 'admin_patch':
+      return Array.isArray(m.fields) && m.fields.length
+        ? [{ label: 'Campos alterados', value: m.fields.join(', ') }]
+        : [];
+    default:
+      return [];
+  }
+}
 
 const timelineEntries = computed(() => {
   const list = order.value?.timeline;
   if (!Array.isArray(list)) return [];
-  return list.map((ev) => {
-    const cfg = TIMELINE_LABELS[ev.action] || { title: ev.action || '—', kind: 'generic' };
-    const meta = ev.meta || {};
-    let detail = '';
-    let title = cfg.title;
-
-    switch (ev.action) {
-      case 'approve':
-        detail = [meta.storeName ? `Loja: ${meta.storeName}` : null, meta.costEuro != null ? `Custo: ${Number(meta.costEuro).toFixed(2)}€` : null, meta.etaMinutes != null ? `ETA: ${meta.etaMinutes} min` : null]
-          .filter(Boolean).join(' · ');
-        break;
-      case 'reject':
-        detail = meta.reason ? `Motivo: ${meta.reason}` : '';
-        break;
-      case 'request_info':
-        detail = meta.message ? `Mensagem: ${meta.message}` : '';
-        break;
-      case 'assign_courier':
-        detail = meta.courierName ? `Estafeta: ${meta.courierName}` : '';
-        break;
-      case 'set_priority':
-        detail = (meta.from != null && meta.to != null) ? `P${meta.from} → P${meta.to}` : '';
-        break;
-      case 'cancel_admin':
-        detail = meta.reason ? `Motivo: ${meta.reason}` : '';
-        break;
-      case 'admin_patch':
-        detail = Array.isArray(meta.fields) ? `Campos: ${meta.fields.join(', ')}` : '';
-        break;
-      case 'courier_status':
-      case 'client_status':
-      case 'admin_status':
-      case 'status_update':
-        if (meta.status) title = meta.status;
-        if (meta.fromStatus && meta.status) {
-          detail = `${meta.fromStatus.split(' ')[0]} → ${meta.status.split(' ')[0]}`;
-        }
-        break;
-      default:
-        detail = '';
-    }
-
+  const mapped = list.map((ev) => {
+    const cfg = TIMELINE_CONFIG[ev.action] || { title: ev.action || 'Evento', kind: 'generic', icon: ClipboardList };
+    const facts = buildTimelineFacts(ev.action, ev.meta);
+    const message = !facts.length && ev.meta?.message ? String(ev.meta.message) : '';
     return {
-      title,
+      action: ev.action,
+      title: cfg.title,
       kind: cfg.kind,
+      icon: cfg.icon,
       at: ev.at,
       actorName: ev.actor?.name || 'Sistema',
-      transition: (ev.from && ev.to) ? `${ev.from} → ${ev.to}` : null,
-      detail,
+      actorRole: resolveTimelineActorRole(ev),
+      fromLabel: statusHumanLabel(ev.from),
+      toLabel: statusHumanLabel(ev.to),
+      facts,
+      message,
     };
   });
+  return mapped.slice().reverse();
 });
+
+const COMM_KIND_LABELS = {
+  info_adicional: 'Pedido de informação',
+  approval: 'Aprovação',
+  rejection: 'Rejeição',
+  delivery: 'Entrega',
+};
+
+function commKindLabel(kind) {
+  return COMM_KIND_LABELS[kind] || kind || 'Comunicação';
+}
 
 function formatTimelineDate(iso) {
   if (!iso) return '—';
@@ -501,11 +615,108 @@ const canApprove = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].i
 const canEditPriority = computed(() => order.value && !terminalStatuses.includes(order.value.status));
 const canReject = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].includes(order.value.status));
 const canRequestInfo = computed(() => order.value && ['PENDING', 'INFO_REQUESTED'].includes(order.value.status));
-const canAssignSection = computed(() => order.value && ['APPROVED', 'ASSIGNED', 'UNDELIVERABLE'].includes(order.value.status));
+const impossibleReview = computed(() => order.value && String(order.value.deliveryStatus || '').startsWith('E-14'));
+const canAssignSection = computed(() => order.value && ['APPROVED', 'ASSIGNED'].includes(order.value.status));
 const canAdminCorrect = computed(() => order.value && !terminalStatuses.includes(order.value.status));
-const canCancelAdmin = computed(() => order.value && ['APPROVED', 'ASSIGNED', 'IN_TRANSIT', 'UNDELIVERABLE'].includes(order.value.status));
+const canCancelAdmin = computed(() => order.value && ['APPROVED', 'ASSIGNED', 'IN_TRANSIT'].includes(order.value.status));
 const available = computed(() => (order.value ? availableCouriersForOrder(order.value.id) : []));
+const orderMails = computed(() => {
+  const o = order.value;
+  const fromServer = o?.communicationLog;
+  if (Array.isArray(fromServer) && fromServer.length) {
+    return fromServer.map((c) => ({
+      id: c.id || `${c.at}-${c.kind}`,
+      kind: c.kind || c.channel || 'registo',
+      to: c.to || '',
+      at: c.at || '',
+      body: c.body || '',
+      emailSent: c.emailSent,
+      emailError: c.emailError || '',
+    }));
+  }
+  return logistics.emailLog.filter((e) => e.orderId === orderId.value);
+});
 
+function normalizeBody(text) {
+  return String(text || '').trim().toLowerCase();
+}
+
+function findTimelineAt(action) {
+  const list = order.value?.timeline;
+  if (!Array.isArray(list)) return null;
+  const hit = list.find((e) => e.action === action);
+  return hit?.at || null;
+}
+
+const hasClientReply = computed(() => !!String(order.value?.clientReply || '').trim());
+
+const clientThread = computed(() => {
+  const o = order.value;
+  if (!o) return [];
+  const items = [];
+  const seenBodies = new Set();
+
+  const pushMsg = (msg) => {
+    const key = normalizeBody(msg.body);
+    if (!key || seenBodies.has(key)) return;
+    seenBodies.add(key);
+    items.push(msg);
+  };
+
+  for (const m of orderMails.value) {
+    pushMsg({
+      id: m.id,
+      at: m.at || o.createdAt,
+      direction: 'out',
+      who: 'Operação (Back-Office)',
+      label: commKindLabel(m.kind),
+      body: m.body,
+      to: m.to,
+      emailSent: m.emailSent,
+      emailError: m.emailError,
+    });
+  }
+
+  if (o.infoRequestMessage) {
+    pushMsg({
+      id: 'info-request',
+      at: findTimelineAt('request_info') || o.createdAt,
+      direction: 'out',
+      who: 'Operação (Back-Office)',
+      label: 'Pedido de informação (S-03)',
+      body: o.infoRequestMessage,
+      to: o.clientEmail,
+    });
+  }
+
+  if (o.clientReply) {
+    pushMsg({
+      id: 'client-reply',
+      at: findTimelineAt('approve') || o.createdAt,
+      direction: 'in',
+      who: o.clientName || 'Cliente',
+      label: 'Resposta do cliente',
+      body: o.clientReply,
+    });
+  }
+
+  return items.sort((a, b) => {
+    const ta = a.at ? new Date(a.at).getTime() : 0;
+    const tb = b.at ? new Date(b.at).getTime() : 0;
+    return ta - tb;
+  });
+});
+
+const showClientComms = computed(() => {
+  const o = order.value;
+  if (!o) return false;
+  return (
+    clientThread.value.length > 0
+    || o.status === ORDER_STATUS.INFO_REQUESTED
+    || !!o.infoRequestMessage
+    || hasClientReply.value
+  );
+});
 
 function statusBadgeClass(status) {
   switch (status) {
@@ -614,6 +825,339 @@ async function doCancelAdmin() {
 
 .back-link:hover { opacity: 0.75; }
 
+.order-detail-page {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.order-hero {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 20px 22px;
+  border-radius: var(--bo-radius-lg);
+  border: 1px solid var(--bo-border);
+  background: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+  box-shadow: var(--bo-shadow-md);
+}
+
+.order-hero--INFO_REQUESTED {
+  border-color: #e9d5ff;
+  background: linear-gradient(135deg, #faf5ff 0%, #ffffff 55%);
+}
+
+.order-hero--APPROVED,
+.order-hero--ASSIGNED {
+  border-color: #bfdbfe;
+  background: linear-gradient(135deg, #eff6ff 0%, #ffffff 55%);
+}
+
+.order-hero--IN_TRANSIT {
+  border-color: #bbf7d0;
+  background: linear-gradient(135deg, #ecfdf5 0%, #ffffff 55%);
+}
+
+.order-hero--DELIVERED {
+  border-color: #a7f3d0;
+  background: linear-gradient(135deg, #f0fdf4 0%, #ffffff 55%);
+}
+
+.order-hero--REJECTED,
+.order-hero--CANCELLED_ADMIN,
+.order-hero--CANCELLED_CLIENT {
+  border-color: #fecaca;
+  background: linear-gradient(135deg, #fef2f2 0%, #ffffff 55%);
+}
+
+.order-hero__eyebrow {
+  margin: 0 0 4px;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--bo-text-secondary);
+}
+
+.order-hero__title {
+  margin: 0;
+  font-size: 1.65rem;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+  color: var(--bo-text);
+}
+
+.order-hero__sub {
+  margin: 6px 0 0;
+  font-size: 14px;
+  color: var(--bo-text-secondary);
+}
+
+.order-hero__client {
+  font-weight: 700;
+  color: var(--bo-text);
+}
+
+.order-hero__sep {
+  margin: 0 6px;
+  opacity: 0.45;
+}
+
+.order-hero__badges {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 8px;
+}
+
+.order-hero__status {
+  font-size: 13px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  padding: 8px 14px;
+  border-radius: 10px;
+  background: var(--bo-brand);
+  color: #fff;
+  box-shadow: 0 4px 14px rgba(27, 138, 74, 0.25);
+}
+
+.order-hero--INFO_REQUESTED .order-hero__status { background: #7c3aed; box-shadow: 0 4px 14px rgba(124, 58, 237, 0.25); }
+.order-hero--IN_TRANSIT .order-hero__status { background: #059669; }
+.order-hero--REJECTED .order-hero__status,
+.order-hero--CANCELLED_ADMIN .order-hero__status { background: #dc2626; box-shadow: 0 4px 14px rgba(220, 38, 38, 0.2); }
+
+.order-hero__pill {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--bo-text-secondary);
+  background: #fff;
+  border: 1px solid var(--bo-border);
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.order-hero__pill--urgent {
+  color: #991b1b;
+  background: var(--bo-danger-soft);
+  border-color: #fecaca;
+}
+
+.order-kpis {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@media (max-width: 900px) {
+  .order-kpis { grid-template-columns: repeat(2, 1fr); }
+}
+
+.order-kpi {
+  background: var(--bo-surface);
+  border: 1px solid var(--bo-border);
+  border-radius: var(--bo-radius);
+  padding: 14px 16px;
+  box-shadow: var(--bo-shadow);
+}
+
+.order-kpi__label {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--bo-text-secondary);
+  margin-bottom: 4px;
+}
+
+.order-kpi__value {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: var(--bo-text);
+  font-variant-numeric: tabular-nums;
+}
+
+.order-kpi__value--sm {
+  font-size: 0.95rem;
+  font-weight: 700;
+  line-height: 1.35;
+}
+
+.bo-card--summary {
+  box-shadow: var(--bo-shadow);
+}
+
+.bo-card__meta-time {
+  font-size: 12px;
+  color: var(--bo-text-secondary);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.bo-card--timeline {
+  box-shadow: var(--bo-shadow);
+}
+
+.comm-hub {
+  border-left: 4px solid #7c3aed;
+  box-shadow: var(--bo-shadow-md);
+}
+
+.comm-hub__count {
+  font-size: 12px;
+  font-weight: 600;
+  color: #6d28d9;
+  background: #f5f3ff;
+  border-radius: 999px;
+  padding: 4px 10px;
+}
+
+.comm-hub__await {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+  margin-bottom: 14px;
+  border-radius: var(--bo-radius-sm);
+  background: var(--bo-warning-soft);
+  border: 1px solid #fde68a;
+  color: #92400e;
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.comm-hub__empty {
+  margin: 0;
+  font-size: 13px;
+  color: var(--bo-text-secondary);
+}
+
+.comm-thread {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  max-height: 420px;
+  overflow-y: auto;
+  padding: 4px 2px 8px;
+}
+
+.comm-bubble {
+  max-width: 88%;
+  padding: 12px 14px;
+  border-radius: 14px;
+  border: 1px solid var(--bo-border);
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(15, 23, 42, 0.06);
+}
+
+.comm-bubble--out {
+  align-self: flex-end;
+  margin-left: auto;
+  border-color: #e0e7ff;
+  background: linear-gradient(180deg, #f8fafc 0%, #ffffff 100%);
+  border-bottom-right-radius: 4px;
+}
+
+.comm-bubble--in {
+  align-self: flex-start;
+  border-color: #a7f3d0;
+  background: linear-gradient(180deg, #ecfdf5 0%, #ffffff 100%);
+  border-bottom-left-radius: 4px;
+}
+
+.comm-bubble__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  margin-bottom: 8px;
+}
+
+.comm-bubble__who {
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--bo-text);
+}
+
+.comm-bubble__tag {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--bo-text-secondary);
+  background: rgba(255, 255, 255, 0.7);
+  border: 1px solid var(--bo-border);
+  border-radius: 4px;
+  padding: 2px 6px;
+}
+
+.comm-bubble--in .comm-bubble__tag {
+  color: #047857;
+  border-color: #bbf7d0;
+  background: #f0fdf4;
+}
+
+.comm-bubble__time {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--bo-text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.comm-bubble__text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+  color: var(--bo-text);
+  white-space: pre-wrap;
+}
+
+.comm-bubble__to {
+  margin: 8px 0 0;
+  font-size: 11px;
+  color: var(--bo-text-secondary);
+}
+
+.comm-bubble__err {
+  margin: 6px 0 0;
+  font-size: 11px;
+  color: var(--bo-danger);
+}
+
+.comm-bubble__warn {
+  display: inline-block;
+  margin-top: 6px;
+  font-size: 10px;
+  font-weight: 600;
+  color: #b45309;
+}
+
+.impossible-review-banner {
+  margin-bottom: 16px;
+  padding: 14px 16px;
+  border-radius: var(--bo-radius);
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.impossible-review-banner strong {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 14px;
+}
+
+.impossible-review-banner__hint {
+  margin: 8px 0 0;
+  font-size: 12px;
+  opacity: 0.9;
+}
+
 .urgent-banner {
   padding: 14px 18px;
   background: var(--bo-danger-soft);
@@ -669,8 +1213,9 @@ async function doCancelAdmin() {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  padding: 8px 12px;
-  background: var(--bo-page);
+  padding: 10px 12px;
+  background: linear-gradient(90deg, var(--bo-brand-soft) 0%, var(--bo-page) 100%);
+  border: 1px solid #d1fae5;
   border-radius: 8px;
   font-size: 13px;
 }
@@ -685,27 +1230,6 @@ async function doCancelAdmin() {
   width: 100%;
   height: 320px;
   border-top: 1px solid var(--bo-border);
-}
-
-.s03-card { border-left: 3px solid var(--bo-warning); }
-
-.s03-block {
-  padding: 12px 14px;
-  background: var(--bo-page);
-  border: 1px solid var(--bo-border);
-  border-radius: 10px;
-}
-
-.s03-block--reply {
-  background: var(--bo-success-soft);
-  border-color: #a7f3d0;
-}
-
-.s03-block__text {
-  margin: 6px 0 0;
-  font-size: 13.5px;
-  line-height: 1.55;
-  color: var(--bo-text);
 }
 
 .priority-row {
@@ -814,122 +1338,254 @@ async function doCancelAdmin() {
   font-size: 13px;
 }
 
-.timeline {
-  list-style: none;
-  margin: 0;
-  padding: 4px 0 4px 8px;
-  position: relative;
+.mail-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 12px; }
+
+.mail-list__row {
+  padding: 12px 14px;
+  border: 1px solid var(--bo-border);
+  border-radius: 10px;
+  background: var(--bo-surface);
 }
 
-.timeline::before {
-  content: '';
-  position: absolute;
-  top: 6px;
-  bottom: 6px;
-  left: 13px;
-  width: 2px;
-  background: var(--bo-border, #e2e8f0);
-  border-radius: 2px;
-}
-
-.timeline__row {
-  position: relative;
-  padding-left: 30px;
-  padding-bottom: 16px;
-}
-
-.timeline__row:last-child { padding-bottom: 0; }
-
-.timeline__dot {
-  position: absolute;
-  left: 6px;
-  top: 4px;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
-  background: #94a3b8;
-  border: 3px solid var(--bo-surface, #fff);
-  box-shadow: 0 0 0 1px var(--bo-border, #e2e8f0);
-}
-
-.timeline__row--client .timeline__dot { background: #6366f1; } /* Indigo for Client */
-.timeline__row--courier .timeline__dot { background: #0ea5e9; } /* Light Blue for Courier */
-.timeline__row--admin .timeline__dot { background: #8b5cf6; } /* Purple for Admin actions */
-.timeline__row--admin_warn .timeline__dot { background: #f59e0b; } /* Amber for Admin warnings */
-.timeline__row--admin_danger .timeline__dot { background: #ef4444; } /* Red for Admin reject/cancel */
-.timeline__row--admin_transit .timeline__dot { background: #f97316; } /* Orange for Admin transit */
-.timeline__row--admin_success .timeline__dot { background: #10b981; } /* Emerald for Admin success */
-.timeline__row--admin_info .timeline__dot { background: #a855f7; }
-.timeline__row--generic .timeline__dot { background: #94a3b8; }
-
-.timeline-legend {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 14px;
-  margin-bottom: 20px;
-  padding-bottom: 14px;
-  border-bottom: 1px dashed var(--bo-border);
-}
-
-.legend-item {
+.mail-list__head {
   display: flex;
   align-items: center;
-  gap: 6px;
-  font-size: 12.5px;
-  color: var(--bo-text-secondary);
-  font-weight: 500;
-}
-
-.legend-dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  display: inline-block;
-  box-shadow: 0 0 0 1px var(--bo-border, #e2e8f0);
-}
-
-.timeline__content {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.timeline__head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 12px;
+  gap: 10px;
   flex-wrap: wrap;
+  margin-bottom: 6px;
 }
 
-.timeline__title {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: var(--bo-text, #0f172a);
+.mail-list__body {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--bo-text);
+  white-space: pre-wrap;
 }
 
-.timeline__when {
-  font-size: 11.5px;
-  color: var(--bo-text-secondary, #64748b);
+.bo-card--timeline .bo-card__head {
+  align-items: flex-start;
+}
+
+.tl-count {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--bo-text-secondary);
+  background: var(--bo-page);
+  border: 1px solid var(--bo-border);
+  border-radius: 999px;
+  padding: 4px 10px;
   white-space: nowrap;
 }
 
-.timeline__sub {
+.tl-empty {
+  font-size: 13px;
   margin: 0;
-  font-size: 12.5px;
-  color: var(--bo-text-secondary, #64748b);
 }
 
-.timeline__actor {
+.tl {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.tl-item {
+  display: grid;
+  grid-template-columns: 40px minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.tl-item__rail {
+  display: flex;
+  justify-content: center;
+  padding-top: 14px;
+}
+
+.tl-item__node {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 10px;
+  color: #fff;
+  box-shadow: var(--bo-shadow);
+  flex-shrink: 0;
+}
+
+.tl-item__node--created { background: linear-gradient(145deg, #6366f1, #4f46e5); }
+.tl-item__node--approved { background: linear-gradient(145deg, #10b981, #059669); }
+.tl-item__node--rejected { background: linear-gradient(145deg, #ef4444, #dc2626); }
+.tl-item__node--info { background: linear-gradient(145deg, #a855f7, #9333ea); }
+.tl-item__node--assigned { background: linear-gradient(145deg, #0ea5e9, #0284c7); }
+.tl-item__node--transit { background: linear-gradient(145deg, #f59e0b, #d97706); }
+.tl-item__node--delivered { background: linear-gradient(145deg, #22c55e, #16a34a); }
+.tl-item__node--priority { background: linear-gradient(145deg, #ec4899, #db2777); }
+.tl-item__node--generic { background: linear-gradient(145deg, #64748b, #475569); }
+
+.tl-item__card {
+  background: var(--bo-page);
+  border: 1px solid var(--bo-border);
+  border-radius: var(--bo-radius);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.tl-item--latest .tl-item__card {
+  border-color: var(--bo-brand-mid);
+  background: linear-gradient(180deg, #f0fdf4 0%, #ffffff 48%);
+  box-shadow: var(--bo-shadow-md);
+}
+
+.tl-item__top {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.tl-item__labels {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.tl-chip {
+  display: inline-flex;
+  align-items: center;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  padding: 3px 8px;
+  border-radius: 6px;
+  line-height: 1.3;
+}
+
+.tl-chip--latest {
+  background: var(--bo-brand);
+  color: #fff;
+}
+
+.tl-chip--created { background: #eef2ff; color: #4338ca; }
+.tl-chip--approved { background: #ecfdf5; color: #047857; }
+.tl-chip--rejected { background: #fef2f2; color: #b91c1c; }
+.tl-chip--info { background: #faf5ff; color: #7e22ce; }
+.tl-chip--assigned { background: #eff6ff; color: #1d4ed8; }
+.tl-chip--transit { background: #fffbeb; color: #b45309; }
+.tl-chip--delivered { background: #f0fdf4; color: #15803d; }
+.tl-chip--priority { background: #fdf2f8; color: #be185d; }
+.tl-chip--generic { background: #f1f5f9; color: #475569; }
+
+.tl-item__time {
+  font-size: 12px;
+  color: var(--bo-text-secondary);
+  white-space: nowrap;
+  font-variant-numeric: tabular-nums;
+}
+
+.tl-item__who {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.tl-item__actor {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--bo-text);
+}
+
+.tl-item__role {
+  font-size: 11px;
   font-weight: 600;
-  color: var(--bo-text, #0f172a);
+  color: var(--bo-text-secondary);
+  background: #fff;
+  border: 1px solid var(--bo-border);
+  border-radius: 999px;
+  padding: 2px 8px;
 }
 
-.timeline__detail {
-  margin: 4px 0 0;
-  font-size: 12.5px;
-  color: var(--bo-text-secondary, #475569);
-  line-height: 1.5;
+.tl-transition {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.tl-state {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 8px;
+  line-height: 1.3;
+}
+
+.tl-state--from {
+  background: #f8fafc;
+  color: #64748b;
+  border: 1px dashed var(--bo-border);
+}
+
+.tl-state--to {
+  background: var(--bo-brand-soft);
+  color: #047857;
+  border: 1px solid #bbf7d0;
+}
+
+.tl-transition__arrow {
+  color: var(--bo-text-secondary);
+  font-weight: 700;
+  font-size: 14px;
+}
+
+.tl-facts {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  border-top: 1px solid var(--bo-border);
+  padding-top: 8px;
+}
+
+.tl-facts__row {
+  display: grid;
+  grid-template-columns: minmax(88px, 34%) 1fr;
+  gap: 8px;
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.tl-facts__label {
+  color: var(--bo-text-secondary);
+  font-weight: 600;
+}
+
+.tl-facts__value {
+  color: var(--bo-text);
+  word-break: break-word;
+}
+
+.tl-item__message {
+  margin: 0;
+  font-size: 13px;
+  line-height: 1.55;
+  color: var(--bo-text);
+  background: #fff;
+  border: 1px solid var(--bo-border);
+  border-radius: var(--bo-radius-sm);
+  padding: 10px 12px;
+  white-space: pre-wrap;
 }
 
 .current-courier-box {

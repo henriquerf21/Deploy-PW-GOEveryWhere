@@ -83,6 +83,10 @@ nbproject
 public/uploads/*
 !public/uploads/.gitkeep
 .tsbuildinfo
+types/
+**/*.ts
+**/*.tsx
+**/*.d.ts
 .eslintcache
 
 ############################

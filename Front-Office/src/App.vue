@@ -18,16 +18,37 @@ const route = useRoute();
 const transitionName = computed(() => 'page-slide');
 
 /* ── Global scroll-reveal via IntersectionObserver ── */
-import { fetchStores, fetchCatalogProducts } from './stores/orderStore.js';
+import {
+  fetchStores, fetchCatalogProducts, socket, fetchUserOrders, useOrderStore,
+  patchActiveOrderFields, ORDER_STATES,
+} from './stores/orderStore.js';
+import { fetchMe, isAuthenticated } from './stores/authStore.js';
+
+const store = useOrderStore();
 
 onMounted(() => {
   // Carregar dados dinâmicos do backend (RF)
   fetchStores();
   fetchCatalogProducts();
 
-  // Note: Real-time order updates are handled per-order via room-based
-  // 'order_status_update' events in OrderTrackingView. No global listener
-  // needed here — it was causing all clients to refetch on every change.
+  // Escutar eventos globais para atualizar os pontos e o histórico em tempo real
+  socket.on('global_order_status_update', async (data) => {
+    if (!isAuthenticated.value) return;
+    const room = data?.room != null ? String(data.room) : '';
+    const activeDoc = store.activeOrder?.documentId != null ? String(store.activeOrder.documentId) : '';
+    if (data?.status && room && activeDoc && room === activeDoc) {
+      const code = String(data.status).substring(0, 4);
+      if (ORDER_STATES[code]) {
+        patchActiveOrderFields({ status: code });
+        return;
+      }
+    }
+    if (room && activeDoc && room === activeDoc) {
+      await fetchUserOrders({ silent: true });
+      return;
+    }
+    await fetchUserOrders({ silent: true });
+  });
 
   if (typeof IntersectionObserver === 'undefined') return;
 

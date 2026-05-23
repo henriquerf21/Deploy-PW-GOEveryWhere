@@ -145,7 +145,7 @@ async function saveProfile() {
   }
 }
 
-function handleLogout() { logout(); router.push('/login'); }
+async function handleLogout() { await logout(); router.push('/login'); }
 
 </script>
 

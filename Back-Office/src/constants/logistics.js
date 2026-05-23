@@ -70,3 +70,31 @@ export const courierStateLabels = {
   'E-06': 'Online — Disponível',
   'E-07': 'Em Pausa',
 };
+
+/** Modo de ligação (isOnline) — coluna "Modo" na lista de estafetas */
+export function courierModeLabel(courier) {
+  return courier?.online ? 'Online' : 'Offline';
+}
+
+/** Resumo para painéis — evita "Offline · Offline" */
+export function courierPanelMeta(courier) {
+  if (!courier) return '—';
+  const state = courierStateLabels[courier.state] || courier.state || '—';
+  const connected = !!courier.online;
+
+  if (courier.state === COURIER_STATE.E06 && connected) return state;
+  if (courier.state === COURIER_STATE.E05 && !connected) return state;
+  if (courier.state === COURIER_STATE.E07) {
+    return connected ? `${state} · ligado` : `${state} · desligado`;
+  }
+  if (courier.currentOrderId && !connected) {
+    return `${state} · com entrega · desligado`;
+  }
+  return `${state} · ${connected ? 'Online' : 'Offline'}`;
+}
+
+/** Estafeta visível no mapa operacional */
+export function isCourierOnOperationsMap(courier) {
+  if (!courier) return false;
+  return !!courier.online || !!courier.currentOrderId;
+}

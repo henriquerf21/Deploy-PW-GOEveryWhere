@@ -12,7 +12,7 @@ export default defineConfig({
             strategies: 'injectManifest',
             srcDir: 'src',
             filename: 'sw.js',
-            includeAssets: ['favicon.svg', 'icons/*.png', 'media/brand/*.svg'],
+            includeAssets: ['favicon.svg', 'icons/*.png', 'media/brand/*.svg', 'media/map/*.png'],
             manifest: {
                 name: 'GoEverywhere Estafeta',
                 short_name: 'GE Estafeta',

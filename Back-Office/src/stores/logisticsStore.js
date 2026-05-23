@@ -9,6 +9,7 @@ import {
   API_BASE,
   boBootstrap,
   boGetOrder,
+  boGetCourier,
   boOrderAction,
   boPatchOrder,
   boReports,
@@ -31,10 +32,6 @@ import {
 } from '../api/backofficeApi.js';
 
 export const socket = io(API_BASE, { autoConnect: true });
-// Join dedicated admin room for targeted updates from backend
-socket.on('connect', () => {
-  socket.emit('join_admin');
-});
 let realtimeRefreshTimer = null;
 let realtimeRefreshInFlight = false;
 const lastRoomRefreshAt = new Map();
@@ -94,7 +91,7 @@ async function runRealtimeFullRefresh() {
   if (realtimeRefreshInFlight) return;
   realtimeRefreshInFlight = true;
   try {
-    await initLogistics({ force: true });
+    await initLogistics({ force: true, silent: true });
   } finally {
     realtimeRefreshInFlight = false;
   }
@@ -110,39 +107,87 @@ function scheduleRealtimeFullRefresh(delayMs = 450) {
 
 export async function handleRealtimeEvent(payload = {}) {
   const model = String(payload?.model || '').trim().toLowerCase();
+  const room = String(payload?.room || payload?.id || '').trim();
 
-  // Ignore GPS updates for courier-estafeta to prevent high database/network load from full bootstrap refreshes
-  if (model === 'courier-estafeta') {
+  if (model === 'courier' && room) {
+    const key = `courier:${room}`;
+    const now = Date.now();
+    const lastHit = lastRoomRefreshAt.get(key) || 0;
+    if (now - lastHit < 900) return;
+    lastRoomRefreshAt.set(key, now);
+    void refreshCourierFromServer(room, { silent: true });
     return;
   }
 
-  // For order-specific events with a room ID, try targeted refresh first
-  const room = String(payload?.room || '').trim();
-  if (room && model === 'order') {
+  if (room && (model === 'order' || model === 'order.order' || !model)) {
     const now = Date.now();
     const lastHit = lastRoomRefreshAt.get(room) || 0;
-    if (now - lastHit < 900) return; // debounce bursts for same order room
+    if (now - lastHit < 900) return;
     lastRoomRefreshAt.set(room, now);
     try {
-      await refreshOrderFromServer(room);
+      await refreshOrderFromServer(room, { silent: true });
       syncOperationalAggregatesFromOrders();
       return;
     } catch {
-      // fallback below
+      /* fallback silencioso abaixo */
     }
   }
-  // For any model change (orders, couriers, etc.) do a full refresh
+
   const now = Date.now();
-  if (now - lastGlobalRefreshAt < 2000) return;
+  if (now - lastGlobalRefreshAt < 5000) return;
   lastGlobalRefreshAt = now;
-  scheduleRealtimeFullRefresh(2000);
+  scheduleRealtimeFullRefresh(1200);
 }
 
-socket.on('data_changed', (payload) => {
+socket.on('global_order_status_update', (payload) => {
   handleRealtimeEvent(payload);
 });
 socket.on('courier_status_update', (payload) => {
   handleRealtimeEvent({ ...payload, model: 'courier' });
+});
+
+function applyCourierGpsToOrders(lat, lng, { room, courierId }) {
+  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return;
+  if (Math.abs(lat) < 0.0001 && Math.abs(lng) < 0.0001) return;
+  const roomKey = room != null ? String(room) : '';
+  for (const o of logistics.orders) {
+    const matchRoom = roomKey && (String(o._documentId) === roomKey || String(o.id).includes(roomKey));
+    const matchCourier = courierId && (
+      o.courierId === courierId
+      || String(o.courierId || '').endsWith(String(courierId))
+      || String(o._documentId) === String(courierId)
+    );
+    if (!matchRoom && !matchCourier) continue;
+    o.courierLiveLat = lat;
+    o.courierLiveLng = lng;
+    if (o.courierId) {
+      const c = logistics.couriers.find((x) => x.id === o.courierId);
+      if (c) {
+        c.lat = lat;
+        c.lng = lng;
+      }
+    }
+  }
+}
+
+socket.on('gps_update', (data) => {
+  if (data?.lat == null || data?.lng == null) return;
+  applyCourierGpsToOrders(Number(data.lat), Number(data.lng), {
+    room: data.room,
+    courierId: data.courierId != null ? String(data.courierId) : null,
+  });
+});
+
+socket.on('courier_gps_update', (data) => {
+  if (data?.lat == null || data?.lng == null) return;
+  const courierId = data.courierId != null ? String(data.courierId) : null;
+  const courier = logistics.couriers.find(
+    (c) => c.id === courierId || String(c.id).endsWith(String(courierId)),
+  );
+  applyCourierGpsToOrders(Number(data.lat), Number(data.lng), {
+    room: null,
+    courierId: courier?.id || courierId,
+  });
 });
 
 function applyBootstrap(data) {
@@ -178,11 +223,13 @@ function applyBootstrap(data) {
   logistics.initialized = true;
 }
 
-export async function initLogistics({ force = false } = {}) {
-  if (logistics.loading) return { ok: true };
+export async function initLogistics({ force = false, silent = false } = {}) {
+  if (!silent && logistics.loading) return { ok: true };
   if (logistics.initialized && !force) return { ok: true };
-  logistics.loading = true;
-  adjustBusy(1);
+  if (!silent) {
+    logistics.loading = true;
+    adjustBusy(1);
+  }
   try {
     const data = await boBootstrap();
     applyBootstrap(data);
@@ -207,17 +254,31 @@ export async function initLogistics({ force = false } = {}) {
     logistics.storeInventory = [];
     return { ok: false, error: err?.message || 'Falha ao carregar dados do Strapi.' };
   } finally {
-    logistics.loading = false;
-    adjustBusy(-1);
+    if (!silent) {
+      logistics.loading = false;
+      adjustBusy(-1);
+    }
   }
 }
 
-export async function refreshOrderFromServer(orderId) {
-  return withBusy(async () => {
+export async function refreshOrderFromServer(orderId, { silent = true } = {}) {
+  const load = async () => {
     const order = await boGetOrder(orderId);
     upsertOrder(order);
     return order;
-  });
+  };
+  if (silent) return load();
+  return withBusy(load);
+}
+
+export async function refreshCourierFromServer(courierId, { silent = true } = {}) {
+  const load = async () => {
+    const courier = await boGetCourier(courierId);
+    upsertCourier(courier);
+    return courier;
+  };
+  if (silent) return load();
+  return withBusy(load);
 }
 
 
@@ -476,7 +537,7 @@ export async function approveOrder(orderId, { storeId, costEuro, etaMinutes, res
     upsertOrder(order);
     logAct(`Pedido ${orderId} aprovado (loja ${storeId}).`);
     syncOperationalAggregatesFromOrders();
-    // Lifecycle hook on Strapi already notifies admin_room via data_changed
+    socket.emit('global_order_status_update', { status: 'S-05' });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao aprovar pedido.' };
@@ -492,7 +553,7 @@ export async function rejectOrder(orderId, justification) {
     upsertOrder(order);
     logAct(`Pedido ${orderId} rejeitado.`);
     syncOperationalAggregatesFromOrders();
-    // Lifecycle hook on Strapi already notifies admin_room via data_changed
+    socket.emit('global_order_status_update', { status: 'S-04' });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao rejeitar pedido.' };
@@ -508,7 +569,7 @@ export async function requestOrderInfo(orderId, message) {
     upsertOrder(order);
     logAct(`Pedido ${orderId}: pedido de informação ao cliente.`);
     syncOperationalAggregatesFromOrders();
-    // Lifecycle hook on Strapi already notifies admin_room via data_changed
+    socket.emit('global_order_status_update', { status: 'S-03' });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao pedir informação.' };
@@ -522,7 +583,7 @@ export async function assignCourierToOrder(orderId, courierId) {
     upsertOrder(order);
     logAct(`Pedido ${orderId} atribuído a ${courierId}.`);
     syncOperationalAggregatesFromOrders();
-    // Lifecycle hook on Strapi already notifies admin_room via data_changed
+    socket.emit('global_order_status_update', { status: 'S-07' });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao atribuir estafeta.' };
@@ -538,7 +599,7 @@ export async function setOrderPriority(orderId, priority) {
     upsertOrder(order);
     if (p === 5) pushUrgentAlert(`ALERTA: Pedido ${orderId} definido como prioridade 5 (Urgente).`);
     logAct(`Pedido ${orderId}: prioridade ${p}.`);
-    // Lifecycle hook on Strapi already notifies admin_room via data_changed
+    socket.emit('global_order_status_update', { status: `P-${p}` });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao alterar prioridade.' };
@@ -551,7 +612,7 @@ export async function startTransit(orderId) {
     upsertOrder(order);
     logAct(`Pedido ${orderId} em trânsito.`);
     syncOperationalAggregatesFromOrders();
-    // Lifecycle hook on Strapi already notifies admin_room via data_changed
+    socket.emit('global_order_status_update', { status: 'S-09' });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao iniciar trânsito.' };
@@ -565,7 +626,7 @@ export async function completeDelivery(orderId) {
     logAct(`Pedido ${orderId} entregue.`);
     refreshAggregatesForCustomerId(order.clientId);
     syncOperationalAggregatesFromOrders();
-    // Lifecycle hook on Strapi already notifies admin_room via data_changed
+    socket.emit('global_order_status_update', { status: 'S-11' });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao concluir entrega.' };
@@ -580,7 +641,7 @@ export async function cancelOrderByAdmin(orderId, reason) {
     upsertOrder(order);
     logAct(`Pedido ${orderId} cancelado pela operação.`);
     syncOperationalAggregatesFromOrders();
-    // Lifecycle hook on Strapi already notifies admin_room via data_changed
+    socket.emit('global_order_status_update', { status: 'S-14' });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao cancelar.' };
@@ -593,7 +654,7 @@ export async function patchOrderAdmin(orderId, payload) {
     upsertOrder(order);
     logAct(`Pedido ${orderId}: correção administrativa.`);
     syncOperationalAggregatesFromOrders();
-    // Lifecycle hook on Strapi already notifies admin_room via data_changed
+    socket.emit('global_order_status_update', { status: 'admin_patch' });
     return { ok: true };
   } catch (err) {
     return { ok: false, error: err.message || 'Falha ao guardar correções.' };
@@ -887,6 +948,84 @@ export function filterOrders({ status, priority, dateFrom, dateTo, type, zone, q
 export const activeOrdersForMap = computed(() =>
   logistics.orders.filter((o) => [ORDER_STATUS.ASSIGNED, ORDER_STATUS.IN_TRANSIT, ORDER_STATUS.APPROVED].includes(o.status))
 );
+
+/** Entregas concluídas (S-11) por zona — indicador obrigatório do dashboard. */
+export const deliveriesByZoneDelivered = computed(() => {
+  const zoneMap = {};
+  for (const o of logistics.orders) {
+    if (o.status !== ORDER_STATUS.DELIVERED) continue;
+    const zone = o.zone || 'Outro';
+    zoneMap[zone] = (zoneMap[zone] || 0) + 1;
+  }
+  return Object.entries(zoneMap)
+    .map(([zone, count]) => ({ zone, count }))
+    .sort((a, b) => b.count - a.count);
+});
+
+export function periodStart(period) {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  if (period === '7d') start.setDate(start.getDate() - 6);
+  else if (period === '30d') start.setDate(start.getDate() - 29);
+  return start;
+}
+
+export function ordersInPeriod(period) {
+  const t0 = periodStart(period).getTime();
+  return logistics.orders.filter((o) => ts(o.createdAt) >= t0);
+}
+
+export function buildHourlyVolume(orders) {
+  const hours = Array(24).fill(0);
+  for (const o of orders) {
+    hours[new Date(o.createdAt).getHours()] += 1;
+  }
+  return hours;
+}
+
+/** Últimos N dias (inclui hoje), rótulos curtos PT. */
+export function buildDailyVolume(orders, dayCount) {
+  const labels = [];
+  const counts = [];
+  const today = new Date();
+  today.setHours(0, 0, 0, 0);
+  for (let i = dayCount - 1; i >= 0; i -= 1) {
+    const d = new Date(today);
+    d.setDate(d.getDate() - i);
+    const key = d.toISOString().slice(0, 10);
+    labels.push(d.toLocaleDateString('pt-PT', { weekday: 'short', day: 'numeric' }));
+    counts.push(orders.filter((o) => String(o.createdAt || '').startsWith(key)).length);
+  }
+  return { labels, counts };
+}
+
+/** Estafetas E-06 online com capacidade livre (para o painel do dashboard). */
+export const dashboardAvailableCouriers = computed(() =>
+  logistics.couriers
+    .filter((c) => c.state === COURIER_STATE.E06 && c.online)
+    .map((c) => {
+      const active = logistics.orders.filter(
+        (x) => x.courierId === c.id
+          && [ORDER_STATUS.ASSIGNED, ORDER_STATUS.IN_TRANSIT].includes(x.status),
+      ).length;
+      const max = Number(c.maxConcurrent) > 0 ? Number(c.maxConcurrent) : 2;
+      return {
+        id: c.id,
+        name: c.name || c.id,
+        zones: (c.zones || []).join(', ') || '—',
+        active,
+        max,
+        free: Math.max(0, max - active),
+      };
+    })
+    .sort((a, b) => b.free - a.free || String(a.name).localeCompare(String(b.name), 'pt')),
+);
+
+export const backlogStuckTotal = computed(() => {
+  const rows = logistics.slaMetrics?.backlogStuckByZone;
+  if (!Array.isArray(rows)) return 0;
+  return rows.reduce((s, z) => s + (Number(z.count) || 0), 0);
+});
 
 export const kpiSummary = computed(() => {
   const today = new Date().toISOString().slice(0, 10);

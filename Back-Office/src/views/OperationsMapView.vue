@@ -5,7 +5,7 @@
         <p class="bo-page-head__eyebrow">Operações em tempo real</p>
         <h1 class="bo-page-head__title">Mapa operacional</h1>
         <p class="bo-page-head__sub">
-          Estafetas online, lojas Continente, clientes e rotas calculadas. Clica num pedido para isolá-lo no mapa.
+          Estafetas com ligação ativa ou entrega em curso, lojas Continente, clientes e rotas. Clica num pedido para isolá-lo no mapa.
         </p>
       </div>
       <div class="bo-page-head__actions">
@@ -28,15 +28,19 @@
       <aside class="panel">
         <header class="panel__head">
           <h3 class="panel__title">{{ mapIsolated ? 'Estafeta desta entrega' : 'Estafetas' }}</h3>
-          <p class="panel__sub">{{ mapIsolated ? 'Apenas o motorista do pedido selecionado.' : 'Online e com encomenda atribuída.' }}</p>
+          <p class="panel__sub">{{ couriersPanelSubtitle }}</p>
         </header>
         <ul class="panel__list">
           <li v-if="!couriersForSidePanel.length" class="bo-muted" style="font-size: 13px; padding: 12px 0;">Sem estafetas para mostrar.</li>
           <li v-for="c in couriersForSidePanel" :key="c.id" class="panel__item">
-            <span class="pulse" aria-hidden="true" />
+            <span
+              class="status-dot"
+              :class="c.online ? 'status-dot--online' : 'status-dot--offline'"
+              aria-hidden="true"
+            />
             <div class="panel__item-body">
               <div class="panel__item-name">{{ c.name }}</div>
-              <div class="panel__item-meta">{{ courierStateLabels[c.state] }} · {{ c.online ? 'Online' : 'Offline' }}</div>
+              <div class="panel__item-meta">{{ courierPanelMeta(c) }}</div>
               <div v-if="c.currentOrderId" class="panel__item-order">Pedido {{ c.currentOrderId }} · ETA ~{{ c.etaMinutes }} min</div>
               <div v-else class="panel__item-meta">Sem encomenda atribuída</div>
             </div>
@@ -101,8 +105,15 @@ import {
   getCourierById,
   refreshStores,
 } from '../stores/logisticsStore.js';
-import { courierStateLabels, COURIER_STATE, orderStatusLabels } from '../constants/logistics.js';
-import { fetchDeliveryLegs, deliveryLegsStraightLine } from '../utils/osrmRouting.js';
+import {
+  courierPanelMeta,
+  courierStateLabels,
+  isCourierOnOperationsMap,
+  orderStatusLabels,
+} from '../constants/logistics.js';
+import { fetchDeliveryLegs, deliveryLegsStraightLine, fetchStoreToDestLeg, straightLinePoints } from '../utils/osrmRouting.js';
+import { isValidMapGps, isGpsPlausibleForRoute } from '../utils/geo.js';
+import { LEAFLET_LIGHT_TILE } from '../utils/leafletBasemap.js';
 
 const courierPinUrl = `${import.meta.env.BASE_URL}media/map/courier-pin.png`;
 const continentePinUrl = `${import.meta.env.BASE_URL}media/map/continente-pin.png`;
@@ -197,14 +208,27 @@ function getCustomerMapIcon() {
 }
 
 function validLatLngPair(p) {
-  return (
-    Array.isArray(p) &&
-    p.length >= 2 &&
-    typeof p[0] === 'number' &&
-    typeof p[1] === 'number' &&
-    !Number.isNaN(p[0]) &&
-    !Number.isNaN(p[1])
-  );
+  return Array.isArray(p) && p.length >= 2 && isValidMapGps(p[0], p[1]);
+}
+
+/** Posição do estafeta para rotas/marcadores: live → perfil, só se plausível perto da loja/destino */
+function resolveCourierLatLng(order, courier, store) {
+  if (!order || !store) return null;
+  const storeLat = Number(store.lat ?? order.pickupLat);
+  const storeLng = Number(store.lng ?? order.pickupLng);
+  const destLat = Number(order.destLat);
+  const destLng = Number(order.destLng);
+  const candidates = [
+    [order.courierLiveLat, order.courierLiveLng],
+    [courier?.lat, courier?.lng],
+  ];
+  for (const [lat, lng] of candidates) {
+    if (!isValidMapGps(lat, lng)) continue;
+    if (isGpsPlausibleForRoute(Number(lat), Number(lng), storeLat, storeLng, destLat, destLng)) {
+      return [Number(lat), Number(lng)];
+    }
+  }
+  return null;
 }
 
 const mapEl = ref(null);
@@ -218,6 +242,8 @@ let animMarker = null;
 let animTimer = null;
 let abortCtrl = null;
 let debounceT = null;
+let mapViewLocked = false;
+let didInitialBoundsFit = false;
 
 const selectedOrderId = ref('');
 const routesLoading = ref(false);
@@ -259,8 +285,17 @@ const ordersForMap = computed(() => {
 });
 
 const activeCouriers = computed(() =>
-  logistics.couriers.filter((c) => c.state === COURIER_STATE.E06 || c.state === COURIER_STATE.E07 || !!c.currentOrderId)
+  logistics.couriers.filter(isCourierOnOperationsMap)
 );
+
+const couriersPanelSubtitle = computed(() => {
+  if (mapIsolated.value) return 'Apenas o motorista do pedido selecionado.';
+  const list = activeCouriers.value;
+  if (!list.length) return 'Nenhum estafeta online nem com entrega ativa.';
+  const onlineCount = list.filter((c) => c.online).length;
+  const withOrder = list.filter((c) => c.currentOrderId).length;
+  return `${onlineCount} online · ${withOrder} com entrega ativa`;
+});
 
 const couriersForSidePanel = computed(() => {
   const sel = selectedRoutableOrder.value;
@@ -369,18 +404,17 @@ function drawMarkers() {
     markerLayers.push(m);
   }
 
-  const hideCourierIds = new Set();
-  if (selOrder?.status === ORDER_STATUS.IN_TRANSIT && selOrder.courierId) {
-    hideCourierIds.add(selOrder.courierId);
-  }
-
   const couriersToIterate = isolated && selOrder?.courierId
     ? logistics.couriers.filter((c) => c.id === selOrder.courierId)
-    : logistics.couriers;
+    : logistics.couriers.filter(isCourierOnOperationsMap);
 
   for (const c of couriersToIterate) {
-    if (c.lat == null || (c.lat === 0 && c.lng === 0) || hideCourierIds.has(c.id)) continue;
-    const m = L.marker([c.lat, c.lng], { icon: getCourierIcon(false) }).addTo(map);
+    const liveOrder = logistics.orders.find((o) => o.courierId === c.id);
+    const store = liveOrder ? getStoreById(liveOrder.storeId) : null;
+    const pt = liveOrder && store ? resolveCourierLatLng(liveOrder, c, store) : null;
+    if (!pt) continue;
+    const [lat, lng] = pt;
+    const m = L.marker([lat, lng], { icon: getCourierIcon(false) }).addTo(map);
     m.bindPopup(`<strong>${c.name}</strong><br/>${courierStateLabels[c.state]}`);
     markerLayers.push(m);
   }
@@ -422,43 +456,66 @@ async function refreshRoutes() {
       const c = getCourierById(o.courierId);
       const s = getStoreById(o.storeId);
       if (!c || !s) continue;
-      const courier = [c.lat, c.lng];
+      const courier = resolveCourierLatLng(o, c, s);
       const store = [s.lat, s.lng];
       const dest = [o.destLat, o.destLng];
-      if (!validLatLngPair(courier) || !validLatLngPair(store) || !validLatLngPair(dest)) continue;
-      let legs;
+      if (!validLatLngPair(store) || !validLatLngPair(dest)) continue;
+
+      let leg1 = [];
+      let leg2 = [];
+      let fromApi = false;
       try {
-        legs = await fetchDeliveryLegs(courier, store, dest, signal);
+        if (courier) {
+          const legs = await fetchDeliveryLegs(courier, store, dest, signal);
+          leg1 = legs?.leg1 || [];
+          leg2 = legs?.leg2 || [];
+          fromApi = !!legs?.fromApi;
+        } else {
+          leg2 = await fetchStoreToDestLeg(store, dest, signal);
+        }
       } catch {
         if (signal.aborted) return;
-        legs = deliveryLegsStraightLine(courier, store, dest);
+        if (courier) {
+          const fb = deliveryLegsStraightLine(courier, store, dest);
+          leg1 = fb.leg1;
+          leg2 = fb.leg2;
+        } else {
+          leg2 = straightLinePoints(store, dest);
+        }
       }
       if (signal.aborted) return;
-      if (!legs?.leg1?.length || !legs?.leg2?.length) continue;
-      if (!legs.fromApi) usedFallback.value = true;
+      if (!leg2?.length) continue;
+      if (!fromApi) usedFallback.value = true;
 
       const focused = singleFocus || selectedOrderId.value === o.id;
       const wMain = focused ? 6 : 5;
       const opacityMain = focused ? 1 : 0.92;
       const { leg1: col1, leg2: col2 } = routePaletteForOrderId(o.id);
 
-      addRouteLeg(legs.leg1, col1, {
-        weight: wMain,
-        opacity: opacityMain,
-        dashArray: '16 12',
-      });
-      addRouteLeg(legs.leg2, col2, {
+      if (leg1?.length) {
+        addRouteLeg(leg1, col1, {
+          weight: wMain,
+          opacity: opacityMain,
+          dashArray: '16 12',
+        });
+      }
+      addRouteLeg(leg2, col2, {
         weight: wMain,
         opacity: opacityMain,
         dashArray: null,
       });
       const n = routeLayers.length;
       const k = ROUTE_LEG_LAYER_COUNT;
-      routeLayers[n - k * 2 + k - 1].bindPopup(`<strong>${o.id}</strong><br/>① Estafeta → loja (recolha)`);
+      if (leg1?.length) {
+        routeLayers[n - k * 2 + k - 1].bindPopup(`<strong>${o.id}</strong><br/>① Estafeta → loja (recolha)`);
+      }
       routeLayers[n - 1].bindPopup(`<strong>${o.id}</strong><br/>② Loja → cliente (entrega)`);
 
-      if (o.status === ORDER_STATUS.IN_TRANSIT && (singleFocus || selectedOrderId.value === o.id)) {
-        startCourierAnimAlongLeg2(legs.leg2);
+      if (o.status === ORDER_STATUS.IN_TRANSIT && (singleFocus || selectedOrderId.value === o.id) && !courier) {
+        startCourierAnimAlongLeg2(leg2);
+      } else if (courier && (singleFocus || selectedOrderId.value === o.id)) {
+        clearAnim();
+        animMarker = L.marker(courier, { icon: getCourierIcon(true), zIndexOffset: 1000 }).addTo(map);
       }
     }
   } finally {
@@ -475,21 +532,25 @@ async function refreshRoutes() {
     });
   }
   markerLayers.forEach((m) => boundsPoints.push(m.getLatLng()));
-  if (boundsPoints.length) {
+  if (boundsPoints.length && (!mapViewLocked || !didInitialBoundsFit)) {
     try {
       const b = L.latLngBounds(boundsPoints);
-      if (b.isValid()) map.fitBounds(b, { padding: [48, 48], maxZoom: 14 });
+      if (b.isValid()) {
+        map.fitBounds(b, { padding: [48, 48], maxZoom: 14 });
+        didInitialBoundsFit = true;
+      }
     } catch {
       /* ignore */
     }
   }
 }
 
-function scheduleRefresh() {
+function scheduleRefresh(fullRoutes = true) {
   clearTimeout(debounceT);
   debounceT = setTimeout(() => {
     debounceT = null;
-    refreshRoutes();
+    if (fullRoutes) void refreshRoutes();
+    else drawMarkers();
   }, 350);
 }
 
@@ -502,21 +563,53 @@ watch(
   { immediate: true }
 );
 
-watch(
-  () => [logistics.orders, logistics.couriers],
-  () => scheduleRefresh(),
-  { deep: true }
-);
+const ordersRouteKey = computed(() => logistics.orders
+  .map((o) => `${o.id}|${o.status}|${o.courierId}|${o.storeId}|${o.destLat}|${o.destLng}`)
+  .join(';'));
 
-watch(selectedOrderId, () => scheduleRefresh());
+const ordersLiveGpsKey = computed(() => logistics.orders
+  .map((o) => `${o.id}:${o.courierLiveLat}:${o.courierLiveLng}`)
+  .join(';'));
+
+const couriersGpsKey = computed(() => logistics.couriers
+  .map((c) => `${c.id}:${c.lat}:${c.lng}:${c.state}`)
+  .join(';'));
+
+watch(ordersRouteKey, () => scheduleRefresh(true));
+
+watch(ordersLiveGpsKey, () => syncLiveCourierOnMap());
+
+watch(couriersGpsKey, () => scheduleRefresh(false));
+
+function syncLiveCourierOnMap() {
+  if (!map) return;
+  const sel = selectedRoutableOrder.value;
+  if (sel) {
+    const c = getCourierById(sel.courierId);
+    const s = getStoreById(sel.storeId);
+    const pt = c && s ? resolveCourierLatLng(sel, c, s) : null;
+    if (pt) {
+      clearAnim();
+      animMarker = L.marker(pt, { icon: getCourierIcon(true), zIndexOffset: 1000 }).addTo(map);
+    }
+  }
+  drawMarkers();
+}
+
+watch(selectedOrderId, () => {
+  mapViewLocked = false;
+  didInitialBoundsFit = false;
+  scheduleRefresh(true);
+});
 
 onMounted(() => {
   if (!mapEl.value) return;
   map = L.map(mapEl.value).setView([41.15, -8.63], 12);
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>',
-    maxZoom: 19,
-  }).addTo(map);
+  map.on('dragstart', () => { mapViewLocked = true; });
+  map.on('zoomstart', (ev) => {
+    if (ev?.originalEvent) mapViewLocked = true;
+  });
+  L.tileLayer(LEAFLET_LIGHT_TILE.url, LEAFLET_LIGHT_TILE.options).addTo(map);
   routesGroup = L.layerGroup().addTo(map);
   void refreshStores();
   void refreshRoutes();
@@ -634,15 +727,21 @@ onBeforeUnmount(() => {
   margin-top: 4px;
 }
 
-.pulse {
+.status-dot {
   width: 10px;
   height: 10px;
   margin-top: 5px;
   border-radius: 50%;
+  flex-shrink: 0;
+}
+.status-dot--online {
   background: var(--bo-success);
   box-shadow: 0 0 12px rgba(5, 150, 105, 0.6);
-  flex-shrink: 0;
   animation: pulse 1.4s ease-in-out infinite;
+}
+.status-dot--offline {
+  background: #9ca3af;
+  box-shadow: none;
 }
 
 .map-wrap {

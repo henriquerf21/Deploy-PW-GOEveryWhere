@@ -13,6 +13,16 @@
 import { ref, watch, onMounted, onBeforeUnmount, nextTick } from 'vue';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
+import {
+  fetchDeliveryLegs,
+  fetchStoreToDestLeg,
+  deliveryLegsStraightLine,
+  straightLinePoints,
+} from '@/utils/osrmRouting.js';
+import { LEAFLET_LIGHT_TILE } from '@/utils/leafletBasemap.js';
+
+const MAP_BASE = `${import.meta.env.BASE_URL}media/map/`;
+import { isGpsPlausibleForRoute } from '@/utils/geo.js';
 
 const props = defineProps({
   storeLat: { type: Number, required: true },
@@ -20,7 +30,8 @@ const props = defineProps({
   destLat: { type: Number, required: true },
   destLng: { type: Number, required: true },
   /** 0 = junto à loja, 100 = no destino (posição do estafeta na linha) — fallback quando não há GPS real */
-  courierProgress: { type: Number, default: 0 },
+  /** -1 = não mostrar estafeta fictício na linha; só GPS real */
+  courierProgress: { type: Number, default: -1 },
   /** GPS real do estafeta (latitude). Se fornecido, sobrepõe courierProgress */
   courierLat: { type: Number, default: null },
   /** GPS real do estafeta (longitude). Se fornecido, sobrepõe courierProgress */
@@ -54,6 +65,14 @@ let routeAbort = null;
 let storeIcon = null;
 let customerIcon = null;
 let courierIcon = null;
+let storeMarker = null;
+let destMarker = null;
+let courierMarker = null;
+let routePolylines = [];
+let routeLeg1 = null;
+let routeLeg2 = null;
+let mapViewLocked = false;
+let didInitialBoundsFit = false;
 
 const OSRM_BASE = 'https://router.project-osrm.org/route/v1';
 
@@ -125,7 +144,7 @@ function polylinePointsForDraw() {
 function getStoreIcon() {
   if (!storeIcon) {
     storeIcon = L.icon({
-      iconUrl: '/media/map/continente-pin.png',
+      iconUrl: `${MAP_BASE}continente-pin.png`,
       iconSize: [36, 36],
       iconAnchor: [18, 36],
       popupAnchor: [0, -36],
@@ -138,7 +157,7 @@ function getStoreIcon() {
 function getCustomerIcon() {
   if (!customerIcon) {
     customerIcon = L.icon({
-      iconUrl: '/media/map/customer-house-pin.png',
+      iconUrl: `${MAP_BASE}customer-house-pin.png`,
       iconSize: [40, 48],
       iconAnchor: [20, 48],
       popupAnchor: [0, -40],
@@ -151,7 +170,7 @@ function getCustomerIcon() {
 function getCourierIcon() {
   if (!courierIcon) {
     courierIcon = L.icon({
-      iconUrl: '/media/map/courier-pin.png',
+      iconUrl: `${MAP_BASE}courier-pin.png`,
       iconSize: [40, 48],
       iconAnchor: [20, 48],
       popupAnchor: [0, -40],
@@ -161,98 +180,176 @@ function getCourierIcon() {
   return courierIcon;
 }
 
-function scheduleRouteFetch() {
+function courierPlausibleOnRoute() {
+  return isGpsPlausibleForRoute(
+    props.courierLat,
+    props.courierLng,
+    props.storeLat,
+    props.storeLng,
+    props.destLat,
+    props.destLng,
+  );
+}
+
+/** Remove só as linhas do mapa — não apagar dados da rota (leg1/leg2) */
+function clearRoutePolylines() {
+  for (const line of routePolylines) {
+    layerGroup?.removeLayer(line);
+  }
+  routePolylines = [];
+}
+
+function hasCourierGps() {
+  return Number.isFinite(props.courierLat)
+    && Number.isFinite(props.courierLng)
+    && !(props.courierLat === 0 && props.courierLng === 0);
+}
+
+function allPointsForBounds() {
+  const pts = [[props.storeLat, props.storeLng], [props.destLat, props.destLng]];
+  if (hasCourierGps()) {
+    pts.push([props.courierLat, props.courierLng]);
+  }
+  if (routeLeg1?.length) routeLeg1.forEach((p) => pts.push(p));
+  if (routeLeg2?.length) routeLeg2.forEach((p) => pts.push(p));
+  if (routeLatLngs?.length) routeLatLngs.forEach((p) => pts.push(p));
+  return pts;
+}
+
+async function scheduleRouteFetch() {
   if (!map || !layerGroup || !validCoords()) return;
 
   routeAbort?.abort();
   routeAbort = new AbortController();
   const keySnapshot = coordsKey();
+  const signal = routeAbort.signal;
 
-  if (!props.roadRoute) {
-    routeLatLngs = null;
-    boundsKey = '';
-    drawLayers();
-    return;
-  }
+  const store = [props.storeLat, props.storeLng];
+  const dest = [props.destLat, props.destLng];
+  const courier = hasCourierGps() ? [props.courierLat, props.courierLng] : null;
 
+  routeLeg2 = straightLinePoints(store, dest);
+  routeLeg1 = courier ? straightLinePoints(courier, store) : null;
   routeLatLngs = null;
   boundsKey = '';
-  drawLayers();
+  drawLayers({ refitBounds: !didInitialBoundsFit });
 
-  const url = `${OSRM_BASE}/${props.routeProfile}/${props.storeLng},${props.storeLat};${props.destLng},${props.destLat}?overview=full&geometries=geojson`;
+  if (!props.roadRoute) return;
 
-  fetch(url, { signal: routeAbort.signal })
-    .then((r) => r.json())
-    .then((data) => {
-      if (coordsKey() !== keySnapshot) return;
-      if (data.code !== 'Ok' || !data.routes?.[0]?.geometry?.coordinates?.length) {
-        routeLatLngs = null;
-      } else {
-        routeLatLngs = data.routes[0].geometry.coordinates.map(([lng, lat]) => [lat, lng]);
-      }
-      boundsKey = '';
-      drawLayers();
-    })
-    .catch((e) => {
-      if (e.name === 'AbortError') return;
-      if (coordsKey() !== keySnapshot) return;
-      routeLatLngs = null;
-      boundsKey = '';
-      drawLayers();
-    });
+  try {
+    routeLeg2 = await fetchStoreToDestLeg(store, dest, signal);
+    if (courier) {
+      const legs = await fetchDeliveryLegs(courier, store, dest, signal);
+      if (coordsKey() !== keySnapshot || signal.aborted) return;
+      routeLeg1 = legs.leg1;
+      routeLeg2 = legs.leg2;
+    }
+    if (coordsKey() !== keySnapshot || signal.aborted) return;
+    drawLayers({ refitBounds: !mapViewLocked });
+  } catch (e) {
+    if (e.name === 'AbortError') return;
+    if (courier) {
+      const fallback = deliveryLegsStraightLine(courier, store, dest);
+      routeLeg1 = fallback.leg1;
+      routeLeg2 = fallback.leg2;
+    }
+    drawLayers({ refitBounds: !mapViewLocked });
+  }
 }
 
-function drawLayers() {
+function courierLatLng() {
+  if (hasCourierGps()) return [props.courierLat, props.courierLng];
+  if (props.courierProgress < 0) return null;
+  const linePoints = polylinePointsForDraw();
+  const p = Math.min(1, Math.max(0, props.courierProgress / 100));
+  if (p > 0 && p < 1) return pointAlongPolyline(linePoints, p);
+  return null;
+}
+
+function maybeFitBounds(linePoints, force = false) {
+  if (!map || mapViewLocked) return;
+  const key = `${coordsKey()}|${routeLatLngs ? 'r' : 's'}`;
+  if (!force && key === boundsKey && didInitialBoundsFit) return;
+  boundsKey = key;
+  const bounds = L.latLngBounds(linePoints).pad(0.18);
+  map.fitBounds(bounds, { animate: false });
+  didInitialBoundsFit = true;
+}
+
+function updateCourierMarker() {
+  if (!map || !layerGroup || !validCoords()) return;
+  if (courierMarker) {
+    layerGroup.removeLayer(courierMarker);
+    courierMarker = null;
+  }
+  const pos = courierLatLng();
+  if (!pos) return;
+  courierMarker = L.marker(pos, { icon: getCourierIcon() })
+    .addTo(layerGroup)
+    .bindTooltip('Estafeta (GPS)', { permanent: false, direction: 'right' });
+}
+
+function drawLayers({ refitBounds = false } = {}) {
   if (!map || !layerGroup || !validCoords()) return;
 
-  layerGroup.clearLayers();
+  clearRoutePolylines();
+  if (storeMarker) {
+    layerGroup.removeLayer(storeMarker);
+    storeMarker = null;
+  }
+  if (destMarker) {
+    layerGroup.removeLayer(destMarker);
+    destMarker = null;
+  }
 
   const storeLatLng = [props.storeLat, props.storeLng];
   const destLatLng = [props.destLat, props.destLng];
-  const linePoints = polylinePointsForDraw();
 
-  L.polyline(linePoints, {
-    color: '#10b981',
-    weight: 4,
-    opacity: 0.75,
-    dashArray: '10 8',
-    lineCap: 'round',
-    lineJoin: 'round',
-  }).addTo(layerGroup);
+  if (routeLeg2?.length) {
+    routePolylines = [];
+    if (routeLeg1?.length) {
+      const line1 = L.polyline(routeLeg1, {
+        color: '#38bdf8',
+        weight: 4,
+        opacity: 0.85,
+        dashArray: '12 10',
+        lineCap: 'round',
+        lineJoin: 'round',
+      }).addTo(layerGroup);
+      routePolylines.push(line1);
+    }
+    const line2 = L.polyline(routeLeg2, {
+      color: '#f97316',
+      weight: 6,
+      opacity: 0.92,
+      lineCap: 'round',
+      lineJoin: 'round',
+    }).addTo(layerGroup);
+    routePolylines.push(line2);
+  } else {
+    const linePoints = polylinePointsForDraw();
+    const line = L.polyline(linePoints, {
+      color: '#10b981',
+      weight: 5,
+      opacity: 0.9,
+      dashArray: routeLatLngs ? null : '10 8',
+      lineCap: 'round',
+      lineJoin: 'round',
+    }).addTo(layerGroup);
+    routePolylines = [line];
+  }
 
-  L.marker(storeLatLng, { icon: getStoreIcon() })
+  storeMarker = L.marker(storeLatLng, { icon: getStoreIcon() })
     .addTo(layerGroup)
     .bindTooltip('Loja', { permanent: false, direction: 'top' });
 
-  L.marker(destLatLng, { icon: getCustomerIcon() })
+  destMarker = L.marker(destLatLng, { icon: getCustomerIcon() })
     .addTo(layerGroup)
     .bindTooltip('Destino', { permanent: false, direction: 'top' });
 
-  // GPS real do estafeta (prioridade) ou fallback por progresso
-  const hasRealGps = props.courierLat != null && props.courierLng != null
-    && Number.isFinite(props.courierLat) && Number.isFinite(props.courierLng)
-    && props.courierLat !== 0 && props.courierLng !== 0;
+  updateCourierMarker();
 
-  if (hasRealGps) {
-    L.marker([props.courierLat, props.courierLng], { icon: getCourierIcon() })
-      .addTo(layerGroup)
-      .bindTooltip('Estafeta (GPS real)', { permanent: false, direction: 'right' });
-  } else {
-    const p = Math.min(1, Math.max(0, props.courierProgress / 100));
-    if (p > 0 && p < 1) {
-      const [clat, clng] = pointAlongPolyline(linePoints, p);
-      L.marker([clat, clng], { icon: getCourierIcon() })
-        .addTo(layerGroup)
-        .bindTooltip('Estafeta (indicativo)', { permanent: false, direction: 'right' });
-    }
-  }
-
-  const key = `${coordsKey()}|${routeLatLngs ? 'r' : 's'}`;
-  const bounds = L.latLngBounds(linePoints).pad(0.18);
-  if (key !== boundsKey) {
-    boundsKey = key;
-    map.fitBounds(bounds, { animate: false });
-  }
+  if (refitBounds) maybeFitBounds(allPointsForBounds(), true);
 }
 
 function initMap() {
@@ -268,17 +365,17 @@ function initMap() {
     map.setView([41.15, -8.63], 10);
   }
 
-  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-    maxZoom: 19,
-    attribution:
-      '&copy; <a href="https://www.openstreetmap.org/copyright" rel="noreferrer">OpenStreetMap</a>',
-  }).addTo(map);
+  L.tileLayer(LEAFLET_LIGHT_TILE.url, LEAFLET_LIGHT_TILE.options).addTo(map);
 
   map.attributionControl.addAttribution(
     'Rotas © <a href="https://project-osrm.org/" rel="noreferrer">OSRM</a>'
   );
 
   layerGroup = L.layerGroup().addTo(map);
+  map.on('dragstart', () => { mapViewLocked = true; });
+  map.on('zoomstart', (ev) => {
+    if (ev?.originalEvent) mapViewLocked = true;
+  });
   scheduleRouteFetch();
 
   setTimeout(() => map?.invalidateSize(), 100);
@@ -288,6 +385,12 @@ function destroyMap() {
   routeAbort?.abort();
   routeAbort = null;
   routeLatLngs = null;
+  storeMarker = null;
+  destMarker = null;
+  courierMarker = null;
+  routePolylines = [];
+  mapViewLocked = false;
+  didInitialBoundsFit = false;
   if (map) {
     map.remove();
     map = null;
@@ -297,17 +400,33 @@ function destroyMap() {
 }
 
 watch(
-  () => [props.storeLat, props.storeLng, props.destLat, props.destLng, props.roadRoute, props.routeProfile],
+  () => [
+    props.storeLat,
+    props.storeLng,
+    props.destLat,
+    props.destLng,
+    props.roadRoute,
+    props.routeProfile,
+    hasCourierGps() ? Math.round(props.courierLat * 500) / 500 : null,
+    hasCourierGps() ? Math.round(props.courierLng * 500) / 500 : null,
+  ],
   () => {
     if (map && layerGroup) scheduleRouteFetch();
-  }
+  },
 );
 
 watch(
-  () => [props.courierProgress, props.courierLat, props.courierLng, props.dimTiles],
+  () => [props.courierProgress, props.courierLat, props.courierLng],
   () => {
-    if (map && layerGroup) drawLayers();
-  }
+    if (map && layerGroup) updateCourierMarker();
+  },
+);
+
+watch(
+  () => props.dimTiles,
+  () => {
+    if (map && layerGroup) updateCourierMarker();
+  },
 );
 
 watch(

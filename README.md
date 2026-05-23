@@ -13,7 +13,7 @@ Este repositório está organizado para trabalho em equipa (5 elementos):
 - `Front-Office/` — site público (Vue 3 + Vite). Dentro de `src/`: `views/` (ecrãs por rota), `components/`, `stores/`, `router/`, `utils/`, `config/`, `styles/`.
 - `Back-Office/` — consola de administração (Vue 3 + Vite). Mesma ideia: `views/`, `layouts/`, `components/`, `stores/`, etc.
 - `PWA/` — PWA dos estafetas; projeto ativo em `PWA/estafeta-app/`.
-- `backend/` — API Strapi (não é Vue).
+- `backend/` — API Strapi em **JavaScript** (`.js`; sem TypeScript no código do projeto).
 
 ## Regras rápidas para evitar conflitos
 

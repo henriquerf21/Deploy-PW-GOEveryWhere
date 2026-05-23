@@ -3,11 +3,9 @@
     <SiteHeader />
 
     <main class="cf-checkout-main tracking-main">
-      <header class="track-head" style="display: flex; justify-content: space-between; align-items: flex-end;">
-        <div>
-          <p class="cf-checkout-kicker">Em tempo real</p>
-          <h1 class="cf-checkout-title">Acompanhamento</h1>
-        </div>
+      <header class="track-head">
+        <p class="cf-checkout-kicker">Em tempo real</p>
+        <h1 class="cf-checkout-title">Acompanhamento</h1>
       </header>
 
       <div class="cf-tabs" role="tablist">
@@ -16,6 +14,10 @@
       </div>
 
       <div v-if="order" class="tracking-layout">
+        <div v-if="isImpossibleReview" class="impossible-review-banner" role="status">
+          <strong>Incidente antes da recolha</strong>
+          <p>O estafeta reportou um problema. A nossa equipa está a analisar e pode atribuir outro estafeta — não precisas de fazer nada por agora.</p>
+        </div>
         <div class="map-card">
           <div class="map-leaflet-host">
             <DeliveryRouteMap
@@ -27,7 +29,7 @@
               :dest-lng="trackingMapCoords.destLng"
               :courier-lat="courierGps.lat"
               :courier-lng="courierGps.lng"
-              :courier-progress="displayProgress"
+              :courier-progress="mapCourierProgress"
               height="300px"
             />
           </div>
@@ -307,11 +309,18 @@ import SiteHeader from '../components/SiteHeader.vue';
 import SiteFooter from '../components/SiteFooter.vue';
 import DeliveryRouteMap from '../components/DeliveryRouteMap.vue';
 import { getDestinationLatLng } from '../utils/mapCoords.js';
+import { CONTINENTE_STORES_STATIC } from '../data/continent-stores.js';
+import { resolveStoreCoords } from '../utils/storeCoords.js';
+import { CONTINENTE_STORES, fetchStores } from '../stores/orderStore.js';
 import { ref, computed, reactive, onMounted, onUnmounted, watch } from 'vue';
 import { useRouter } from 'vue-router';
-import { useOrderStore, ORDER_STATES, DELIVERY_ACCEPTED_STATUSES, fetchUserOrders, cancelActiveOrder, replyToInfoRequest, sendChatMessage, socket, acknowledgeActiveOrder } from '../stores/orderStore.js';
+import {
+  useOrderStore, ORDER_STATES, DELIVERY_ACCEPTED_STATUSES, fetchUserOrders,
+  cancelActiveOrder, replyToInfoRequest, sendChatMessage, socket, acknowledgeActiveOrder,
+} from '../stores/orderStore.js';
 import { requestNotificationPermission, notifyOrderStateChange, sendNotification } from '../utils/notifications.js';
 import { API_URL, BACKEND_URL } from '../config/env.js';
+import authState from '../stores/authStore.js';
 
 const router = useRouter();
 const store = useOrderStore();
@@ -319,17 +328,27 @@ const store = useOrderStore();
 const order = computed(() => store.activeOrder);
 const toastMessage = ref('');
 let pollingTimer = null;
+let gpsPollTimer = null;
 let currentOrderRoom = null;
 
-// Removed manual refresh variables
+watch(() => order.value?.courierGpsLat, () => syncCourierGpsFromOrder());
+watch(() => order.value?.delivery, () => syncCourierGpsFromOrder(), { deep: true });
 
 // ── GPS REAL DO ESTAFETA ────────────────────────────────────────────
 const courierGps = reactive({ lat: null, lng: null });
 const dynamicEta = ref(0);
+let lastGpsSocketAt = 0;
+const GPS_SOCKET_GUARD_MS = 15000;
 
 const isInTransitPhase = computed(() => {
   if (!order.value) return false;
   return ['S-07', 'S-08', 'S-09', 'S-10'].includes(order.value.status);
+});
+
+/** Sem GPS real, não interpolar estafeta na linha (evita pin a meio do percurso) */
+const mapCourierProgress = computed(() => {
+  if (courierGps.lat != null && courierGps.lng != null) return 0;
+  return -1;
 });
 
 function haversineKm(lat1, lng1, lat2, lng2) {
@@ -340,31 +359,60 @@ function haversineKm(lat1, lng1, lat2, lng2) {
   return 2 * R * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
 }
 
+function readGpsFromDeliveryEntity(delivery) {
+  if (!delivery) return null;
+  const attrs = delivery.attributes || delivery;
+  const lat = Number(attrs.courierLatitude);
+  const lng = Number(attrs.courierLongitude);
+  if (!Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) return null;
+  return { lat, lng };
+}
+
+function syncCourierGpsFromOrder() {
+  if (Date.now() - lastGpsSocketAt < GPS_SOCKET_GUARD_MS) return;
+  const o = order.value;
+  if (!o) return;
+  if (o.courierGpsLat != null && o.courierGpsLng != null) {
+    updateGpsCoords(o.courierGpsLat, o.courierGpsLng);
+    return;
+  }
+  const fromDelivery = readGpsFromDeliveryEntity(o.delivery);
+  if (fromDelivery) updateGpsCoords(fromDelivery.lat, fromDelivery.lng);
+}
+
 async function fetchCourierGps() {
   if (!order.value?.documentId) return;
+  if (Date.now() - lastGpsSocketAt < GPS_SOCKET_GUARD_MS && courierGps.lat != null) return;
+  syncCourierGpsFromOrder();
+  if (courierGps.lat != null && courierGps.lng != null) return;
+
   try {
-    const res = await fetch(`${API_URL}/deliveries?filters[order][documentId][$eq]=${order.value.documentId}&fields[0]=courierLatitude&fields[1]=courierLongitude&status=published`);
+    const params = new URLSearchParams({
+      'filters[order][documentId][$eq]': order.value.documentId,
+      'pagination[pageSize]': '1',
+    });
+    const headers = { 'Content-Type': 'application/json' };
+    if (authState.token) headers.Authorization = `Bearer ${authState.token}`;
+    const res = await fetch(`${API_URL}/deliveries?${params}`, { headers });
+    if (!res.ok) return;
     const json = await res.json();
-    const deliveryData = json.data?.[0];
-    const attrs = deliveryData?.attributes || deliveryData || {};
-    const lat = parseFloat(attrs.courierLatitude);
-    const lng = parseFloat(attrs.courierLongitude);
-    updateGpsCoords(lat, lng);
-  } catch (err) {
-    // Silently fail — fallback to progress-based position
+    const row = json.data?.[0];
+    const attrs = row?.attributes || row || {};
+    updateGpsCoords(Number(attrs.courierLatitude), Number(attrs.courierLongitude));
+  } catch {
+    /* sem GPS — mapa mostra só loja, cliente e rota */
   }
 }
 
 function updateGpsCoords(lat, lng) {
-  if (Number.isFinite(lat) && Number.isFinite(lng) && lat !== 0 && lng !== 0) {
-    courierGps.lat = lat;
-    courierGps.lng = lng;
-    const coords = trackingMapCoords.value;
-    if (coords) {
-      const distKm = haversineKm(lat, lng, coords.destLat, coords.destLng);
-      dynamicEta.value = Math.max(1, Math.round(5 + distKm * 2.5));
-    }
+  const coords = trackingMapCoords.value;
+  if (!coords || !Number.isFinite(lat) || !Number.isFinite(lng) || (lat === 0 && lng === 0)) {
+    return;
   }
+  courierGps.lat = lat;
+  courierGps.lng = lng;
+  const distKm = haversineKm(lat, lng, coords.destLat, coords.destLng);
+  dynamicEta.value = Math.max(1, Math.round(5 + distKm * 2.5));
 }
 
 function handleAcknowledgeAndGo(path) {
@@ -372,15 +420,16 @@ function handleAcknowledgeAndGo(path) {
   router.push(path);
 }
 
-async function refreshOrderAndCourierData() {
+async function refreshOrderAndCourierData({ silent = true } = {}) {
   const previousStatus = order.value?.status;
-  await fetchUserOrders();
+  await fetchUserOrders({ silent });
   if (order.value?.status && previousStatus && order.value.status !== previousStatus) {
     showStateToast(order.value.status);
     notifyOrderStateChange(order.value.id, order.value.status, ORDER_STATES[order.value.status]);
   }
   if (order.value) {
     fetchCourierInfo();
+    if (isInTransitPhase.value) syncCourierGpsFromOrder();
   }
 }
 
@@ -530,17 +579,15 @@ function goToNewOrder() {
 
 // ── CICLO DE VIDA ──────────────────────────────────────────────────
 onMounted(async () => {
-  // RF13: Pedir permissão para notificações do browser
   requestNotificationPermission();
-
+  await fetchStores();
   await fetchUserOrders();
   // Atualiza estado de aceitação/estafeta através da Delivery.
   if (order.value) {
     fetchCourierInfo();
   }
-  // Fetch GPS real do estafeta se já em trânsito
   if (order.value && isInTransitPhase.value) {
-    fetchCourierGps();
+    await fetchCourierGps();
   }
 
   // Ligar aos websockets para atualizações imediatas
@@ -551,20 +598,53 @@ onMounted(async () => {
   }
 
   socket.on('gps_update', (data) => {
-    if (data.lat && data.lng) {
-      updateGpsCoords(data.lat, data.lng);
-    }
+    if (data.lat == null || data.lng == null) return;
+    const room = order.value?.documentId != null ? String(order.value.documentId) : '';
+    if (data.room != null && room && String(data.room) !== room) return;
+    lastGpsSocketAt = Date.now();
+    updateGpsCoords(Number(data.lat), Number(data.lng));
   });
+
+  if (isInTransitPhase.value) {
+    gpsPollTimer = setInterval(() => {
+      if (order.value && isInTransitPhase.value) void fetchCourierGps();
+    }, 5000);
+  }
 
   socket.on('order_status_update', async (data) => {
     if (!order.value?.documentId || !data?.room) return;
     if (String(data.room) !== String(order.value.documentId)) return;
-    await refreshOrderAndCourierData();
+    if (data.status) {
+      const code = String(data.status).substring(0, 4);
+      if (ORDER_STATES[code]) {
+        const prev = order.value.status;
+        order.value.status = code;
+        if (prev !== code) {
+          showStateToast(code);
+          notifyOrderStateChange(order.value.id, code, ORDER_STATES[code]);
+        }
+        fetchCourierInfo();
+        return;
+      }
+    }
+    await refreshOrderAndCourierData({ silent: true });
   });
 
-  socket.on('global_order_status_update', async () => {
+  socket.on('global_order_status_update', async (data) => {
     if (!order.value?.documentId) return;
-    await refreshOrderAndCourierData();
+    const room = data?.room != null ? String(data.room) : '';
+    if (room && room !== String(order.value.documentId)) return;
+    if (data?.status) {
+      const code = String(data.status).substring(0, 4);
+      if (ORDER_STATES[code] && order.value.status !== code) {
+        order.value.status = code;
+        showStateToast(code);
+        notifyOrderStateChange(order.value.id, code, ORDER_STATES[code]);
+        void fetchCourierInfo();
+        return;
+      }
+    }
+    await refreshOrderAndCourierData({ silent: true });
   });
 
   socket.on('chat_message', (data) => {
@@ -574,11 +654,12 @@ onMounted(async () => {
       if (data.message?.sender === 'courier') {
         if (!openChat.value) {
           showStateToast('Nova mensagem do estafeta!');
+          sendNotification('GoEverywhere — Nova mensagem', {
+            body: String(data.message.text || '').slice(0, 160),
+            tag: `chat-${order.value.documentId}`,
+            onClick: () => { openChat.value = true; },
+          });
         }
-        sendNotification('GoEverywhere — Nova Mensagem', {
-          body: data.message.text,
-          onClick: () => { openChat.value = true; }
-        });
       }
 
       if (openChat.value) {
@@ -594,20 +675,19 @@ onMounted(async () => {
   pollingTimer = setInterval(async () => {
     if (order.value && !ORDER_STATES[order.value.status]?.terminal) {
       const oldStatus = order.value.status;
-      await fetchUserOrders();
+      await fetchUserOrders({ silent: true });
       if (order.value && order.value.status !== oldStatus) {
         showStateToast(order.value.status);
-        // RF13: Notificação nativa do browser em cada mudança de estado
         notifyOrderStateChange(order.value.id, order.value.status, ORDER_STATES[order.value.status]);
       }
-      // Revalida sempre o estado da delivery para mostrar/esconder estafeta corretamente.
       if (order.value) fetchCourierInfo();
     }
-  }, 30000); // RNF02 relaxed: Polling de estado cai para 30s pois o GPS agora usa WebSockets (5s)
+  }, 60000);
 });
 
 onUnmounted(() => {
   clearInterval(pollingTimer);
+  clearInterval(gpsPollTimer);
   socket.off('gps_update');
   socket.off('order_status_update');
   socket.off('global_order_status_update');
@@ -619,6 +699,16 @@ onUnmounted(() => {
 });
 
 // ── COMPUTED ────────────────────────────────────────────────────────
+function deliveryStatusCode(o) {
+  const del = o?.delivery;
+  const raw = del?.delivery_status || del?.attributes?.delivery_status || '';
+  return String(raw).substring(0, 4);
+}
+
+const isImpossibleReview = computed(() => (
+  order.value?.status === 'S-06' && deliveryStatusCode(order.value) === 'E-14'
+));
+
 const currentStateData = computed(() => order.value ? ORDER_STATES[order.value.status] : null);
 
 const routeProgress = computed(() => {
@@ -663,33 +753,47 @@ watch(routeProgress, (newVal) => {
   animationFrame = requestAnimationFrame(animate);
 }, { immediate: true });
 
-// Reset the "sent" success message if the order status transitions back to S-03 (new admin request)
-watch(() => order.value?.status, (newStatus, oldStatus) => {
-  if (newStatus === 'S-03' && oldStatus !== 'S-03') {
-    s03Sent.value = false;
-  }
-});
-
 const trackingMapCoords = computed(() => {
   const o = order.value;
   if (!o) return null;
 
-  // Usar coordenadas reais guardadas na submissão da encomenda
   const dc = o.deliveryCoords;
-  if (dc?.storeLat && dc?.storeLng && dc?.destLat && dc?.destLng) {
-    return {
-      storeLat: dc.storeLat,
-      storeLng: dc.storeLng,
-      destLat: dc.destLat,
-      destLng: dc.destLng,
-    };
+  let storeLat = null;
+  let storeLng = null;
+  let destLat = null;
+  let destLng = null;
+
+  if (dc?.storeLat != null && dc?.storeLng != null) {
+    storeLat = Number(dc.storeLat);
+    storeLng = Number(dc.storeLng);
+  } else if (o.storeLatitude != null && o.storeLongitude != null) {
+    storeLat = Number(o.storeLatitude);
+    storeLng = Number(o.storeLongitude);
+  } else {
+    const catalog = CONTINENTE_STORES.length ? CONTINENTE_STORES : CONTINENTE_STORES_STATIC;
+    const resolved = resolveStoreCoords(o.store, catalog);
+    if (resolved) {
+      storeLat = resolved.lat;
+      storeLng = resolved.lng;
+    }
   }
 
-  // Fallback para encomendas antigas sem coordenadas guardadas
-  const storeLat = 41.5518;
-  const storeLng = -8.4229;
-  const dest = getDestinationLatLng(o.delivery || {}, storeLat, storeLng);
-  return { storeLat, storeLng, destLat: dest.lat, destLng: dest.lng };
+  if (dc?.destLat != null && dc?.destLng != null) {
+    destLat = Number(dc.destLat);
+    destLng = Number(dc.destLng);
+  } else if (o.deliveryLatitude != null && o.deliveryLongitude != null) {
+    destLat = Number(o.deliveryLatitude);
+    destLng = Number(o.deliveryLongitude);
+  }
+
+  if (storeLat == null) return null;
+  if (destLat == null) {
+    const dest = getDestinationLatLng(o.delivery || {}, storeLat, storeLng);
+    destLat = dest.lat;
+    destLng = dest.lng;
+  }
+
+  return { storeLat, storeLng, destLat, destLng };
 });
 
 const timelineSteps = computed(() => {
@@ -920,6 +1024,23 @@ function showStateToast(newState) {
 .track-head {
   margin-bottom: 1.5rem;
   max-width: 36rem;
+}
+
+.impossible-review-banner {
+  grid-column: 1 / -1;
+  margin-bottom: 0.5rem;
+  padding: 14px 16px;
+  border-radius: var(--cf-radius-lg);
+  border: 1px solid #fcd34d;
+  background: #fffbeb;
+  color: #92400e;
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.impossible-review-banner strong {
+  display: block;
+  margin-bottom: 4px;
 }
 
 .tracking-layout {
