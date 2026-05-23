@@ -170,7 +170,18 @@ exports.default = strapi_1.factories.createCoreController('api::order.order', ({
         }
     },
     async appendChatMessage(ctx) {
-        const user = ctx.state.user;
+        let user = ctx.state.user;
+        if (!user && ctx.request.header.authorization) {
+            try {
+                const token = ctx.request.header.authorization.split(' ')[1];
+                const decoded = await strapi.plugins['users-permissions'].services.jwt.verify(token);
+                if (decoded && decoded.id) {
+                    user = await strapi.db.query('plugin::users-permissions.user').findOne({ where: { id: decoded.id } });
+                }
+            } catch (e) {
+                // ignore
+            }
+        }
         if (!user)
             return ctx.unauthorized();
         const documentId = String(ctx.params.documentId || '').trim();
