@@ -1,3 +1,15 @@
+# Backend (Strapi) — GoEverywhere
+
+## Runtime em JavaScript
+
+- **API e plugins custom:** só ficheiros **`.js`** em `config/`, `src/api/`, `src/extensions/`, `src/index.js`, etc.
+- **IDE:** `jsconfig.json` na raiz do backend (não há `tsconfig.json` aqui).
+- **Painel admin Strapi** (`src/admin/`): build interno do Strapi; `src/admin/tsconfig.json` é só para esse UI (React), não para a API.
+- **`types/generated/*.d.ts`:** tipos gerados pelo Strapi para autocomplete — **não são executados** em runtime.
+- Ficheiros **`.ts` / `.tsx`** na API estão no `.gitignore` e não devem ser commitados.
+
+---
+
 # 🚀 Getting started with Strapi
 
 Strapi comes with a full featured [Command Line Interface](https://docs.strapi.io/dev-docs/cli) (CLI) which lets you scaffold and manage your project in seconds.
