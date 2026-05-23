@@ -365,6 +365,36 @@ exports.default = strapi_1.factories.createCoreController('api::courier-estafeta
             return handleCourierError(ctx, strapi, err, 'myDeliveries');
         }
     },
+    async myCompletedDeliveries(ctx) {
+        try {
+            const auth = await getCourierAuth(strapi, ctx);
+            if (!auth)
+                return ctx.unauthorized('Token de estafeta inválido.');
+            const courier = await findPublishedCourier(strapi, auth.courierDocumentId);
+            if (!courier)
+                return ctx.notFound('Estafeta não encontrado.');
+            const deliveries = await strapi.documents('api::delivery.delivery').findMany({
+                status: 'published',
+                filters: {
+                    courier: { documentId: auth.courierDocumentId },
+                    delivery_status: {
+                        $in: ['E-13 Entrega Confirmada', 'E-14 Entrega Impossível'],
+                    },
+                },
+                populate: {
+                    order: {
+                        populate: { user: true, review: true },
+                    },
+                    courier: true,
+                },
+                sort: { endTime: 'desc' },
+            });
+            ctx.body = { data: deliveries };
+        }
+        catch (err) {
+            return handleCourierError(ctx, strapi, err, 'myCompletedDeliveries');
+        }
+    },
     async login(ctx) {
         try {
             const body = (ctx.request.body || {});

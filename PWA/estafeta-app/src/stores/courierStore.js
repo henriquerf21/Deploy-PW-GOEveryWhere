@@ -320,7 +320,8 @@ function mapDelivery(d) {
             if (!order || !order.id) return DELIVERY_STATE.E14; // Orfão / Pedido eliminado
             
             const oStatus = String(attrs.order?.data?.attributes?.order_status || attrs.order?.order_status || order.order_status || '').toUpperCase();
-            if (['DELIVERED', 'S-11'].includes(oStatus) || oStatus.includes('ENTREGUE')) {
+            const oCode = oStatus.slice(0, 4);
+            if (['S-11', 'S-15', 'S-16'].includes(oCode) || oStatus.includes('ENTREGUE')) {
                 return DELIVERY_STATE.E13;
             } else if (['REJECTED', 'CANCELLED_ADMIN', 'CANCELLED_CLIENT', 'S-12', 'S-13'].includes(oStatus) || oStatus.includes('CANCEL') || oStatus.includes('REJEIT')) {
                 return DELIVERY_STATE.E14;
@@ -581,7 +582,10 @@ export async function login(phone, countryCode, password) {
 
         // 4. Load deliveries; keep server presence (do not force pause on login)
         store.activeDeliveryId = null;
-        await fetchDeliveries({ silent: true });
+        await Promise.all([
+            fetchDeliveries({ silent: true }),
+            fetchCompletedDeliveries(),
+        ]);
         if (hasActiveDeliveryInProgress() && !isPaused()) {
             startGpsTracking();
         }
@@ -694,7 +698,7 @@ export async function fetchDeliveries(options = {}) {
 export async function fetchCompletedDeliveries() {
     if (!store.courierId) return [];
     try {
-        const res = await apiGet(`/deliveries?filters[delivery_status][$in][0]=${encodeURIComponent('E-13 Entrega Confirmada')}&filters[delivery_status][$in][1]=${encodeURIComponent('E-14 Entrega Impossível')}&filters[courier][documentId][$eq]=${store.profile.documentId || store.courierId}&populate[order][populate][0]=user&populate[order][populate][1]=review&sort=endTime:desc&status=published`);
+        const res = await apiGet('/courier-estafetas/my-completed-deliveries');
         const deliveries = (res.data || []).map(d => mapDelivery(d));
         await enrichDeliveriesRouteKm(deliveries);
         store.completedDeliveries = deliveries;
@@ -842,6 +846,7 @@ export async function confirmDelivery(deliveryId, confirmation) {
             }
 
         await updateDeliveryOnStrapi(d, 'E-13', extraData);
+        void fetchCompletedDeliveries();
 
         // Update courier totalDeliveries
         if (store.profile.documentId) {
@@ -1425,7 +1430,10 @@ export function wazeLink(lat, lng) {
 
 // ── Init: load deliveries if already logged in ───────────────────
 if (store.auth.loggedIn && store.courierId) {
-    fetchDeliveries({ silent: true }).then(() => {
+    Promise.all([
+        fetchDeliveries({ silent: true }),
+        fetchCompletedDeliveries(),
+    ]).then(() => {
         if (hasActiveDeliveryInProgress()) {
             if (!isPaused()) restartGpsTracking();
             else if (store.profile.state !== COURIER_STATE.E07) {

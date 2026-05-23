@@ -15,6 +15,12 @@ exports.default = {
             config: { auth: false },
         },
         {
+            method: 'GET',
+            path: '/courier-estafetas/my-completed-deliveries',
+            handler: 'courier-estafeta.myCompletedDeliveries',
+            config: { auth: false },
+        },
+        {
             method: 'PUT',
             path: '/courier-estafetas/deliveries/:id',
             handler: 'courier-estafeta.courierUpdateDelivery',
