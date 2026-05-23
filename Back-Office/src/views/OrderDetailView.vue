@@ -356,7 +356,6 @@
               </div>
               <div class="bo-row">
                 <button v-if="canReassignCourier" type="button" class="bo-btn bo-btn--primary" :disabled="!pickCourier" @click="doAssign">{{ order.courierName ? 'Re-atribuir' : 'Atribuir' }}</button>
-                <button v-if="order.status === ORDER_STATUS.ASSIGNED" type="button" class="bo-btn bo-btn--outline" @click="doStartTransit">Marcar em trânsito</button>
               </div>
             </fieldset>
           </div>
