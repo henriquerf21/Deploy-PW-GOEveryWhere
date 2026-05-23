@@ -12,6 +12,7 @@ const OrderDetailView = () => import('../views/OrderDetailView.vue');
 const CourierDetailView = () => import('../views/CourierDetailView.vue');
 const OperationsMapView = () => import('../views/OperationsMapView.vue');
 const CustomersView = () => import('../views/CustomersView.vue');
+const CustomerDetailView = () => import('../views/CustomerDetailView.vue');
 const NotificationsView = () => import('../views/NotificationsView.vue');
 
 const routes = [
@@ -31,6 +32,7 @@ const routes = [
       { path: 'couriers/:id', name: 'courier-detail', component: CourierDetailView, meta: { title: 'Estafeta' } },
       { path: 'map', name: 'map', component: OperationsMapView, meta: { title: 'Mapa de Operações' } },
       { path: 'customers', name: 'customers', component: CustomersView, meta: { title: 'Clientes' } },
+      { path: 'customers/:id', name: 'customer-detail', component: CustomerDetailView, meta: { title: 'Detalhe de Cliente' } },
       { path: 'notifications', name: 'notifications', component: NotificationsView, meta: { title: 'Notificações' } },
     ],
   },

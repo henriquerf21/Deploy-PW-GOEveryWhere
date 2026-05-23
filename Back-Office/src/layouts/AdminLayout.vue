@@ -123,12 +123,12 @@ const frontOfficeUrl = import.meta.env.VITE_FRONT_OFFICE_URL || 'http://localhos
 
 const nav = [
   { name: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
+  { name: 'map', label: 'Mapa', icon: MapPinned },
   { name: 'notifications', label: 'Notificações', icon: Bell },
-  { name: 'products', label: 'Produtos', icon: Package },
   { name: 'orders', label: 'Pedidos', icon: ClipboardList },
   { name: 'couriers', label: 'Estafetas', icon: Bike },
-  { name: 'map', label: 'Mapa', icon: MapPinned },
   { name: 'customers', label: 'Clientes', icon: Users },
+  { name: 'products', label: 'Produtos', icon: Package },
 ];
 
 const pageTitle = computed(() => {

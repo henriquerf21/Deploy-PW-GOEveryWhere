@@ -777,17 +777,28 @@ export async function acceptDelivery(deliveryId) {
 }
 
 export async function advanceDeliveryState(deliveryId) {
-    const d = store.deliveries.find(x => String(x.id) === String(deliveryId));
-    if (!d) return false;
+    const d = getDeliveryById(deliveryId);
+    if (!d) throw new Error('Entrega não encontrada no estado local.');
     const next = NEXT_STATE[d.state];
-    if (!next || next === 'E-13') return false;
+    if (!next || next === 'E-13') throw new Error('Não é possível avançar o estado.');
+
+    const prevState = d.state;
+    const prevTimestamps = { ...d.timestamps };
 
     const now = new Date().toISOString();
     d.state = next;
     d.timestamps[next] = now;
     saveState();
 
-    await updateDeliveryOnStrapi(d, next, { timestamps: d.timestamps });
+    try {
+        await updateDeliveryOnStrapi(d, next, { timestamps: d.timestamps });
+    } catch (err) {
+        // Revert local state on error
+        d.state = prevState;
+        d.timestamps = prevTimestamps;
+        saveState();
+        throw err;
+    }
 
     if (next === 'E-14') {
         store.activeDeliveryId = null;

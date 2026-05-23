@@ -326,7 +326,7 @@ function buildOrderTimeline(attrs, boMeta) {
         const cName = del.courier?.fullName || del.courier?.firstName || 'Estafeta';
         const cId = del.courier?.id || null;
         Object.entries(del.timestamps).forEach(([code, ts]) => {
-            if (ts && !stored.some(e => e.action === code)) {
+            if (ts && !stored.some(e => String(e.action).startsWith(code))) {
                 synthesized.push({
                     at: ts,
                     action: code,

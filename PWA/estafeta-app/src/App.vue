@@ -18,7 +18,7 @@ const showNav = computed(() => {
   if (!store.auth.loggedIn) return false;
   
   // Hide nav for specific pages
-  if (['Login', 'Register', 'DeliveryDetail', 'ConfirmDelivery'].includes(route.name)) return false;
+  if (['Login', 'Register', 'DeliveryDetail', 'ConfirmDelivery', 'DeliveryCompleted'].includes(route.name)) return false;
   
   // Hide nav if there's an active delivery in progress
   if (store.activeDeliveryId && route.path && !route.path.startsWith('/completed/')) {

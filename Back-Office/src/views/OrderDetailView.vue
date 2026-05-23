@@ -619,9 +619,18 @@ const timelineEntries = computed(() => {
   const list = order.value?.timeline;
   if (!Array.isArray(list)) return [];
   const mapped = list.reduce((acc, ev) => {
-    if (ev.action === 'E-08' || ev.action === 'request_info') return acc; // Filter out redundant events
+    const rawAction = String(ev.action || '');
+    const isECode = /^E-\d{2}/.test(rawAction);
+    const baseAction = isECode ? rawAction.substring(0, 4) : rawAction;
 
-    const cfg = TIMELINE_CONFIG[ev.action] || { title: ev.action || 'Evento', kind: 'generic', icon: ClipboardList };
+    if (baseAction === 'E-08' || rawAction === 'request_info') return acc; // Filter out redundant events
+
+    // Deduplicate: if the last added event has the same base action (e.g. E-12 and E-12 NO DESTINO), skip it
+    if (acc.length > 0 && acc[acc.length - 1].baseAction === baseAction) {
+      return acc;
+    }
+
+    const cfg = TIMELINE_CONFIG[baseAction] || TIMELINE_CONFIG[rawAction] || { title: rawAction || 'Evento', kind: 'generic', icon: ClipboardList };
     const facts = buildTimelineFacts(ev.action, ev.meta);
     const message = !facts.length && ev.meta?.message ? String(ev.meta.message) : '';
 
@@ -653,6 +662,7 @@ const timelineEntries = computed(() => {
 
     acc.push({
       action: ev.action,
+      baseAction,
       title: cfg.title,
       kind: computedKind,
       nodeKind: computedNodeKind,

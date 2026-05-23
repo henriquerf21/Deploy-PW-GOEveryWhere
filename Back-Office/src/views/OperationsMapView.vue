@@ -632,7 +632,7 @@ onBeforeUnmount(() => {
   grid-template-columns: 280px 1fr 300px;
   gap: 18px;
   align-items: stretch;
-  min-height: 540px;
+  min-height: calc(100vh - 200px);
 }
 
 @media (max-width: 1100px) {
@@ -646,7 +646,7 @@ onBeforeUnmount(() => {
   box-shadow: var(--bo-shadow);
   display: flex;
   flex-direction: column;
-  max-height: 720px;
+  height: 100%;
   overflow: hidden;
 }
 
@@ -748,7 +748,7 @@ onBeforeUnmount(() => {
   position: relative;
   padding: 0;
   overflow: hidden;
-  min-height: 400px;
+  height: 100%;
   background: var(--bo-surface);
   border: 1px solid var(--bo-border);
   border-radius: var(--bo-radius-lg);
@@ -757,12 +757,10 @@ onBeforeUnmount(() => {
 
 .map {
   height: 100%;
-  min-height: 400px;
 }
 
 .map-wrap :deep(.leaflet-container) {
   height: 100%;
-  min-height: 400px;
   border-radius: var(--bo-radius-lg);
 }
 

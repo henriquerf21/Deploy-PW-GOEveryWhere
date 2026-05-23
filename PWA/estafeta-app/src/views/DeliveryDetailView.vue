@@ -344,6 +344,18 @@
         </div>
       </div>
     </Teleport>
+    <!-- WA Style Toast -->
+    <Transition name="wa-toast-anim">
+      <div v-if="waToast" class="wa-toast" @click="openChat = true; waToast = null">
+        <div class="wa-toast-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        </div>
+        <div class="wa-toast-content">
+          <h4>{{ waToast.title }}</h4>
+          <p>{{ waToast.body }}</p>
+        </div>
+      </div>
+    </Transition>
   </div>
 
   <div v-else class="page" style="text-align:center; padding-top:80px">
@@ -474,6 +486,36 @@ const unreadCount = ref(0);
 
 // We can just keep track of the last seen length
 let lastSeenChatLength = 0;
+let isHistoryInitialized = false;
+const waToast = ref(null);
+
+let sharedAudioCtx = null;
+function playChatDing() {
+  try {
+    if (!sharedAudioCtx) {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      sharedAudioCtx = new AudioContext();
+    }
+    if (sharedAudioCtx.state === 'suspended') {
+      sharedAudioCtx.resume().catch(() => {});
+    }
+    const osc = sharedAudioCtx.createOscillator();
+    const gain = sharedAudioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, sharedAudioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1760, sharedAudioCtx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0, sharedAudioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.3, sharedAudioCtx.currentTime + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.01, sharedAudioCtx.currentTime + 0.3);
+    osc.connect(gain);
+    gain.connect(sharedAudioCtx.destination);
+    osc.start(sharedAudioCtx.currentTime);
+    osc.stop(sharedAudioCtx.currentTime + 0.3);
+  } catch(e) {
+    console.error('Audio ding error:', e);
+  }
+}
 
 watch(openChat, (newVal) => {
   if (newVal) {
@@ -489,13 +531,37 @@ watch(openChat, (newVal) => {
 
 watch(() => delivery.value?.chatHistory, (newHistory) => {
   const currentLength = newHistory?.length || 0;
+  
+  if (!isHistoryInitialized && newHistory !== undefined) {
+    lastSeenChatLength = currentLength;
+    isHistoryInitialized = true;
+    return;
+  }
+
+  const isNew = currentLength > lastSeenChatLength;
+  const latestMsg = newHistory && newHistory.length > 0 ? newHistory[newHistory.length - 1] : null;
+  const isIncoming = latestMsg && latestMsg.sender === 'client';
+
   if (!openChat.value) {
-    if (currentLength > lastSeenChatLength) {
+    if (isNew) {
       unreadCount.value += (currentLength - lastSeenChatLength);
       lastSeenChatLength = currentLength;
+      if (isIncoming) {
+        playChatDing();
+        if (typeof navigator.vibrate === 'function') {
+          try { navigator.vibrate([100, 50, 100]); } catch(e) {}
+        }
+        waToast.value = { title: delivery.value?.destination?.name || 'Nova Mensagem', body: latestMsg.text };
+        setTimeout(() => { if (waToast.value?.body === latestMsg.text) waToast.value = null; }, 4000);
+      }
     }
   } else {
-    lastSeenChatLength = currentLength;
+    if (isNew) {
+      lastSeenChatLength = currentLength;
+      if (isIncoming) {
+        playChatDing();
+      }
+    }
     setTimeout(() => {
       if (chatContainer.value) {
         chatContainer.value.scrollTop = chatContainer.value.scrollHeight;
@@ -753,6 +819,9 @@ async function handleCTA() {
       return;
     }
     await advanceDeliveryState(props.id);
+  } catch (err) {
+    console.error('Failed to advance state:', err);
+    alert(err.message || 'Não foi possível avançar o estado da entrega. Verifique a sua ligação.');
   } finally {
     loadingCTA.value = false;
   }
@@ -774,25 +843,27 @@ async function handleImpossible() {
 .logo-mini { width: 36px; height: 34px; border-radius: 14px; object-fit: cover; }
 .header-title { font-family: var(--ge-font-display); font-size: 14px; font-weight: 700; color: #111827; }
 
-/* Header Lock */
-.header-lock {
-  position: absolute;
+/* WA Toast */
+.wa-toast {
+  position: fixed;
+  top: 16px;
   left: 16px;
+  right: 16px;
+  background: #25D366;
+  color: #fff;
+  border-radius: 12px;
+  padding: 12px 16px;
   display: flex;
+  gap: 12px;
   align-items: center;
-  gap: 4px;
-  background: #fef2f2;
-  padding: 4px 8px;
-  border-radius: var(--ge-radius-full);
-  border: 0.72px solid #fee2e2;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 10000;
+  cursor: pointer;
 }
-.header-lock-label {
-  font-size: 10px;
-  font-weight: 700;
-  color: #ef4444;
-  text-transform: uppercase;
-  letter-spacing: 0.02em;
-}
+.wa-toast-content h4 { margin: 0 0 4px; font-size: 14px; font-weight: 700; }
+.wa-toast-content p { margin: 0; font-size: 13px; opacity: 0.9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; }
+.wa-toast-anim-enter-active, .wa-toast-anim-leave-active { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); }
+.wa-toast-anim-enter-from, .wa-toast-anim-leave-to { opacity: 0; transform: translateY(-20px); }
 
 /* Order banner */
 .order-banner {

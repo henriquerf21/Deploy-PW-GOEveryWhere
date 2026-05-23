@@ -230,6 +230,19 @@
       </div>
     </Transition>
 
+    <!-- WA Style Toast -->
+    <Transition name="wa-toast-anim">
+      <div v-if="waToast" class="wa-toast" @click="openChat = true; waToast = null">
+        <div class="wa-toast-icon">
+          <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>
+        </div>
+        <div class="wa-toast-content">
+          <h4>{{ waToast.title }}</h4>
+          <p>{{ waToast.body }}</p>
+        </div>
+      </div>
+    </Transition>
+
     <!-- Chat Modal -->
     <div v-if="openChat" class="modal-overlay">
       <div class="modal-card chat-modal">
@@ -339,6 +352,7 @@ const clientChatMessages = computed(() =>
 );
 const sortedChatMessages = computed(() => sortChatHistory(clientChatMessages.value));
 const toastMessage = ref('');
+const waToast = ref(null);
 let pollingTimer = null;
 let gpsPollTimer = null;
 let currentOrderRoom = null;
@@ -675,8 +689,10 @@ onMounted(async () => {
       applyOrderChatMessage(order.value, data);
 
       if (data.message?.sender === 'courier') {
+        playChatDing();
         if (!openChat.value) {
-          showStateToast('Nova mensagem do estafeta!');
+          waToast.value = { title: courierInfo.value?.name || 'Estafeta', body: data.message.text };
+          setTimeout(() => { if (waToast.value?.body === data.message.text) waToast.value = null; }, 4000);
           sendNotification('GoEverywhere — Nova mensagem', {
             body: String(data.message.text || '').slice(0, 160),
             tag: `chat-${order.value.documentId}`,
@@ -720,6 +736,34 @@ onUnmounted(() => {
   }
   // Mantém a ligação global, apenas sai da sala
 });
+
+let sharedAudioCtx = null;
+function playChatDing() {
+  try {
+    if (!sharedAudioCtx) {
+      const AudioContext = window.AudioContext || window.webkitAudioContext;
+      if (!AudioContext) return;
+      sharedAudioCtx = new AudioContext();
+    }
+    if (sharedAudioCtx.state === 'suspended') {
+      sharedAudioCtx.resume().catch(() => {});
+    }
+    const osc = sharedAudioCtx.createOscillator();
+    const gain = sharedAudioCtx.createGain();
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, sharedAudioCtx.currentTime);
+    osc.frequency.exponentialRampToValueAtTime(1760, sharedAudioCtx.currentTime + 0.1);
+    gain.gain.setValueAtTime(0, sharedAudioCtx.currentTime);
+    gain.gain.linearRampToValueAtTime(0.3, sharedAudioCtx.currentTime + 0.05);
+    gain.gain.exponentialRampToValueAtTime(0.01, sharedAudioCtx.currentTime + 0.3);
+    osc.connect(gain);
+    gain.connect(sharedAudioCtx.destination);
+    osc.start(sharedAudioCtx.currentTime);
+    osc.stop(sharedAudioCtx.currentTime + 0.3);
+  } catch(e) {
+    console.error('Audio ding error:', e);
+  }
+}
 
 // ── COMPUTED ────────────────────────────────────────────────────────
 const isImpossibleReview = computed(() => {
@@ -1613,16 +1657,36 @@ function showStateToast(newState) {
   z-index: 1000;
   background: #1e293b;
   color: white;
-  padding: 1rem 2rem;
-  border-radius: 12px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-weight: 600;
-  font-size: 0.875rem;
-  pointer-events: none;
+  padding: 10px 20px;
+  border-radius: 6px;
+  z-index: 1000;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  font-weight: 500;
 }
+
+/* WA Toast */
+.wa-toast {
+  position: fixed;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: calc(100% - 32px);
+  max-width: 400px;
+  background: #25D366;
+  color: #fff;
+  border-radius: 12px;
+  padding: 12px 16px;
+  display: flex;
+  gap: 12px;
+  align-items: center;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+  z-index: 10000;
+  cursor: pointer;
+}
+.wa-toast-content h4 { margin: 0 0 4px; font-size: 14px; font-weight: 700; color: #fff; }
+.wa-toast-content p { margin: 0; font-size: 13px; opacity: 0.9; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 250px; color: #fff; }
+.wa-toast-anim-enter-active, .wa-toast-anim-leave-active { transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1); }
+.wa-toast-anim-enter-from, .wa-toast-anim-leave-to { opacity: 0; transform: translate(-50%, -20px); }
 
 .toast-enter-active {
   animation: toastIn 0.35s ease;
