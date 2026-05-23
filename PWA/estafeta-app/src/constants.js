@@ -98,8 +98,8 @@ export const courierStateLabels = {
 export const NEXT_STATE = {
     'E-08': 'E-09',
     'E-09': 'E-10',
-    'E-10': 'E-11',
-    'E-11': 'E-12',
+    'E-10': 'E-11', // Em recolha → Em trânsito para cliente
+    'E-11': 'E-12', // Em trânsito → No destino
     'E-12': 'E-13', // or E-14 for impossible
 };
 

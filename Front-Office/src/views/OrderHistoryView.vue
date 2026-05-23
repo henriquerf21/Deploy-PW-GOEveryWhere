@@ -71,6 +71,27 @@
             </div>
           </div>
 
+          <!-- Informação do Estafeta e Avaliação se a encomenda foi entregue -->
+          <div v-if="order.courier && ['S-11', 'S-15', 'S-16'].includes(order.status)" class="courier-delivery-info">
+            <div class="courier-avatar-mini">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" />
+                <circle cx="12" cy="7" r="4" />
+              </svg>
+            </div>
+            <div class="courier-text-info">
+              <span class="courier-name-label">
+                Entregue por <strong>{{ getCourierDisplayName(order.courier) }}</strong>
+              </span>
+              <span v-if="!order.rating && (order.status === 'S-11' || order.status === 'S-16')" class="courier-rate-prompt">
+                Clica no botão <strong>Avaliar</strong> para o classificar!
+              </span>
+              <span v-else-if="order.rating" class="courier-rate-done">
+                Serviço avaliado com {{ order.rating }} ★. Obrigado pelo teu feedback!
+              </span>
+            </div>
+          </div>
+
           <div class="order-bottom">
             <div class="delivery-info">
               <span v-if="order.store" class="info-item">
@@ -137,7 +158,8 @@ import {
   fetchUserOrders,
   refreshUserProfile,
   cancelActiveOrder,
-  userPointsBalance
+  userPointsBalance,
+  getCourierDisplayName
 } from '../stores/orderStore.js';
 
 const router = useRouter();
@@ -759,5 +781,52 @@ function repeatOrder(order) {
     flex-direction: column;
     align-items: flex-start;
   }
+}
+
+.courier-delivery-info {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.75rem 1rem;
+  background: var(--cf-surface, #f8fafc);
+  border-radius: var(--cf-radius, 8px);
+  margin-top: 0.75rem;
+  border: 1px dashed var(--cf-line, #e2e8f0);
+}
+
+.courier-avatar-mini {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 2rem;
+  height: 2rem;
+  border-radius: 50%;
+  background: #e6fcf5;
+  color: var(--cf-cta, #00c853);
+  flex-shrink: 0;
+}
+
+.courier-text-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  text-align: left;
+}
+
+.courier-name-label {
+  font-size: 0.8125rem;
+  color: #0f172a;
+}
+
+.courier-rate-prompt {
+  font-size: 0.75rem;
+  color: #b45309;
+  font-weight: 500;
+}
+
+.courier-rate-done {
+  font-size: 0.75rem;
+  color: var(--cf-success, #059669);
+  font-weight: 500;
 }
 </style>

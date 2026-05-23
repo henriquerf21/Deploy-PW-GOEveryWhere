@@ -39,7 +39,7 @@
 
 
 
-        <button class="change-btn" @click="startEditing" style="margin: 0 16px;">Editar Perfil</button>
+        <button class="change-btn" @click="startEditing" style="display: block; width: 200px; margin: 24px auto 16px; padding: 10px 16px;">Editar Perfil</button>
       </div>
 
       <div v-else class="info-section edit-section">

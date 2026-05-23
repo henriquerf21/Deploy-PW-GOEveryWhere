@@ -133,9 +133,6 @@ export async function handleRealtimeEvent(payload = {}) {
     }
   }
 
-  const now = Date.now();
-  if (now - lastGlobalRefreshAt < 5000) return;
-  lastGlobalRefreshAt = now;
   scheduleRealtimeFullRefresh(1200);
 }
 

@@ -170,10 +170,11 @@ function toggleDistance() {
 }
 
 async function handleAccept(id) {
-  const ok = await acceptDelivery(id);
-  if (!ok) return;
-  await requestDeviceLocation({ force: true });
-  goToDetail(id);
+  // Navigate immediately — state change is optimistic in the store
+  teardownListMap();
+  router.push(`/deliveries/${id}`);
+  void requestDeviceLocation({ force: true });
+  await acceptDelivery(id);
 }
 function goToDetail(id) {
   teardownListMap();

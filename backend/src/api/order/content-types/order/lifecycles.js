@@ -4,16 +4,20 @@ const order_chat_js_1 = require("../../../../utils/order-chat.js");
 exports.default = {
     async beforeUpdate(event) {
         const data = event?.params?.data;
-        if (!data || data.chatHistory === undefined)
+        if (!data)
             return;
-        const documentId = event?.params?.documentId;
+        const documentId = event?.params?.documentId || event?.params?.where?.documentId;
         if (!documentId)
             return;
-        const existing = await strapi.documents('api::order.order').findOne({
-            documentId: String(documentId),
-            status: 'published',
-        });
-        data.chatHistory = (0, order_chat_js_1.mergeChatHistory)(existing?.chatHistory, data.chatHistory);
+            
+        let existing = null;
+        if (data.chatHistory !== undefined) {
+            existing = await strapi.documents('api::order.order').findOne({
+                documentId: String(documentId),
+                status: 'published'
+            });
+            data.chatHistory = (0, order_chat_js_1.mergeChatHistory)(existing?.chatHistory, data.chatHistory);
+        }
     },
     async beforeCreate(event) {
         const { data } = event.params;
@@ -34,7 +38,11 @@ exports.default = {
             return;
         const order = await strapi.documents('api::order.order').findOne({
             documentId: result.documentId,
-            populate: ['user', 'user.go_point'],
+            populate: {
+                user: {
+                    populate: ['go_point']
+                }
+            },
         });
         if (!order?.user) {
             console.warn('[GoPoints] afterCreate — sem utilizador');
@@ -83,8 +91,31 @@ exports.default = {
             try {
                 const orderToCancel = await strapi.documents('api::order.order').findOne({
                     documentId: result.documentId,
-                    populate: ['delivery']
+                    populate: ['delivery', 'user']
                 });
+
+                if (status.startsWith('S-13')) {
+                    const rawItems = orderToCancel.items && typeof orderToCancel.items === 'object' && !Array.isArray(orderToCancel.items)
+                        ? orderToCancel.items : {};
+                    const boMeta = { ...(rawItems.boMeta || {}) };
+                    const events = Array.isArray(boMeta.events) ? [...boMeta.events] : [];
+                    
+                    if (!events.some(e => e.action === 'cancel_client')) {
+                        events.push({
+                            at: new Date().toISOString(),
+                            action: 'cancel_client',
+                            actor: { id: orderToCancel.user?.id || null, name: orderToCancel.clientName || 'Cliente', role: 'client' },
+                            meta: { source: 'front-office', message: result.cancelReason || '' }
+                        });
+                        boMeta.events = events;
+                        
+                        await strapi.documents('api::order.order').update({
+                            documentId: result.documentId,
+                            data: { items: { ...rawItems, boMeta } }
+                        });
+                    }
+                }
+
                 const delivery = orderToCancel?.delivery;
                 if (delivery && delivery.documentId) {
                     const dStatus = delivery.delivery_status || '';
@@ -149,7 +180,11 @@ exports.default = {
             return;
         const order = await strapi.documents('api::order.order').findOne({
             documentId: result.documentId,
-            populate: ['user', 'user.go_point'],
+            populate: {
+                user: {
+                    populate: ['go_point']
+                }
+            },
         });
         if (!order?.user) {
             console.warn('[GoPoints] sem utilizador na encomenda');
