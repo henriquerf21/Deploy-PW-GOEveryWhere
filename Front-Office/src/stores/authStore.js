@@ -1,5 +1,6 @@
 import { reactive, computed } from 'vue';
 import { API_URL } from '../config/env.js';
+import { readApiJson } from '../utils/apiResponse.js';
 
 // ── Storage keys ──────────────────────────────────────────────────
 const STORAGE_KEY = 'goeverywhere_auth';
@@ -94,7 +95,7 @@ export async function fetchMe() {
     const res = await fetch(`${API_URL}/users/me?populate=go_point`, {
       headers: { Authorization: `Bearer ${state.token}` }
     });
-    const data = await res.json();
+    const data = await readApiJson(res);
     if (res.ok) {
       // Helper to extract URL from Strapi media object if necessary
       const getUrl = (val) => {

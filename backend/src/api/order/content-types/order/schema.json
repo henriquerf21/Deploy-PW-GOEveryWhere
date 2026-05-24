@@ -124,6 +124,10 @@
     },
     "notes": {
       "type": "text"
+    },
+    "invoiceEmailSent": {
+      "type": "boolean",
+      "default": false
     }
   }
 }

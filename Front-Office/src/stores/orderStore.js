@@ -3,6 +3,7 @@ import authState, { fetchMe } from './authStore';
 import { io } from 'socket.io-client';
 import { API_URL, BACKEND_URL } from '../config/env.js';
 import { mergeChatHistory, sortChatHistory } from '../utils/chatHistory.js';
+import { readApiJson } from '../utils/apiResponse.js';
 
 // Initialize socket connection
 export const socket = io(BACKEND_URL, {
@@ -325,7 +326,7 @@ export async function fetchUserOrders({ silent = false } = {}) {
     const response = await fetch(`${API_URL}/orders?${populate}`, {
       headers: { 'Authorization': `Bearer ${authState.token}` }
     });
-    const res = await response.json();
+    const res = await readApiJson(response);
 
     if (!response.ok) throw new Error(res.error?.message || 'Erro no GET');
 
@@ -359,6 +360,7 @@ export async function fetchUserOrders({ silent = false } = {}) {
       return {
         id: Number(order.id),
         documentId: order.documentId,
+        orderId: attr.orderId || order.orderId || null,
         date: new Date(attr.createdAt).toLocaleDateString('pt-PT'),
         createdAt: attr.createdAt,
         products: productList,
@@ -624,6 +626,38 @@ export async function replyToInfoRequest(documentId, reply) {
   } catch (err) {
     console.error(err);
     return { success: false, error: err.message };
+  }
+}
+
+const INVOICE_DOWNLOAD_STATUSES = new Set(['S-11', 'S-15', 'S-16']);
+
+export function canDownloadOrderInvoice(order) {
+  return !!order?.documentId && INVOICE_DOWNLOAD_STATUSES.has(String(order?.status || ''));
+}
+
+export async function downloadOrderInvoice(documentId, suggestedName = 'fatura.pdf') {
+  if (!authState.user || !authState.token) return { success: false, error: 'Não autenticado' };
+  try {
+    const response = await fetch(`${API_URL}/orders/${encodeURIComponent(documentId)}/invoice`, {
+      headers: { Authorization: `Bearer ${authState.token}` },
+    });
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({}));
+      return { success: false, error: err?.error?.message || 'Não foi possível descarregar a fatura.' };
+    }
+    const blob = await response.blob();
+    const disposition = response.headers.get('Content-Disposition') || '';
+    const match = disposition.match(/filename="?([^";]+)"?/i);
+    const filename = match?.[1] || suggestedName;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err?.message || 'Erro ao descarregar fatura.' };
   }
 }
 

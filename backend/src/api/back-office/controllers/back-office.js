@@ -449,4 +449,19 @@ exports.default = {
         res.on('error', cleanup);
         ctx.respond = false;
     },
+    async downloadOrderInvoice(ctx) {
+        if (!(await ensureAdminSession(ctx, strapi)))
+            return ctx.unauthorized();
+        const { loadOrderForInvoice } = require('../../../utils/order-invoice-service.js');
+        const { serveInvoicePdf } = require('../../../utils/serve-invoice-pdf.js');
+        const order = await loadOrderForInvoice(strapi, ctx.params.id);
+        if (!order)
+            return ctx.notFound('Fatura indisponível (pedido não entregue ou inexistente).');
+        try {
+            await serveInvoicePdf(ctx, order);
+        }
+        catch (err) {
+            return ctx.badRequest(err?.message || 'Não foi possível gerar a fatura.');
+        }
+    },
 };

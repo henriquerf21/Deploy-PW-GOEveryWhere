@@ -223,28 +223,5 @@ exports.default = {
                 },
             });
         }
-        // Configurar Webhook/Email para encomenda concluída
-        console.log(`[Webhook] Disparando webhook/email para a encomenda ${order.orderId || order.id} (S-11 Concluída)`);
-        try {
-            // Simulação do envio de email: cria o registo em communications se existisse a coleção
-            // Como alternativa, fazemos um mock fetch a um webhook.
-            await fetch('https://webhook.site/go-everywhere-completed', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    event: 'order.completed',
-                    orderId: order.orderId || order.id,
-                    customerName: order.clientName || order.deliveryName || 'Cliente',
-                    email: order.user?.email,
-                    total: order.total_price,
-                    earnedPoints: earnedPoints
-                })
-            }).catch(err => {
-                console.log('[Webhook] Simulação falhou silenciosamente (esperado se webhook não existe)', err.message);
-            });
-        }
-        catch (e) {
-            console.error('[Webhook] Falha ao enviar email/webhook:', e.message);
-        }
     },
 };

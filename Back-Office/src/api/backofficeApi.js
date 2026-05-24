@@ -268,3 +268,29 @@ export async function boUpload(file) {
     size: first.size,
   };
 }
+
+export async function boDownloadOrderInvoice(orderPublicId) {
+  const jwt = getJwt();
+  const res = await fetch(`${API_BASE}/api/bo/orders/${encodeURIComponent(orderPublicId)}/invoice`, {
+    headers: jwt ? { Authorization: `Bearer ${jwt}` } : {},
+  });
+  if (!res.ok) {
+    const json = await res.json().catch(() => ({}));
+    const msg = json?.error?.message || `HTTP ${res.status}`;
+    throw new Error(String(msg));
+  }
+  const blob = await res.blob();
+  const disposition = res.headers.get('Content-Disposition') || '';
+  const match = disposition.match(/filename="?([^";]+)"?/i);
+  const filename = match?.[1] || `fatura-${orderPublicId}.pdf`;
+  return { blob, filename };
+}
+
+export function triggerBlobDownload(blob, filename) {
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  link.click();
+  URL.revokeObjectURL(url);
+}

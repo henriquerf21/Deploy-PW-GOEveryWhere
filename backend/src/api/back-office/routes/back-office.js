@@ -7,6 +7,7 @@ exports.default = {
         { method: 'POST', path: '/bo/auth/google', handler: 'back-office.googleLogin', config: { auth: false } },
         { method: 'GET', path: '/bo/orders', handler: 'back-office.listOrders', config: { auth: false } },
         { method: 'GET', path: '/bo/orders/:id', handler: 'back-office.getOrder', config: { auth: false } },
+        { method: 'GET', path: '/bo/orders/:id/invoice', handler: 'back-office.downloadOrderInvoice', config: { auth: false } },
         { method: 'PATCH', path: '/bo/orders/:id', handler: 'back-office.patchOrder', config: { auth: false } },
         { method: 'POST', path: '/bo/orders/:id/cancel', handler: 'back-office.cancelOrder', config: { auth: false } },
         { method: 'POST', path: '/bo/orders/:id/approve', handler: 'back-office.approveOrder', config: { auth: false } },
