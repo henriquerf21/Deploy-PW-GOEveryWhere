@@ -1,5 +1,5 @@
-// Origens locais (dev) + origens de produção via env CORS_ORIGINS
-const localOrigins = [
+const allOrigins = [
+  // Dev local
   'http://localhost:5173',
   'http://localhost:5174',
   'http://localhost:5175',
@@ -10,16 +10,11 @@ const localOrigins = [
   'https://192.168.1.94:5175',
   'https://localhost:5175',
   'https://127.0.0.1:5175',
+  // Produção (Vercel)
+  'https://admingoeverywhere.vercel.app',
+  'https://goeverywhere.vercel.app',
+  'https://entregas-goeverywhere.vercel.app',
 ];
-
-// Em produção, adiciona os domínios do Vercel (separados por vírgula)
-// Ex: CORS_ORIGINS=https://front.vercel.app,https://back.vercel.app,https://pwa.vercel.app
-const extraOrigins = (process.env.CORS_ORIGINS || '')
-  .split(',')
-  .map((s) => s.trim())
-  .filter(Boolean);
-
-const allOrigins = [...localOrigins, ...extraOrigins];
 
 module.exports = [
   'strapi::logger',
