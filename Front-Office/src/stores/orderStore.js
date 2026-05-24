@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 import { API_URL, BACKEND_URL } from '../config/env.js';
 import { mergeChatHistory, sortChatHistory } from '../utils/chatHistory.js';
 import { readApiJson } from '../utils/apiResponse.js';
+import { CONTINENTE_STORES_STATIC } from '../data/continent-stores.js';
 
 // Initialize socket connection
 export const socket = io(BACKEND_URL, {
@@ -294,6 +295,20 @@ export async function fetchStores() {
     }
   } catch (error) {
     console.warn('Lista de lojas dinâmica indisponível, a usar fallback estático.', error?.message || error);
+    if (CONTINENTE_STORES_STATIC && CONTINENTE_STORES_STATIC.length) {
+      const mapped = CONTINENTE_STORES_STATIC.map((s, idx) => ({
+        id: s.id || `static-${idx}`,
+        name: s.name,
+        address: s.address || 'Continente',
+        lat: s.lat,
+        lng: s.lng,
+        city: s.city || 'Portugal'
+      }));
+      CONTINENTE_STORES.splice(0, CONTINENTE_STORES.length, ...mapped);
+      if (store.delivery.gpsLat) {
+        findNearestStore(store.delivery.gpsLat, store.delivery.gpsLng);
+      }
+    }
   }
 }
 

@@ -433,16 +433,7 @@ function geocodeAddress() {
         // Recalcular loja mais próxima com coordenadas reais
         findNearestStore(lat, lng);
       } else {
-        console.warn('Geocoding falhou para todas as tentativas. Usando coordenadas da loja como fallback.');
-        // Fallback final: usar coordenadas da loja se existirem
-        if (store.delivery.assignedStore?.lat && store.delivery.assignedStore?.lng) {
-            store.delivery.gpsLat = store.delivery.assignedStore.lat;
-            store.delivery.gpsLng = store.delivery.assignedStore.lng;
-        } else {
-            // Centro de Portugal genérico se tudo falhar
-            store.delivery.gpsLat = 39.3999;
-            store.delivery.gpsLng = -8.2245;
-        }
+        console.warn('Geocoding falhou para todas as tentativas. Mantendo as coordenadas anteriores para evitar sobreposições.');
       }
     } catch (err) {
       console.warn('Erro fatal no Geocoding, a usar fallback:', err);
