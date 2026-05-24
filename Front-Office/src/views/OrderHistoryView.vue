@@ -111,6 +111,14 @@
               >
                 Avaliar
               </button>
+              <button
+                v-if="canDownloadOrderInvoice(order)"
+                type="button"
+                class="btn-invoice"
+                @click="handleDownloadInvoice(order)"
+              >
+                Fatura
+              </button>
               <button class="btn-repeat" @click="repeatOrder(order)">
                 Repetir
               </button>
@@ -159,7 +167,9 @@ import {
   refreshUserProfile,
   cancelActiveOrder,
   userPointsBalance,
-  getCourierDisplayName
+  getCourierDisplayName,
+  canDownloadOrderInvoice,
+  downloadOrderInvoice,
 } from '../stores/orderStore.js';
 
 const router = useRouter();
@@ -169,6 +179,17 @@ const showRatingModal = ref(false);
 const ratingOrder = ref(null);
 const ratingValue = ref(0);
 const ratingLabels = ['Mau', 'Medíocre', 'Razoável', 'Bom', 'Excelente'];
+const invoiceDownloading = ref(null);
+
+async function handleDownloadInvoice(order) {
+  const docId = order.documentId;
+  if (!docId) return;
+  invoiceDownloading.value = docId;
+  const name = `fatura-${order.orderId || `pedido-${order.id}`}.pdf`;
+  const result = await downloadOrderInvoice(docId, name);
+  invoiceDownloading.value = null;
+  if (!result.success) alert(result.error || 'Não foi possível descarregar a fatura.');
+}
 
 // --- Lógica para o Cancelamento (Requisito S-13) ---
 const showCancelModal = ref(false);
@@ -600,6 +621,22 @@ function repeatOrder(order) {
 
 .btn-repeat:hover {
   background: var(--cf-cta-hover);
+}
+
+.btn-invoice {
+  padding: 0.5rem 0.875rem;
+  background: #fff;
+  color: var(--cf-cta);
+  border: 1px solid var(--cf-cta);
+  border-radius: var(--cf-radius);
+  font-weight: 600;
+  font-size: 0.8125rem;
+  cursor: pointer;
+  font-family: var(--cf-font);
+}
+
+.btn-invoice:hover {
+  background: #ecfdf5;
 }
 
 .empty-state {

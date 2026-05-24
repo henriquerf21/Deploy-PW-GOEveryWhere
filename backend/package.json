@@ -22,6 +22,7 @@
     "@strapi/strapi": "5.42.0",
     "better-sqlite3": "12.8.0",
     "node-fetch": "^3.3.2",
+    "pdfkit": "^0.18.0",
     "pg": "^8.20.0",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",

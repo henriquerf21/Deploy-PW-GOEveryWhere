@@ -24,6 +24,15 @@
         <span class="order-hero__status">{{ orderStatusLabels[order.status] }}</span>
         <span class="order-hero__pill">Prioridade {{ order.priority }} — {{ priorityLabels[order.priority] }}</span>
         <span v-if="order.is_urgent" class="order-hero__pill order-hero__pill--urgent">Urgente</span>
+        <button
+          v-if="canDownloadInvoice"
+          type="button"
+          class="bo-btn bo-btn--sm bo-btn--outline order-hero__invoice-btn"
+          :disabled="invoiceDownloading"
+          @click="handleDownloadInvoice"
+        >
+          {{ invoiceDownloading ? 'A gerar…' : 'Descarregar fatura' }}
+        </button>
       </div>
     </header>
 
@@ -450,7 +459,7 @@ import {
 } from '../stores/logisticsStore.js';
 import { orderTypeLabels, priorityLabels } from '../constants/logistics.js';
 import { toast } from '../utils/notify.js';
-import { boPostOrderChatMessage } from '../api/backofficeApi.js';
+import { boPostOrderChatMessage, boDownloadOrderInvoice, triggerBlobDownload } from '../api/backofficeApi.js';
 
 const route = useRoute();
 const orderId = computed(() => route.params.id);
@@ -464,6 +473,23 @@ const adminPatch = reactive({ deliveryAddress: '', deliveryCity: '', internalNot
 const cancelReasonText = ref('');
 const boChatText = ref('');
 const boChatSending = ref(false);
+const invoiceDownloading = ref(false);
+
+const canDownloadInvoice = computed(() => order.value?.status === ORDER_STATUS.DELIVERED);
+
+async function handleDownloadInvoice() {
+  if (!order.value?.id) return;
+  invoiceDownloading.value = true;
+  try {
+    const { blob, filename } = await boDownloadOrderInvoice(order.value.id);
+    triggerBlobDownload(blob, filename);
+    toast.success('Fatura descarregada.');
+  } catch (e) {
+    toast.error(e?.message || 'Não foi possível descarregar a fatura.');
+  } finally {
+    invoiceDownloading.value = false;
+  }
+}
 
 const mapStore = computed(() => logistics.continentStores.find(s => s.id === ap.storeId) || null);
 const mapStoreLat = computed(() => mapStore.value?.lat != null ? Number(mapStore.value.lat) : Number(order.value?.pickupLat));
@@ -1090,6 +1116,10 @@ async function doCancelAdmin() {
   flex-direction: column;
   align-items: flex-end;
   gap: 8px;
+}
+
+.order-hero__invoice-btn {
+  margin-top: 4px;
 }
 
 .order-hero__status {

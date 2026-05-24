@@ -213,4 +213,37 @@ exports.default = strapi_1.factories.createCoreController('api::order.order', ({
             },
         });
     },
+    async downloadInvoice(ctx) {
+        let user = ctx.state.user;
+        if (!user && ctx.request.header.authorization) {
+            try {
+                const token = ctx.request.header.authorization.split(' ')[1];
+                const decoded = await strapi.plugins['users-permissions'].services.jwt.verify(token);
+                if (decoded?.id) {
+                    user = await strapi.db.query('plugin::users-permissions.user').findOne({ where: { id: decoded.id } });
+                }
+            }
+            catch {
+                /* ignore */
+            }
+        }
+        if (!user)
+            return ctx.unauthorized();
+        const documentId = String(ctx.params.documentId || '').trim();
+        const { loadOrderForInvoice } = require('../../../utils/order-invoice-service.js');
+        const { serveInvoicePdf } = require('../../../utils/serve-invoice-pdf.js');
+        const order = await loadOrderForInvoice(strapi, documentId);
+        if (!order)
+            return ctx.notFound('Fatura indisponível para este pedido.');
+        const ownerDocId = order.user?.documentId || order.user?.id;
+        const userDocId = user.documentId || user.id;
+        if (ownerDocId == null || String(ownerDocId) !== String(userDocId))
+            return ctx.forbidden('Sem permissão para este pedido.');
+        try {
+            await serveInvoicePdf(ctx, order);
+        }
+        catch (err) {
+            return ctx.badRequest(err?.message || 'Não foi possível gerar a fatura.');
+        }
+    },
 }));

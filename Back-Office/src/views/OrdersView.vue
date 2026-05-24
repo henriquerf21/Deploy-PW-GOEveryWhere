@@ -129,8 +129,17 @@
               <span class="bo-badge" :class="statusBadgeClass(o.status)">{{ orderStatusLabels[o.status] }}</span>
             </td>
             <td class="bo-mono bo-muted bo-num">{{ o.createdAt.slice(0, 10) }}</td>
-            <td class="bo-table__actions">
+            <td class="bo-table__actions bo-table__actions--split">
               <RouterLink class="bo-btn bo-btn--sm bo-btn--outline" :to="{ name: 'order-detail', params: { id: o.id } }">Operar</RouterLink>
+              <button
+                v-if="canDownloadInvoice(o)"
+                type="button"
+                class="bo-btn bo-btn--sm bo-btn--ghost"
+                :disabled="invoiceLoadingId === o.id"
+                @click="downloadInvoice(o)"
+              >
+                {{ invoiceLoadingId === o.id ? '…' : 'Fatura' }}
+              </button>
             </td>
           </tr>
         </tbody>
@@ -145,6 +154,7 @@ import { useRoute } from 'vue-router';
 import { logistics, filterOrders, orderStatusLabels } from '../stores/logisticsStore.js';
 import { orderTypeLabels, priorityLabels, ZONES, ORDER_STATUS } from '../constants/logistics.js';
 import { toast } from '../utils/notify.js';
+import { boDownloadOrderInvoice, triggerBlobDownload } from '../api/backofficeApi.js';
 
 const route = useRoute();
 
@@ -163,6 +173,25 @@ const LS_KEY = 'bo.orders.savedFilters.v1';
 const savedPresets = ref([]);
 const presetName = ref('');
 const activePresetLabel = ref('');
+const invoiceLoadingId = ref('');
+
+function canDownloadInvoice(order) {
+  return order?.status === ORDER_STATUS.DELIVERED;
+}
+
+async function downloadInvoice(order) {
+  if (!order?.id) return;
+  invoiceLoadingId.value = order.id;
+  try {
+    const { blob, filename } = await boDownloadOrderInvoice(order.id);
+    triggerBlobDownload(blob, filename);
+    toast.success('Fatura descarregada.');
+  } catch (e) {
+    toast.error(e?.message || 'Não foi possível descarregar a fatura.');
+  } finally {
+    invoiceLoadingId.value = '';
+  }
+}
 
 function loadPresets() {
   try {

@@ -560,6 +560,10 @@ a:hover { text-decoration: underline; }
   justify-content: flex-end;
 }
 
+.bo-table__actions--split {
+  flex-wrap: wrap;
+}
+
 .bo-table__empty {
   text-align: center;
   padding: 40px 20px !important;
