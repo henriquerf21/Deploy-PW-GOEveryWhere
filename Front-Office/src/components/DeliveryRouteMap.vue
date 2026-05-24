@@ -451,7 +451,9 @@ function initMap() {
   });
   scheduleRouteFetch({ full: true });
 
-  setTimeout(() => map?.invalidateSize(), 100);
+  // Duplo invalidateSize: garante correção mesmo com CSS lento a calcular alturas
+  setTimeout(() => map?.invalidateSize(), 50);
+  setTimeout(() => map?.invalidateSize(), 300);
 }
 
 function destroyMap() {
@@ -517,12 +519,42 @@ function onResize() {
   map?.invalidateSize();
 }
 
+let _initObserver = null;
+
 onMounted(() => {
-  nextTick(() => initMap());
   window.addEventListener('resize', onResize);
+
+  // Aguarda o contentor ter dimensões reais antes de inicializar o Leaflet.
+  // Necessário porque o componente aparece via v-if e pode estar sem altura no nextTick.
+  nextTick(() => {
+    const el = containerRef.value;
+    if (!el) return;
+
+    if (el.offsetHeight > 0) {
+      // Já tem altura: inicializa de imediato
+      initMap();
+      return;
+    }
+
+    // Sem altura ainda — espera o ResizeObserver detetar o primeiro layout real
+    _initObserver = new ResizeObserver((entries) => {
+      for (const entry of entries) {
+        const h = entry.contentRect?.height ?? entry.target.offsetHeight;
+        if (h > 0) {
+          _initObserver?.disconnect();
+          _initObserver = null;
+          initMap();
+          return;
+        }
+      }
+    });
+    _initObserver.observe(el);
+  });
 });
 
 onBeforeUnmount(() => {
+  _initObserver?.disconnect();
+  _initObserver = null;
   window.removeEventListener('resize', onResize);
   destroyMap();
 });
